@@ -217,8 +217,6 @@ Container(
 * ✨ Animations
 * ☁️ Cloud sync (Firebase)
 
-
-
 ---
 
 
