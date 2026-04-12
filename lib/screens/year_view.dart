@@ -105,7 +105,7 @@ class _YearViewState extends State<YearView> {
         ),
       ),
       body: ValueListenableBuilder(
-        valueListenable: widget.hiveService.getBoxListenable(),
+        valueListenable: widget.hiveService.listenable(),
         builder: (context, box, _) {
           return LayoutBuilder(
             builder: (context, constraints) {

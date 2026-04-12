@@ -130,7 +130,7 @@ class _WeekViewState extends State<WeekView> {
         ),
       ),
       body: ValueListenableBuilder(
-        valueListenable: widget.hiveService.getBoxListenable(),
+        valueListenable: widget.hiveService.listenable(),
         builder: (context, box, _) {
           return Padding(
             padding: const EdgeInsets.all(16.0),

@@ -146,7 +146,84 @@ lib/
 │   └── task_model.dart
 │── services/
 │   └── hive_service.dart
+│── utils/
+│   ├── date_utils.dart
+│   └── grid_utils.dart
+│── constants/
+│   └── colors.dart
 ```
+
+---
+
+## ▶️ Quick Start
+
+### Prerequisites
+- **Flutter SDK**: v3.0.0 or higher
+- **Dart SDK**: Included with Flutter
+- **Android/iOS SDK**: For running on devices or emulators
+
+### Getting Started
+
+1. **Clone & Navigate**:
+   ```bash
+   cd Bubble-Time-Progress-App-Flutter-
+   ```
+
+2. **Install Dependencies**:
+   ```bash
+   flutter pub get
+   ```
+
+3. **Generate Hive Adapters** (if needed):
+   ```bash
+   flutter pub run build_runner build
+   ```
+
+4. **Run the App**:
+   ```bash
+   flutter run
+   ```
+   - On Android: Connects to Android emulator or physical device
+   - On iOS: Requires Xcode (macOS only)
+   - On Web: Run with `-d chrome`
+   - On Desktop: Run with `-d windows`, `-d linux`, or `-d macos`
+
+### Example Commands
+
+```bash
+# Run on specific device
+flutter run -d <device-id>
+
+# Run in release mode
+flutter run --release
+
+# Build APK (Android)
+flutter build apk
+
+# Build IPA (iOS)
+flutter build ios
+
+# Build web
+flutter build web
+
+# Clean and rebuild
+flutter clean
+flutter pub get
+flutter run
+```
+
+### Troubleshooting
+
+- **Gradle errors on Android?**  
+  Run `flutter clean` and then `flutter pub get`
+
+- **Hive adapter not found?**  
+  Run `flutter pub run build_runner build --delete-conflicting-outputs`
+
+- **Module imports failing?**  
+  Verify all imports use the correct relative paths (e.g., `../utils/date_utils.dart`)
+
+---
 
 ---
 

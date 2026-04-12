@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
-import '../constants/colors.dart';
+import '../utils/date_utils.dart';
 
 class TaskScreen extends StatefulWidget {
   final DateTime date;
@@ -95,8 +95,10 @@ class _TaskScreenState extends State<TaskScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final dateKey = toDateKeyUtc(widget.date);
+    
     return ValueListenableBuilder(
-      valueListenable: widget.hiveService.getBoxListenable(),
+      valueListenable: widget.hiveService.listenable(keys: [dateKey]),
       builder: (context, box, _) {
         final tasks = widget.hiveService.getTasksForDate(widget.date);
 

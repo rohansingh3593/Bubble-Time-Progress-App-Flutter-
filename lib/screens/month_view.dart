@@ -102,7 +102,7 @@ class _MonthViewState extends State<MonthView> {
         ),
       ),
       body: ValueListenableBuilder(
-        valueListenable: widget.hiveService.getBoxListenable(),
+        valueListenable: widget.hiveService.listenable(),
         builder: (context, box, _) {
           return Column(
             children: [
