@@ -7,6 +7,16 @@ class HiveService {
   static final HiveService instance = HiveService._privateConstructor();
 
   static const _boxName = 'tasksBox';
+  static const _categoriesKey = '__meta_categories__';
+  static const _delegatesKey = '__meta_delegates__';
+
+  static const List<String> _defaultCategories = [
+    'Work',
+    'Personal',
+    'Study',
+    'Health',
+    'Finance',
+  ];
   late Box<List> _box;
 
   Future<void> init() async {
@@ -26,6 +36,45 @@ class HiveService {
     final rawList = _box.get(key);
     if (rawList == null) return [];
     return rawList.cast<Task>().toList();
+  }
+
+
+  List<String> getCategories() {
+    final saved = (_box.get(_categoriesKey) ?? <String>[]).cast<String>();
+    final merged = <String>[..._defaultCategories];
+    for (final category in saved) {
+      if (!merged.any((item) => item.toLowerCase() == category.toLowerCase())) {
+        merged.add(category);
+      }
+    }
+    return merged;
+  }
+
+  Future<void> addCategory(String category) async {
+    final trimmed = category.trim();
+    if (trimmed.isEmpty) return;
+
+    final saved = (_box.get(_categoriesKey) ?? <String>[]).cast<String>().toList();
+    if (!saved.any((item) => item.toLowerCase() == trimmed.toLowerCase()) &&
+        !_defaultCategories.any((item) => item.toLowerCase() == trimmed.toLowerCase())) {
+      saved.add(trimmed);
+      await _box.put(_categoriesKey, saved);
+    }
+  }
+
+  List<String> getDelegates() {
+    return (_box.get(_delegatesKey) ?? <String>[]).cast<String>().toList();
+  }
+
+  Future<void> addDelegate(String delegate) async {
+    final trimmed = delegate.trim();
+    if (trimmed.isEmpty) return;
+
+    final saved = (_box.get(_delegatesKey) ?? <String>[]).cast<String>().toList();
+    if (!saved.any((item) => item.toLowerCase() == trimmed.toLowerCase())) {
+      saved.add(trimmed);
+      await _box.put(_delegatesKey, saved);
+    }
   }
 
   Future<void> addTask(DateTime date, Task task) async {

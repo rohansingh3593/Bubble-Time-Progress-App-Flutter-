@@ -18,14 +18,6 @@ const List<String> _statusOptions = [
   'Overdue',
 ];
 
-const List<String> _categoryOptions = [
-  'Work',
-  'Personal',
-  'Study',
-  'Health',
-  'Finance',
-];
-
 const List<String> _repeatFrequencyOptions = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
 
 /// Opens the reusable task form dialog.
@@ -39,7 +31,10 @@ Future<Task?> showTaskFormDialog(
   final isEditing = initialTask != null;
   final nameController = TextEditingController(text: initialTask?.task ?? '');
   final descriptionController = TextEditingController(text: initialTask?.description ?? '');
-  final delegateController = TextEditingController(text: initialTask?.delegatedTo ?? '');
+
+  final hiveService = HiveService.instance;
+  final categories = hiveService.getCategories().toList();
+  final delegates = hiveService.getDelegates().toList();
 
   DateTime dueDate = DateTime(
     (initialTask?.dueDate ?? date).year,
@@ -49,9 +44,18 @@ Future<Task?> showTaskFormDialog(
 
   String selectedPriority = initialTask?.priority ?? 'Medium';
   String selectedStatus = initialTask?.status ?? 'Not Started';
-  String selectedCategory = initialTask?.category ?? 'Personal';
+  String selectedCategory = initialTask?.category ?? (categories.isNotEmpty ? categories.first : 'Personal');
+  String? selectedDelegate = initialTask?.delegatedTo;
   bool repeatTask = initialTask?.repeatTask ?? false;
   String repeatFrequency = initialTask?.repeatFrequency ?? 'Daily';
+
+  if (!categories.contains(selectedCategory)) {
+    categories.add(selectedCategory);
+  }
+
+  if (selectedDelegate != null && selectedDelegate!.isNotEmpty && !delegates.contains(selectedDelegate)) {
+    delegates.add(selectedDelegate!);
+  }
 
   try {
     return await showDialog<Task>(
@@ -96,9 +100,7 @@ Future<Task?> showTaskFormDialog(
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          'Due Date: ${dueDate.month}/${dueDate.day}/${dueDate.year}',
-                        ),
+                        child: Text('Due Date: ${dueDate.month}/${dueDate.day}/${dueDate.year}'),
                       ),
                       TextButton(
                         onPressed: () async {
@@ -132,11 +134,7 @@ Future<Task?> showTaskFormDialog(
                       .map((priority) => DropdownMenuItem<String>(value: priority, child: Text(priority)))
                       .toList(),
                   onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() {
-                        selectedPriority = value;
-                      });
-                    }
+                    if (value != null) setDialogState(() => selectedPriority = value);
                   },
                 ),
                 const SizedBox(height: 12),
@@ -152,11 +150,7 @@ Future<Task?> showTaskFormDialog(
                       .map((status) => DropdownMenuItem<String>(value: status, child: Text(status)))
                       .toList(),
                   onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() {
-                        selectedStatus = value;
-                      });
-                    }
+                    if (value != null) setDialogState(() => selectedStatus = value);
                   },
                 ),
                 const SizedBox(height: 12),
@@ -168,27 +162,75 @@ Future<Task?> showTaskFormDialog(
                     filled: true,
                     fillColor: const Color(0xFFF8F4FF),
                   ),
-                  items: _categoryOptions
-                      .map((category) => DropdownMenuItem<String>(value: category, child: Text(category)))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() {
-                        selectedCategory = value;
-                      });
+                  items: [
+                    ...categories.map((category) => DropdownMenuItem<String>(value: category, child: Text(category))),
+                    const DropdownMenuItem<String>(value: '__add_category__', child: Text('➕ Add Category')),
+                  ],
+                  onChanged: (value) async {
+                    if (value == null) return;
+                    if (value == '__add_category__') {
+                      final controller = TextEditingController();
+                      final added = await showDialog<String>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Add Category'),
+                          content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Category name')),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                            TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+                          ],
+                        ),
+                      );
+                      if (added != null && added.isNotEmpty) {
+                        await hiveService.addCategory(added);
+                        if (!categories.contains(added)) categories.add(added);
+                        setDialogState(() => selectedCategory = added);
+                      }
+                    } else {
+                      setDialogState(() => selectedCategory = value);
                     }
                   },
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: delegateController,
+                DropdownButtonFormField<String>(
+                  value: selectedDelegate ?? '__none__',
                   decoration: InputDecoration(
                     labelText: 'Delegate (Optional)',
-                    hintText: 'Amit / Monika / Ankit',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                     filled: true,
                     fillColor: const Color(0xFFF8F4FF),
                   ),
+                  items: [
+                    const DropdownMenuItem<String>(value: '__none__', child: Text('Unassigned')),
+                    ...delegates.map((delegate) => DropdownMenuItem<String>(value: delegate, child: Text(delegate))),
+                    const DropdownMenuItem<String>(value: '__add_delegate__', child: Text('➕ Add Delegate')),
+                  ],
+                  onChanged: (value) async {
+                    if (value == null) return;
+                    if (value == '__none__') {
+                      setDialogState(() => selectedDelegate = null);
+                    } else if (value == '__add_delegate__') {
+                      final controller = TextEditingController();
+                      final added = await showDialog<String>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Add Delegate'),
+                          content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Person name')),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                            TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+                          ],
+                        ),
+                      );
+                      if (added != null && added.isNotEmpty) {
+                        await hiveService.addDelegate(added);
+                        if (!delegates.contains(added)) delegates.add(added);
+                        setDialogState(() => selectedDelegate = added);
+                      }
+                    } else {
+                      setDialogState(() => selectedDelegate = value);
+                    }
+                  },
                 ),
                 const SizedBox(height: 10),
                 SwitchListTile(
@@ -199,9 +241,7 @@ Future<Task?> showTaskFormDialog(
                   onChanged: (value) {
                     setDialogState(() {
                       repeatTask = value;
-                      if (!repeatTask) {
-                        repeatFrequency = 'Daily';
-                      }
+                      if (!repeatTask) repeatFrequency = 'Daily';
                     });
                   },
                 ),
@@ -217,10 +257,7 @@ Future<Task?> showTaskFormDialog(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Repeat Frequency',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
+                        const Text('Repeat Frequency', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
                         ..._repeatFrequencyOptions.map(
                           (frequency) => RadioListTile<String>(
@@ -231,11 +268,7 @@ Future<Task?> showTaskFormDialog(
                             contentPadding: EdgeInsets.zero,
                             visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
                             onChanged: (value) {
-                              if (value != null) {
-                                setDialogState(() {
-                                  repeatFrequency = value;
-                                });
-                              }
+                              if (value != null) setDialogState(() => repeatFrequency = value);
                             },
                           ),
                         ),
@@ -246,20 +279,13 @@ Future<Task?> showTaskFormDialog(
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
+              style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Task name is required')),
-                  );
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task name is required')));
                   return;
                 }
 
@@ -271,7 +297,7 @@ Future<Task?> showTaskFormDialog(
                     priority: selectedPriority,
                     status: selectedStatus,
                     category: selectedCategory,
-                    delegatedTo: delegateController.text.trim().isEmpty ? null : delegateController.text.trim(),
+                    delegatedTo: selectedDelegate,
                     done: selectedStatus == 'Completed',
                     repeatTask: repeatTask,
                     repeatFrequency: repeatTask ? repeatFrequency : null,
@@ -287,7 +313,6 @@ Future<Task?> showTaskFormDialog(
   } finally {
     nameController.dispose();
     descriptionController.dispose();
-    delegateController.dispose();
   }
 }
 
