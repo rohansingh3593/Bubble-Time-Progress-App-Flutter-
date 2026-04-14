@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../services/hive_service.dart';
+import '../models/task_model.dart';
 import '../constants/colors.dart';
 import 'task_screen.dart';
 
@@ -16,6 +17,7 @@ class DayView extends StatefulWidget {
 
 class _DayViewState extends State<DayView> {
   late DateTime _currentDay;
+  bool _showTodayTasks = true;
 
   @override
   void initState() {
@@ -97,15 +99,16 @@ class _DayViewState extends State<DayView> {
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
         builder: (context, box, _) {
+          final todayTasks = widget.hiveService.getTasksForDate(_currentDay);
+
           return Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(12.0),
             child: Column(
               children: [
-                // 24 hour bubbles in 6x4 grid
                 Expanded(
                   child: GridView.builder(
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 6, // 6 columns
+                      crossAxisCount: 6,
                       childAspectRatio: 1.0,
                       crossAxisSpacing: 8.0,
                       mainAxisSpacing: 8.0,
@@ -135,6 +138,8 @@ class _DayViewState extends State<DayView> {
                     },
                   ),
                 ),
+                const SizedBox(height: 10),
+                _todayTasksPanel(todayTasks),
               ],
             ),
           );
@@ -146,6 +151,77 @@ class _DayViewState extends State<DayView> {
         },
         tooltip: 'Add task',
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _todayTasksPanel(List<Task> tasks) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFECE8E6),
+        border: Border.all(color: Colors.black38),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            onTap: () {
+              setState(() {
+                _showTodayTasks = !_showTodayTasks;
+              });
+            },
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Color(0xFFAED9AE),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      "TODAY'S TASKS",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(letterSpacing: 4, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Icon(_showTodayTasks ? Icons.expand_more : Icons.chevron_right, color: Colors.green[800]),
+                ],
+              ),
+            ),
+          ),
+          if (_showTodayTasks) ...[
+            Container(
+              width: double.infinity,
+              color: const Color(0xFFE8C1A0),
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: const Text(
+                'TASK',
+                textAlign: TextAlign.center,
+                style: TextStyle(letterSpacing: 3),
+              ),
+            ),
+            SizedBox(
+              height: 170,
+              child: tasks.isEmpty
+                  ? const Center(child: Text('Nothing for Today, Great Job !'))
+                  : ListView.separated(
+                      itemCount: tasks.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final task = tasks[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(task.task),
+                          subtitle: Text('${task.priority} • ${task.status}'),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ],
       ),
     );
   }
