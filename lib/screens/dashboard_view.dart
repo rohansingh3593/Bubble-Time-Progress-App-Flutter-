@@ -47,6 +47,8 @@ class _DashboardViewState extends State<DashboardView> {
           final allTasks = allByDate.values.expand((list) => list).toList();
 
           final summary = _buildSummary(allTasks, todayStart);
+          final scopedTaskCounts = _buildScopedTaskCounts(allTasks, todayStart);
+          final yearProgress = _buildYearProgress(todayStart);
           final priorityCounts = _countByField(allTasks, (t) => t.priority, _priorityOrder);
           final statusCounts = _countByField(allTasks, (t) => t.status, _statusOrder);
           final categoryCounts = _countByField(allTasks, (t) => t.category, const []);
@@ -87,6 +89,10 @@ class _DashboardViewState extends State<DashboardView> {
             padding: const EdgeInsets.all(12),
             children: [
               _summaryHeader(summary),
+              const SizedBox(height: 12),
+              _scopeTaskHeader(scopedTaskCounts),
+              const SizedBox(height: 12),
+              _yearProgressPanel(yearProgress),
               const SizedBox(height: 12),
               _priorityChart(priorityCounts),
               const SizedBox(height: 12),
@@ -161,6 +167,36 @@ class _DashboardViewState extends State<DashboardView> {
     };
   }
 
+
+  Map<String, int> _buildScopedTaskCounts(List<Task> tasks, DateTime todayStart) {
+    final monthlyTasks = tasks
+        .where((t) => t.dueDate.year == todayStart.year && t.dueDate.month == todayStart.month)
+        .length;
+    final yearlyTasks = tasks.where((t) => t.dueDate.year == todayStart.year).length;
+    final todayTasks = tasks.where((t) => _isSameDay(t.dueDate, todayStart)).length;
+
+    return {
+      'YEAR TASKS': yearlyTasks,
+      'MONTH TASKS': monthlyTasks,
+      'TODAY TASKS': todayTasks,
+    };
+  }
+
+  Map<String, int> _buildYearProgress(DateTime todayStart) {
+    final yearStart = DateTime(todayStart.year, 1, 1);
+    final nextYear = DateTime(todayStart.year + 1, 1, 1);
+    final totalDaysInYear = nextYear.difference(yearStart).inDays;
+    final daysPassed = todayStart.difference(yearStart).inDays + 1;
+    final remaining = totalDaysInYear - daysPassed;
+
+    return {
+      'totalDays': totalDaysInYear,
+      'daysPassed': daysPassed,
+      'daysRemaining': remaining,
+      'progressPercent': ((daysPassed / totalDaysInYear) * 100).round(),
+    };
+  }
+
   List<Task> _filterBy(List<Task> tasks, String selected, String Function(Task) selector) {
     if (selected == 'All') return tasks;
     return tasks.where((task) => selector(task) == selected).toList();
@@ -230,6 +266,69 @@ class _DashboardViewState extends State<DashboardView> {
               ),
             )
             .toList(),
+      ),
+    );
+  }
+
+
+  Widget _scopeTaskHeader(Map<String, int> scopedCounts) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFD4EDF6),
+        border: Border.all(color: Colors.black54),
+      ),
+      child: Row(
+        children: scopedCounts.entries
+            .map(
+              (entry) => Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Column(
+                    children: [
+                      Text(entry.key, style: const TextStyle(letterSpacing: 3, fontSize: 11)),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${entry.value}',
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _yearProgressPanel(Map<String, int> progress) {
+    final percent = progress['progressPercent'] ?? 0;
+
+    return _panel(
+      title: 'YEAR PROGRESS OVERVIEW',
+      headerColor: const Color(0xFFC9BCE2),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Days Passed: ${progress['daysPassed']} / ${progress['totalDays']}'),
+                Text('Remaining: ${progress['daysRemaining']}'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: percent / 100,
+              minHeight: 8,
+              backgroundColor: Colors.grey[300],
+              color: const Color(0xFF8B6BD9),
+            ),
+            const SizedBox(height: 6),
+            Text('$percent% of year completed'),
+          ],
+        ),
       ),
     );
   }
