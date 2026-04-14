@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
+import '../widgets/quick_add_task_dialog.dart';
 
 class DashboardView extends StatefulWidget {
   final HiveService hiveService;
@@ -143,6 +144,21 @@ class _DashboardViewState extends State<DashboardView> {
         },
       ),
     );
+  }
+
+
+  Future<void> _editTask(Task task) async {
+    final updated = await showTaskFormDialog(
+      context,
+      date: task.dueDate,
+      initialTask: task,
+      title: 'Update Task',
+      actionLabel: 'Save Task',
+    );
+
+    if (updated != null) {
+      await widget.hiveService.updateTaskByReference(task, updated);
+    }
   }
 
   Map<String, int> _buildSummary(List<Task> tasks, DateTime todayStart) {
@@ -460,6 +476,7 @@ class _DashboardViewState extends State<DashboardView> {
                   .map(
                     (task) => ListTile(
                       dense: true,
+                      onTap: () => _editTask(task),
                       title: Text(task.task),
                       subtitle: Text('${task.priority} • ${task.status}'),
                     ),
@@ -568,6 +585,7 @@ class _DashboardViewState extends State<DashboardView> {
               ...tasks.map(
                 (task) => ListTile(
                   dense: true,
+                  onTap: () => _editTask(task),
                   title: Text(task.task),
                   subtitle: Text('${task.priority} • ${task.status} • ${task.category}'),
                 ),

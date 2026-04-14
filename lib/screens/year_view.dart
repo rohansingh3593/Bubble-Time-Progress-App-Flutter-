@@ -43,6 +43,21 @@ class _YearViewState extends State<YearView> {
     );
   }
 
+
+  Future<void> _editTask(Task task) async {
+    final updated = await showTaskFormDialog(
+      context,
+      date: task.dueDate,
+      initialTask: task,
+      title: 'Update Task',
+      actionLabel: 'Save Task',
+    );
+
+    if (updated != null) {
+      await widget.hiveService.updateTaskByReference(task, updated);
+    }
+  }
+
   Color _getBubbleColor(DateTime date, Map<String, int> summary, DateTime today) {
     final isPassed = date.isBefore(today);
     if (isPassed) {
@@ -134,6 +149,7 @@ class _YearViewState extends State<YearView> {
                         final task = tasks[index];
                         return ListTile(
                           dense: true,
+                          onTap: () => _editTask(task),
                           title: Text(task.task),
                           subtitle: Text('${task.priority} • ${task.status}'),
                         );

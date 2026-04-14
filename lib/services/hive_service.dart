@@ -134,6 +134,40 @@ class HiveService {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
+
+  Future<bool> updateTaskByReference(Task original, Task updated) async {
+    for (final key in _box.keys) {
+      if (key is! String) continue;
+
+      final rawList = _box.get(key);
+      if (rawList == null) continue;
+      final tasks = rawList.cast<Task>().toList();
+
+      for (int i = 0; i < tasks.length; i++) {
+        final candidate = tasks[i];
+        if (identical(candidate, original) || _matchesTaskIdentity(candidate, original)) {
+          final previous = tasks[i];
+          tasks[i] = updated;
+          await _box.put(key, tasks);
+          await _handleRecurringIfNeeded(previous: previous, updated: updated);
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  bool _matchesTaskIdentity(Task a, Task b) {
+    return a.task == b.task &&
+        a.dueDate.year == b.dueDate.year &&
+        a.dueDate.month == b.dueDate.month &&
+        a.dueDate.day == b.dueDate.day &&
+        a.priority == b.priority &&
+        a.status == b.status &&
+        a.category == b.category;
+  }
+
   Map<String, int> getTaskSummaryForDate(DateTime date) {
     final tasks = getTasksForDate(date);
     final completed = tasks.where((task) => task.done).length;

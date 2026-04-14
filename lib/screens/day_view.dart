@@ -63,6 +63,25 @@ class _DayViewState extends State<DayView> {
     return '${hour - 12} PM';
   }
 
+
+  Future<void> _editTask(Task task, {int? index}) async {
+    final updated = await showTaskFormDialog(
+      context,
+      date: _currentDay,
+      initialTask: task,
+      title: 'Update Task',
+      actionLabel: 'Save Task',
+    );
+
+    if (updated == null) return;
+
+    if (index != null) {
+      await widget.hiveService.updateTask(_currentDay, index, updated);
+    } else {
+      await widget.hiveService.updateTaskByReference(task, updated);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -214,6 +233,7 @@ class _DayViewState extends State<DayView> {
                         final task = tasks[index];
                         return ListTile(
                           dense: true,
+                          onTap: () => _editTask(task, index: index),
                           title: Text(task.task),
                           subtitle: Text('${task.priority} • ${task.status}'),
                         );
