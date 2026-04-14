@@ -50,7 +50,6 @@ Future<Task?> showTaskFormDialog(
   String selectedPriority = initialTask?.priority ?? 'Medium';
   String selectedStatus = initialTask?.status ?? 'Not Started';
   String selectedCategory = initialTask?.category ?? 'Personal';
-  bool isDone = initialTask?.done ?? false;
   bool repeatTask = initialTask?.repeatTask ?? false;
   String repeatFrequency = initialTask?.repeatFrequency ?? 'Daily';
 
@@ -156,7 +155,6 @@ Future<Task?> showTaskFormDialog(
                     if (value != null) {
                       setDialogState(() {
                         selectedStatus = value;
-                        isDone = value == 'Completed';
                       });
                     }
                   },
@@ -244,21 +242,6 @@ Future<Task?> showTaskFormDialog(
                       ],
                     ),
                   ),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Mark as completed'),
-                  value: isDone,
-                  onChanged: (value) {
-                    setDialogState(() {
-                      isDone = value ?? false;
-                      if (isDone) {
-                        selectedStatus = 'Completed';
-                      } else if (selectedStatus == 'Completed') {
-                        selectedStatus = 'Not Started';
-                      }
-                    });
-                  },
-                ),
               ],
             ),
           ),
@@ -289,7 +272,7 @@ Future<Task?> showTaskFormDialog(
                     status: selectedStatus,
                     category: selectedCategory,
                     delegatedTo: delegateController.text.trim().isEmpty ? null : delegateController.text.trim(),
-                    done: isDone,
+                    done: selectedStatus == 'Completed',
                     repeatTask: repeatTask,
                     repeatFrequency: repeatTask ? repeatFrequency : null,
                   ),

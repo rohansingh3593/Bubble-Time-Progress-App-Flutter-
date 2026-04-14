@@ -23,11 +23,6 @@ class _TaskScreenState extends State<TaskScreen> {
     await showQuickAddTaskDialog(context, widget.date, widget.hiveService);
   }
 
-  /// Toggles task completion status.
-  /// No setState needed - reactive ValueListenableBuilder will trigger rebuild.
-  Future<void> _toggleTask(int index) async {
-    await widget.hiveService.toggleTaskStatus(widget.date, index);
-  }
 
   /// Edits task with full form and saves updates.
   Future<void> _editTask(int index) async {
@@ -127,18 +122,14 @@ class _TaskScreenState extends State<TaskScreen> {
                             ),
                             child: ListTile(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              leading: Checkbox(
-                                value: task.done,
-                                onChanged: (_) => _toggleTask(index),
-                              ),
                               title: Text(
                                 task.task,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
-                                  decoration: task.done
+                                  decoration: task.status == 'Completed'
                                       ? TextDecoration.lineThrough
                                       : null,
-                                  color: task.done ? Colors.grey : null,
+                                  color: task.status == 'Completed' ? Colors.grey : null,
                                 ),
                               ),
                               subtitle: Column(
