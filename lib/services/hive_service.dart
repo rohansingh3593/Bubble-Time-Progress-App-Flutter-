@@ -39,8 +39,12 @@ class HiveService {
     final key = _formatKey(date);
     final tasks = getTasksForDate(date);
     if (index < 0 || index >= tasks.length) return;
+
+    final previous = tasks[index];
     tasks[index] = task;
     await _box.put(key, tasks);
+
+    await _handleRecurringIfNeeded(previous: previous, updated: task);
   }
 
   Future<void> deleteTask(DateTime date, int index) async {
@@ -58,12 +62,76 @@ class HiveService {
 
     final currentTask = tasks[index];
     final nextDone = !currentTask.done;
-    tasks[index] = currentTask.copyWith(
+    final updatedTask = currentTask.copyWith(
       done: nextDone,
       status: nextDone ? 'Completed' : 'In Progress',
     );
 
+    tasks[index] = updatedTask;
     await _box.put(key, tasks);
+
+    await _handleRecurringIfNeeded(previous: currentTask, updated: updatedTask);
+  }
+
+  Future<void> _handleRecurringIfNeeded({
+    required Task previous,
+    required Task updated,
+  }) async {
+    if (!updated.repeatTask) return;
+
+    final didBecomeTerminal =
+        !_isTerminalStatus(previous.status) && _isTerminalStatus(updated.status);
+
+    if (!didBecomeTerminal) return;
+
+    final nextDueDate = _computeNextDueDate(updated.dueDate, updated.repeatFrequency);
+    if (nextDueDate == null) return;
+
+    final nextKey = _formatKey(nextDueDate);
+    final nextDateTasks = getTasksForDate(nextDueDate);
+
+    final alreadyExists = nextDateTasks.any(
+      (task) =>
+          task.task == updated.task &&
+          _isSameDate(task.dueDate, nextDueDate) &&
+          task.repeatTask == true &&
+          task.repeatFrequency == updated.repeatFrequency,
+    );
+
+    if (alreadyExists) return;
+
+    nextDateTasks.add(
+      updated.copyWith(
+        dueDate: nextDueDate,
+        done: false,
+        status: 'Not Started',
+      ),
+    );
+
+    await _box.put(nextKey, nextDateTasks);
+  }
+
+  bool _isTerminalStatus(String status) {
+    return status == 'Completed' || status == 'Cancelled';
+  }
+
+  DateTime? _computeNextDueDate(DateTime dueDate, String? repeatFrequency) {
+    switch (repeatFrequency) {
+      case 'Daily':
+        return dueDate.add(const Duration(days: 1));
+      case 'Weekly':
+        return dueDate.add(const Duration(days: 7));
+      case 'Monthly':
+        return DateTime(dueDate.year, dueDate.month + 1, dueDate.day);
+      case 'Yearly':
+        return DateTime(dueDate.year + 1, dueDate.month, dueDate.day);
+      default:
+        return null;
+    }
+  }
+
+  bool _isSameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   Map<String, int> getTaskSummaryForDate(DateTime date) {
@@ -74,7 +142,6 @@ class HiveService {
       'pending': tasks.length - completed,
     };
   }
-
 
   Map<DateTime, List<Task>> getAllTasksByDate() {
     final result = <DateTime, List<Task>>{};

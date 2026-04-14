@@ -153,6 +153,8 @@ class _TaskScreenState extends State<TaskScreen> {
                                   Text('Status: ${task.status} • Category: ${task.category}'),
                                   if (task.delegatedTo != null && task.delegatedTo!.isNotEmpty)
                                     Text('Delegate: ${task.delegatedTo}'),
+                                  if (task.repeatTask)
+                                    Text('Repeats: ${task.repeatFrequency ?? 'Daily'}'),
                                 ],
                               ),
                               trailing: Column(

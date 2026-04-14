@@ -28,6 +28,13 @@ class Task {
   @HiveField(7)
   String? delegatedTo;
 
+
+  @HiveField(8)
+  bool repeatTask;
+
+  @HiveField(9)
+  String? repeatFrequency;
+
   Task({
     required this.task,
     this.done = false,
@@ -37,6 +44,8 @@ class Task {
     this.status = 'Not Started',
     this.category = 'Personal',
     this.delegatedTo,
+    this.repeatTask = false,
+    this.repeatFrequency,
   });
 
   Task copyWith({
@@ -48,6 +57,8 @@ class Task {
     String? status,
     String? category,
     String? delegatedTo,
+    bool? repeatTask,
+    String? repeatFrequency,
   }) {
     return Task(
       task: task ?? this.task,
@@ -58,6 +69,8 @@ class Task {
       status: status ?? this.status,
       category: category ?? this.category,
       delegatedTo: delegatedTo ?? this.delegatedTo,
+      repeatTask: repeatTask ?? this.repeatTask,
+      repeatFrequency: repeatFrequency ?? this.repeatFrequency,
     );
   }
 }

@@ -26,6 +26,8 @@ const List<String> _categoryOptions = [
   'Finance',
 ];
 
+const List<String> _repeatFrequencyOptions = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
+
 /// Opens the reusable task form dialog.
 Future<Task?> showTaskFormDialog(
   BuildContext context, {
@@ -49,6 +51,8 @@ Future<Task?> showTaskFormDialog(
   String selectedStatus = initialTask?.status ?? 'Not Started';
   String selectedCategory = initialTask?.category ?? 'Personal';
   bool isDone = initialTask?.done ?? false;
+  bool repeatTask = initialTask?.repeatTask ?? false;
+  String repeatFrequency = initialTask?.repeatFrequency ?? 'Daily';
 
   try {
     return await showDialog<Task>(
@@ -188,6 +192,41 @@ Future<Task?> showTaskFormDialog(
                     fillColor: const Color(0xFFF8F4FF),
                   ),
                 ),
+                const SizedBox(height: 10),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Repeat Task'),
+                  subtitle: Text(repeatTask ? 'ON' : 'OFF'),
+                  value: repeatTask,
+                  onChanged: (value) {
+                    setDialogState(() {
+                      repeatTask = value;
+                      if (!repeatTask) {
+                        repeatFrequency = 'Daily';
+                      }
+                    });
+                  },
+                ),
+                if (repeatTask)
+                  DropdownButtonFormField<String>(
+                    value: repeatFrequency,
+                    decoration: InputDecoration(
+                      labelText: 'Repeat Frequency',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      filled: true,
+                      fillColor: const Color(0xFFF8F4FF),
+                    ),
+                    items: _repeatFrequencyOptions
+                        .map((frequency) => DropdownMenuItem<String>(value: frequency, child: Text(frequency)))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          repeatFrequency = value;
+                        });
+                      }
+                    },
+                  ),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Mark as completed'),
@@ -234,6 +273,8 @@ Future<Task?> showTaskFormDialog(
                     category: selectedCategory,
                     delegatedTo: delegateController.text.trim().isEmpty ? null : delegateController.text.trim(),
                     done: isDone,
+                    repeatTask: repeatTask,
+                    repeatFrequency: repeatTask ? repeatFrequency : null,
                   ),
                 );
               },
