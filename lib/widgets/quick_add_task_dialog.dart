@@ -26,88 +26,107 @@ const List<String> _categoryOptions = [
   'Finance',
 ];
 
-/// Shows a quick-add task dialog for a given date.
-/// Returns true if a task was added, false otherwise.
-Future<bool> showQuickAddTaskDialog(
-  BuildContext context,
-  DateTime date,
-  HiveService hiveService,
-) async {
-  final nameController = TextEditingController();
-  final descriptionController = TextEditingController();
-  final delegateController = TextEditingController();
+/// Opens the reusable task form dialog.
+Future<Task?> showTaskFormDialog(
+  BuildContext context, {
+  required DateTime date,
+  Task? initialTask,
+  String title = 'Add Task',
+  String actionLabel = 'Add Task',
+}) async {
+  final isEditing = initialTask != null;
+  final nameController = TextEditingController(text: initialTask?.task ?? '');
+  final descriptionController = TextEditingController(text: initialTask?.description ?? '');
+  final delegateController = TextEditingController(text: initialTask?.delegatedTo ?? '');
 
-  DateTime dueDate = DateTime(date.year, date.month, date.day);
-  String selectedPriority = 'Medium';
-  String selectedStatus = 'Not Started';
-  String selectedCategory = 'Personal';
-  bool isDone = false;
+  DateTime dueDate = DateTime(
+    (initialTask?.dueDate ?? date).year,
+    (initialTask?.dueDate ?? date).month,
+    (initialTask?.dueDate ?? date).day,
+  );
+
+  String selectedPriority = initialTask?.priority ?? 'Medium';
+  String selectedStatus = initialTask?.status ?? 'Not Started';
+  String selectedCategory = initialTask?.category ?? 'Personal';
+  bool isDone = initialTask?.done ?? false;
 
   try {
-    final result = await showDialog<Task>(
+    return await showDialog<Task>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add Task'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: Text(title),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Task Name *',
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    filled: true,
+                    fillColor: const Color(0xFFF8F4FF),
                   ),
-                  autofocus: true,
+                  autofocus: !isEditing,
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: descriptionController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Description (Optional)',
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    filled: true,
+                    fillColor: const Color(0xFFF8F4FF),
                   ),
                   maxLines: 2,
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Due Date: ${dueDate.month}/${dueDate.day}/${dueDate.year}',
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8F4FF),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Due Date: ${dueDate.month}/${dueDate.day}/${dueDate.year}',
+                        ),
                       ),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: dueDate,
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2100),
-                        );
-                        if (picked != null) {
-                          setDialogState(() {
-                            dueDate = picked;
-                          });
-                        }
-                      },
-                      child: const Text('Select'),
-                    ),
-                  ],
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: dueDate,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+                          if (picked != null) {
+                            setDialogState(() {
+                              dueDate = picked;
+                            });
+                          }
+                        },
+                        child: const Text('Select'),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: selectedPriority,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Priority',
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    filled: true,
+                    fillColor: const Color(0xFFF8F4FF),
                   ),
                   items: _priorityOptions
-                      .map((priority) => DropdownMenuItem<String>(
-                            value: priority,
-                            child: Text(priority),
-                          ))
+                      .map((priority) => DropdownMenuItem<String>(value: priority, child: Text(priority)))
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
@@ -120,15 +139,14 @@ Future<bool> showQuickAddTaskDialog(
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: selectedStatus,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Status',
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    filled: true,
+                    fillColor: const Color(0xFFF8F4FF),
                   ),
                   items: _statusOptions
-                      .map((status) => DropdownMenuItem<String>(
-                            value: status,
-                            child: Text(status),
-                          ))
+                      .map((status) => DropdownMenuItem<String>(value: status, child: Text(status)))
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
@@ -142,15 +160,14 @@ Future<bool> showQuickAddTaskDialog(
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Category',
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    filled: true,
+                    fillColor: const Color(0xFFF8F4FF),
                   ),
                   items: _categoryOptions
-                      .map((category) => DropdownMenuItem<String>(
-                            value: category,
-                            child: Text(category),
-                          ))
+                      .map((category) => DropdownMenuItem<String>(value: category, child: Text(category)))
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
@@ -163,10 +180,12 @@ Future<bool> showQuickAddTaskDialog(
                 const SizedBox(height: 12),
                 TextField(
                   controller: delegateController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Delegate (Optional)',
-                    border: OutlineInputBorder(),
                     hintText: 'Amit / Monika / Ankit',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    filled: true,
+                    fillColor: const Color(0xFFF8F4FF),
                   ),
                 ),
                 CheckboxListTile(
@@ -193,6 +212,9 @@ Future<bool> showQuickAddTaskDialog(
               child: const Text('Cancel'),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
@@ -210,29 +232,37 @@ Future<bool> showQuickAddTaskDialog(
                     priority: selectedPriority,
                     status: selectedStatus,
                     category: selectedCategory,
-                    delegatedTo: delegateController.text.trim().isEmpty
-                        ? null
-                        : delegateController.text.trim(),
+                    delegatedTo: delegateController.text.trim().isEmpty ? null : delegateController.text.trim(),
                     done: isDone,
                   ),
                 );
               },
-              child: const Text('Add Task'),
+              child: Text(actionLabel),
             ),
           ],
         ),
       ),
     );
-
-    if (result != null) {
-      await hiveService.addTask(date, result);
-      return true;
-    }
-
-    return false;
   } finally {
     nameController.dispose();
     descriptionController.dispose();
     delegateController.dispose();
   }
+}
+
+/// Shows a quick-add task dialog for a given date.
+/// Returns true if a task was added, false otherwise.
+Future<bool> showQuickAddTaskDialog(
+  BuildContext context,
+  DateTime date,
+  HiveService hiveService,
+) async {
+  final result = await showTaskFormDialog(context, date: date);
+
+  if (result != null) {
+    await hiveService.addTask(date, result);
+    return true;
+  }
+
+  return false;
 }

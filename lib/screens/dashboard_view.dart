@@ -238,7 +238,10 @@ class _DashboardViewState extends State<DashboardView> {
       decoration: BoxDecoration(
         color: const Color(0xFFB9B0D8),
         border: Border.all(color: Colors.black54),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 6, offset: Offset(0, 3))],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Row(
         children: summary.entries
             .map(
@@ -276,7 +279,10 @@ class _DashboardViewState extends State<DashboardView> {
       decoration: BoxDecoration(
         color: const Color(0xFFD4EDF6),
         border: Border.all(color: Colors.black54),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 6, offset: Offset(0, 3))],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Row(
         children: scopedCounts.entries
             .map(
@@ -582,7 +588,10 @@ class _DashboardViewState extends State<DashboardView> {
       decoration: BoxDecoration(
         color: const Color(0xFFECE8E6),
         border: Border.all(color: Colors.black54),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 8, offset: Offset(0, 4))],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           Container(

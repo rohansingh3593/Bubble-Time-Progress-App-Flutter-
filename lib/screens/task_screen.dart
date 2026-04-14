@@ -29,6 +29,24 @@ class _TaskScreenState extends State<TaskScreen> {
     await widget.hiveService.toggleTaskStatus(widget.date, index);
   }
 
+  /// Edits task with full form and saves updates.
+  Future<void> _editTask(int index) async {
+    final tasks = widget.hiveService.getTasksForDate(widget.date);
+    if (index < 0 || index >= tasks.length) return;
+
+    final updated = await showTaskFormDialog(
+      context,
+      date: widget.date,
+      initialTask: tasks[index],
+      title: 'Update Task',
+      actionLabel: 'Save Task',
+    );
+
+    if (updated != null) {
+      await widget.hiveService.updateTask(widget.date, index, updated);
+    }
+  }
+
   /// Deletes a task with confirmation.
   /// No setState needed - reactive ValueListenableBuilder will trigger rebuild.
   Future<void> _deleteTask(int index) async {
@@ -65,6 +83,14 @@ class _TaskScreenState extends State<TaskScreen> {
 
         return Container(
           padding: const EdgeInsets.all(16.0),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFFF7F3FF), Color(0xFFF3FBFF)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          ),
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.8,
           ),
@@ -93,8 +119,14 @@ class _TaskScreenState extends State<TaskScreen> {
                         itemBuilder: (context, index) {
                           final task = tasks[index];
                           return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
+                            margin: const EdgeInsets.only(bottom: 10),
+                            elevation: 3,
+                            shadowColor: const Color(0xFFB6A9EA),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
                             child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               leading: Checkbox(
                                 value: task.done,
                                 onChanged: (_) => _toggleTask(index),
@@ -102,6 +134,7 @@ class _TaskScreenState extends State<TaskScreen> {
                               title: Text(
                                 task.task,
                                 style: TextStyle(
+                                  fontWeight: FontWeight.w600,
                                   decoration: task.done
                                       ? TextDecoration.lineThrough
                                       : null,
@@ -113,6 +146,7 @@ class _TaskScreenState extends State<TaskScreen> {
                                 children: [
                                   if (task.description.isNotEmpty)
                                     Text(task.description),
+                                  const SizedBox(height: 4),
                                   Text(
                                     'Due: ${task.dueDate.month}/${task.dueDate.day}/${task.dueDate.year} • ${task.priority}',
                                   ),
@@ -121,9 +155,19 @@ class _TaskScreenState extends State<TaskScreen> {
                                     Text('Delegate: ${task.delegatedTo}'),
                                 ],
                               ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _deleteTask(index),
+                              trailing: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: Color(0xFF6F55C7)),
+                                    onPressed: () => _editTask(index),
+                                    tooltip: 'Update task',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    onPressed: () => _deleteTask(index),
+                                  ),
+                                ],
                               ),
                             ),
                           );
