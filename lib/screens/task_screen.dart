@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import '../models/task_model.dart';
 import '../services/hive_service.dart';
-import '../constants/colors.dart';
+import '../widgets/quick_add_task_dialog.dart';
 
 class TaskScreen extends StatefulWidget {
   final DateTime date;
@@ -18,46 +17,10 @@ class TaskScreen extends StatefulWidget {
 }
 
 class _TaskScreenState extends State<TaskScreen> {
-  /// Adds a new task with an inline dialog.
+  /// Adds a new task with full details dialog.
   /// No setState needed - reactive ValueListenableBuilder will trigger rebuild.
   Future<void> _addTaskWithDialog() async {
-    final controller = TextEditingController();
-    try {
-      final result = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Add Task'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(
-              hintText: 'Enter task description',
-              border: OutlineInputBorder(),
-            ),
-            autofocus: true,
-            maxLines: 2,
-            minLines: 1,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(controller.text),
-              child: const Text('Add Task'),
-            ),
-          ],
-        ),
-      );
-
-      if (result != null && result.trim().isNotEmpty) {
-        final task = Task(task: result.trim());
-        // No setState needed - reactive ValueListenableBuilder will trigger rebuild
-        await widget.hiveService.addTask(widget.date, task);
-      }
-    } finally {
-      controller.dispose();
-    }
+    await showQuickAddTaskDialog(context, widget.date, widget.hiveService);
   }
 
   /// Toggles task completion status.
@@ -129,23 +92,39 @@ class _TaskScreenState extends State<TaskScreen> {
                         itemCount: tasks.length,
                         itemBuilder: (context, index) {
                           final task = tasks[index];
-                          return ListTile(
-                            leading: Checkbox(
-                              value: task.done,
-                              onChanged: (_) => _toggleTask(index),
-                            ),
-                            title: Text(
-                              task.task,
-                              style: TextStyle(
-                                decoration: task.done
-                                    ? TextDecoration.lineThrough
-                                    : null,
-                                color: task.done ? Colors.grey : null,
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: Checkbox(
+                                value: task.done,
+                                onChanged: (_) => _toggleTask(index),
                               ),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deleteTask(index),
+                              title: Text(
+                                task.task,
+                                style: TextStyle(
+                                  decoration: task.done
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  color: task.done ? Colors.grey : null,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (task.description.isNotEmpty)
+                                    Text(task.description),
+                                  Text(
+                                    'Due: ${task.dueDate.month}/${task.dueDate.day}/${task.dueDate.year} • ${task.priority}',
+                                  ),
+                                  Text('Status: ${task.status} • Category: ${task.category}'),
+                                  if (task.delegatedTo != null && task.delegatedTo!.isNotEmpty)
+                                    Text('Delegate: ${task.delegatedTo}'),
+                                ],
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _deleteTask(index),
+                              ),
                             ),
                           );
                         },

@@ -55,8 +55,14 @@ class HiveService {
     final key = _formatKey(date);
     final tasks = getTasksForDate(date);
     if (index < 0 || index >= tasks.length) return;
+
     final currentTask = tasks[index];
-    tasks[index] = Task(task: currentTask.task, done: !currentTask.done);
+    final nextDone = !currentTask.done;
+    tasks[index] = currentTask.copyWith(
+      done: nextDone,
+      status: nextDone ? 'Completed' : 'In Progress',
+    );
+
     await _box.put(key, tasks);
   }
 
