@@ -67,7 +67,7 @@ class _MonthViewState extends State<MonthView> {
 
   Map<String, int> _getSummaryByRepeatType(DateTime date, String repeatFrequency) {
     final tasks = widget.hiveService.getTasksForDate(date).where((task) {
-      return task.repeatTask && task.repeatFrequency == repeatFrequency;
+      return !task.repeatTask || task.repeatFrequency == repeatFrequency;
     }).toList();
 
     final completed = tasks.where((task) => task.status == 'Completed').length;
