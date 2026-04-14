@@ -65,15 +65,15 @@ class _MonthViewState extends State<MonthView> {
   }
 
 
-  Map<String, int> _getSummaryByRepeatType(DateTime date, String repeatFrequency) {
-    final tasks = widget.hiveService.getTasksForDate(date).where((task) {
-      return !task.repeatTask || task.repeatFrequency == repeatFrequency;
-    }).toList();
+  Map<String, int> _getCompletedSummaryForDate(DateTime date) {
+    final completedTasks = widget.hiveService
+        .getTasksForDate(date)
+        .where((task) => task.status == 'Completed')
+        .toList();
 
-    final completed = tasks.where((task) => task.status == 'Completed').length;
     return {
-      'completed': completed,
-      'pending': tasks.length - completed,
+      'completed': completedTasks.length,
+      'pending': 0,
     };
   }
 
@@ -146,7 +146,7 @@ class _MonthViewState extends State<MonthView> {
 
                     final day = index - weekdayOffset + 1;
                     final date = DateTime(_currentMonth.year, _currentMonth.month, day);
-                    final summary = _getSummaryByRepeatType(date, 'Monthly');
+                    final summary = _getCompletedSummaryForDate(date);
                     final isToday = isCurrentMonth && day == now.day;
                     final todayStart = DateTime(now.year, now.month, now.day);
 

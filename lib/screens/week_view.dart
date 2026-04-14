@@ -69,15 +69,15 @@ class _WeekViewState extends State<WeekView> {
   }
 
 
-  Map<String, int> _getSummaryByRepeatType(DateTime date, String repeatFrequency) {
-    final tasks = widget.hiveService.getTasksForDate(date).where((task) {
-      return !task.repeatTask || task.repeatFrequency == repeatFrequency;
-    }).toList();
+  Map<String, int> _getCompletedSummaryForDate(DateTime date) {
+    final completedTasks = widget.hiveService
+        .getTasksForDate(date)
+        .where((task) => task.status == 'Completed')
+        .toList();
 
-    final completed = tasks.where((task) => task.status == 'Completed').length;
     return {
-      'completed': completed,
-      'pending': tasks.length - completed,
+      'completed': completedTasks.length,
+      'pending': 0,
     };
   }
 
@@ -151,7 +151,7 @@ class _WeekViewState extends State<WeekView> {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: List.generate(7, (index) {
                     final date = weekDays[index];
-                    final summary = _getSummaryByRepeatType(date, 'Weekly');
+                    final summary = _getCompletedSummaryForDate(date);
                     final isToday = date.year == now.year && date.month == now.month && date.day == now.day;
 
                     return Expanded(
