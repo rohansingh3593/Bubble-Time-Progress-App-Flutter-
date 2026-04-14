@@ -3,6 +3,7 @@ import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
+import '../models/task_model.dart';
 
 class WeekView extends StatefulWidget {
   final HiveService hiveService;
@@ -15,6 +16,7 @@ class WeekView extends StatefulWidget {
 
 class _WeekViewState extends State<WeekView> {
   late DateTime _currentWeekStart;
+  bool _showWeeklyTasks = true;
 
   @override
   void initState() {
@@ -68,7 +70,6 @@ class _WeekViewState extends State<WeekView> {
     return '$startStr - $endStr';
   }
 
-
   Map<String, int> _getCompletedSummaryForDate(DateTime date) {
     final completedTasks = widget.hiveService
         .getTasksForDate(date)
@@ -81,13 +82,83 @@ class _WeekViewState extends State<WeekView> {
     };
   }
 
+  List<Task> _getWeeklyRepeatingTasks() {
+    final allTasksByDate = widget.hiveService.getAllTasksByDate();
+    final weekStart = DateTime(_currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day);
+    final weekEnd = weekStart.add(const Duration(days: 6));
+
+    return allTasksByDate.values
+        .expand((tasks) => tasks)
+        .where((task) {
+          final dueDate = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+          return task.repeatTask &&
+              task.repeatFrequency == 'Weekly' &&
+              !dueDate.isBefore(weekStart) &&
+              !dueDate.isAfter(weekEnd);
+        })
+        .toList();
+  }
+
+  Widget _weeklyTasksPanel(List<Task> tasks) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFECE8E6),
+        border: Border.all(color: Colors.black38),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _showWeeklyTasks = !_showWeeklyTasks),
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Color(0xFFAED9AE),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      "WEEKLY TASKS",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(letterSpacing: 4, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Icon(_showWeeklyTasks ? Icons.expand_more : Icons.chevron_right, color: Colors.green[800]),
+                ],
+              ),
+            ),
+          ),
+          if (_showWeeklyTasks)
+            SizedBox(
+              height: 140,
+              child: tasks.isEmpty
+                  ? const Center(child: Text('Nothing for this week, Great Job !'))
+                  : ListView.builder(
+                      itemCount: tasks.length,
+                      itemBuilder: (context, index) {
+                        final task = tasks[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(task.task),
+                          subtitle: Text('${task.priority} • ${task.status}'),
+                        );
+                      },
+                    ),
+            ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
     final weekDays = List.generate(7, (i) => _currentWeekStart.add(Duration(days: i)));
-    final isCurrentWeek = _currentWeekStart.isBefore(todayStart) && 
+    final isCurrentWeek = _currentWeekStart.isBefore(todayStart) &&
         todayStart.isBefore(_currentWeekStart.add(const Duration(days: 7)));
     final fabTargetDate = isCurrentWeek ? todayStart : _currentWeekStart;
 
@@ -142,37 +213,42 @@ class _WeekViewState extends State<WeekView> {
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
         builder: (context, box, _) {
+          final weeklyTasks = _getWeeklyRepeatingTasks();
+
           return Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                // Week bubbles in a row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(7, (index) {
-                    final date = weekDays[index];
-                    final summary = _getCompletedSummaryForDate(date);
-                    final isToday = date.year == now.year && date.month == now.month && date.day == now.day;
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: List.generate(7, (index) {
+                      final date = weekDays[index];
+                      final summary = _getCompletedSummaryForDate(date);
+                      final isToday = date.year == now.year && date.month == now.month && date.day == now.day;
 
-                    return Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          BubbleWidget(
-                            color: _getBubbleColor(date, summary, todayStart),
-                            isHighlighted: isToday,
-                            onTap: () => _openQuickAddForDate(date),
-                          ),
-                          const SizedBox(height: 8.0),
-                          Text(
-                            _getDayLabels()[index],
-                            style: const TextStyle(fontSize: 12.0),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                      return Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            BubbleWidget(
+                              color: _getBubbleColor(date, summary, todayStart),
+                              isHighlighted: isToday,
+                              onTap: () => _openQuickAddForDate(date),
+                            ),
+                            const SizedBox(height: 8.0),
+                            Text(
+                              _getDayLabels()[index],
+                              style: const TextStyle(fontSize: 12.0),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
                 ),
+                const SizedBox(height: 8),
+                _weeklyTasksPanel(weeklyTasks),
               ],
             ),
           );
