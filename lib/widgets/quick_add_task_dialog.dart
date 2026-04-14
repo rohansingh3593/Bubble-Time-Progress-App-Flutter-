@@ -208,24 +208,41 @@ Future<Task?> showTaskFormDialog(
                   },
                 ),
                 if (repeatTask)
-                  DropdownButtonFormField<String>(
-                    value: repeatFrequency,
-                    decoration: InputDecoration(
-                      labelText: 'Repeat Frequency',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                      filled: true,
-                      fillColor: const Color(0xFFF8F4FF),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8F4FF),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.black12),
                     ),
-                    items: _repeatFrequencyOptions
-                        .map((frequency) => DropdownMenuItem<String>(value: frequency, child: Text(frequency)))
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setDialogState(() {
-                          repeatFrequency = value;
-                        });
-                      }
-                    },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Repeat Frequency',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        ..._repeatFrequencyOptions.map(
+                          (frequency) => RadioListTile<String>(
+                            value: frequency,
+                            groupValue: repeatFrequency,
+                            title: Text(frequency),
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setDialogState(() {
+                                  repeatFrequency = value;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
