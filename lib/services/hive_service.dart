@@ -75,6 +75,26 @@ class HiveService {
     };
   }
 
+
+  Map<DateTime, List<Task>> getAllTasksByDate() {
+    final result = <DateTime, List<Task>>{};
+
+    for (final key in _box.keys) {
+      if (key is! String) continue;
+
+      final parsedDate = DateTime.tryParse(key);
+      if (parsedDate == null) continue;
+
+      final tasks = _box.get(key);
+      if (tasks == null) continue;
+
+      result[DateTime(parsedDate.year, parsedDate.month, parsedDate.day)] =
+          tasks.cast<Task>().toList();
+    }
+
+    return result;
+  }
+
   /// Returns a ValueListenable that rebuilds when the box changes
   ValueListenable<Box<List>> getBoxListenable() {
     return _box.listenable();
