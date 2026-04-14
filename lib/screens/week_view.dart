@@ -3,7 +3,6 @@ import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
-import 'task_screen.dart';
 
 class WeekView extends StatefulWidget {
   final HiveService hiveService;
@@ -44,21 +43,18 @@ class _WeekViewState extends State<WeekView> {
     }
   }
 
-  void _showTaskScreen(DateTime date) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        expand: false,
-        builder: (context, scrollController) => SingleChildScrollView(
-          controller: scrollController,
-          child: TaskScreen(
-            date: date,
-            hiveService: widget.hiveService,
-          ),
-        ),
-      ),
+  Future<void> _openQuickAddForDate(DateTime date) async {
+    final selectedDate = DateTime(date.year, date.month, date.day);
+    final task = await showTaskFormDialog(
+      context,
+      date: selectedDate,
+      title: 'Add Task',
+      actionLabel: 'Save Task',
     );
+
+    if (task != null) {
+      await widget.hiveService.addTask(selectedDate, task);
+    }
   }
 
   List<String> _getDayLabels() {
@@ -151,7 +147,7 @@ class _WeekViewState extends State<WeekView> {
                           BubbleWidget(
                             color: _getBubbleColor(date, summary, todayStart),
                             isHighlighted: isToday,
-                            onTap: () => _showTaskScreen(date),
+                            onTap: () => _openQuickAddForDate(date),
                           ),
                           const SizedBox(height: 8.0),
                           Text(
