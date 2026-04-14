@@ -3,6 +3,7 @@ import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
+import '../models/task_model.dart';
 
 class MonthView extends StatefulWidget {
   final HiveService hiveService;
@@ -15,6 +16,7 @@ class MonthView extends StatefulWidget {
 
 class _MonthViewState extends State<MonthView> {
   late DateTime _currentMonth;
+  bool _showMonthlyTasks = true;
 
   @override
   void initState() {
@@ -78,6 +80,78 @@ class _MonthViewState extends State<MonthView> {
   }
 
 
+
+  List<Task> _getMonthlyRepeatingTasks() {
+    final allTasksByDate = widget.hiveService.getAllTasksByDate();
+    final monthStart = DateTime(_currentMonth.year, _currentMonth.month, 1);
+    final monthEnd = DateTime(_currentMonth.year, _currentMonth.month + 1, 0);
+
+    return allTasksByDate.values
+        .expand((tasks) => tasks)
+        .where((task) {
+          final dueDate = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+          return task.repeatTask &&
+              task.repeatFrequency == 'Monthly' &&
+              !dueDate.isBefore(monthStart) &&
+              !dueDate.isAfter(monthEnd);
+        })
+        .toList();
+  }
+
+  Widget _monthlyTasksPanel(List<Task> tasks) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFECE8E6),
+        border: Border.all(color: Colors.black38),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _showMonthlyTasks = !_showMonthlyTasks),
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Color(0xFFAED9AE),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      "MONTHLY TASKS",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(letterSpacing: 4, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Icon(_showMonthlyTasks ? Icons.expand_more : Icons.chevron_right, color: Colors.green[800]),
+                ],
+              ),
+            ),
+          ),
+          if (_showMonthlyTasks)
+            SizedBox(
+              height: 140,
+              child: tasks.isEmpty
+                  ? const Center(child: Text('Nothing for this month, Great Job !'))
+                  : ListView.builder(
+                      itemCount: tasks.length,
+                      itemBuilder: (context, index) {
+                        final task = tasks[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(task.task),
+                          subtitle: Text('${task.priority} • ${task.status}'),
+                        );
+                      },
+                    ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -114,6 +188,7 @@ class _MonthViewState extends State<MonthView> {
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
         builder: (context, box, _) {
+          final monthlyTasks = _getMonthlyRepeatingTasks();
           return Column(
             children: [
               // Day headers
@@ -159,6 +234,8 @@ class _MonthViewState extends State<MonthView> {
                   },
                 ),
               ),
+              const SizedBox(height: 8),
+              _monthlyTasksPanel(monthlyTasks),
             ],
           );
         },

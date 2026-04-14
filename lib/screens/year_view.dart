@@ -4,6 +4,7 @@ import '../widgets/quick_add_task_dialog.dart';
 import '../utils/grid_utils.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
+import '../models/task_model.dart';
 import 'task_screen.dart';
 
 class YearView extends StatefulWidget {
@@ -17,6 +18,7 @@ class YearView extends StatefulWidget {
 
 class _YearViewState extends State<YearView> {
   late DateTime _currentYear;
+  bool _showYearlyTasks = true;
 
   @override
   void initState() {
@@ -70,6 +72,79 @@ class _YearViewState extends State<YearView> {
   }
 
 
+
+  List<Task> _getYearlyRepeatingTasks() {
+    final allTasksByDate = widget.hiveService.getAllTasksByDate();
+    final yearStart = DateTime(_currentYear.year, 1, 1);
+    final yearEnd = DateTime(_currentYear.year, 12, 31);
+
+    return allTasksByDate.values
+        .expand((tasks) => tasks)
+        .where((task) {
+          final dueDate = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+          return task.repeatTask &&
+              task.repeatFrequency == 'Yearly' &&
+              !dueDate.isBefore(yearStart) &&
+              !dueDate.isAfter(yearEnd);
+        })
+        .toList();
+  }
+
+  Widget _yearlyTasksPanel(List<Task> tasks) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFECE8E6),
+        border: Border.all(color: Colors.black38),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _showYearlyTasks = !_showYearlyTasks),
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Color(0xFFAED9AE),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      "YEARLY TASKS",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(letterSpacing: 4, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Icon(_showYearlyTasks ? Icons.expand_more : Icons.chevron_right, color: Colors.green[800]),
+                ],
+              ),
+            ),
+          ),
+          if (_showYearlyTasks)
+            SizedBox(
+              height: 140,
+              child: tasks.isEmpty
+                  ? const Center(child: Text('Nothing for this year, Great Job !'))
+                  : ListView.builder(
+                      itemCount: tasks.length,
+                      itemBuilder: (context, index) {
+                        final task = tasks[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(task.task),
+                          subtitle: Text('${task.priority} • ${task.status}'),
+                        );
+                      },
+                    ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -121,37 +196,45 @@ class _YearViewState extends State<YearView> {
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
         builder: (context, box, _) {
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final gridDims = calculateGridDimensions(
-                daysInYear,
-                constraints.maxWidth,
-                constraints.maxHeight,
-                viewType: 'year',
-              );
+          final yearlyTasks = _getYearlyRepeatingTasks();
+          return Column(
+            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final gridDims = calculateGridDimensions(
+                      daysInYear,
+                      constraints.maxWidth,
+                      constraints.maxHeight,
+                      viewType: 'year',
+                    );
 
-              return GridView.builder(
-                padding: const EdgeInsets.all(16.0),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: gridDims['columns'],
-                  childAspectRatio: 1.0,
-                  crossAxisSpacing: 4.0,
-                  mainAxisSpacing: 4.0,
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(16.0),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: gridDims['columns'],
+                        childAspectRatio: 1.0,
+                        crossAxisSpacing: 4.0,
+                        mainAxisSpacing: 4.0,
+                      ),
+                      itemCount: daysInYear,
+                      itemBuilder: (context, index) {
+                        final date = DateTime(_currentYear.year, 1, index + 1);
+                        final summary = _getCompletedSummaryForDate(date);
+                        final isToday = isCurrentYear && date.day == now.day && date.month == now.month;
+
+                        return BubbleWidget(
+                          color: _getBubbleColor(date, summary, todayStart),
+                          isHighlighted: isToday,
+                          onTap: () => _showTaskScreen(date),
+                        );
+                      },
+                    );
+                  },
                 ),
-                itemCount: daysInYear,
-                itemBuilder: (context, index) {
-                  final date = DateTime(_currentYear.year, 1, index + 1);
-                  final summary = _getCompletedSummaryForDate(date);
-                  final isToday = isCurrentYear && date.day == now.day && date.month == now.month;
-
-                  return BubbleWidget(
-                    color: _getBubbleColor(date, summary, todayStart),
-                    isHighlighted: isToday,
-                    onTap: () => _showTaskScreen(date),
-                  );
-                },
-              );
-            },
+              ),
+              _yearlyTasksPanel(yearlyTasks),
+            ],
           );
         },
       ),
