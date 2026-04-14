@@ -257,7 +257,7 @@ class _DashboardViewState extends State<DashboardView> {
                   ),
                   child: Column(
                     children: [
-                      Text(entry.key, style: const TextStyle(letterSpacing: 3, fontSize: 12)),
+                      Text(entry.key, textAlign: TextAlign.center, style: const TextStyle(letterSpacing: 1.2, fontSize: 11, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 8),
                       Text(
                         '${entry.value}',
@@ -291,7 +291,7 @@ class _DashboardViewState extends State<DashboardView> {
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Column(
                     children: [
-                      Text(entry.key, style: const TextStyle(letterSpacing: 3, fontSize: 11)),
+                      Text(entry.key, textAlign: TextAlign.center, style: const TextStyle(letterSpacing: 1.1, fontSize: 10.5, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       Text(
                         '${entry.value}',
@@ -531,7 +531,7 @@ class _DashboardViewState extends State<DashboardView> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 color: const Color(0xFFE8C1A0),
-                child: Text('$label:', style: const TextStyle(letterSpacing: 3, fontWeight: FontWeight.bold)),
+                child: Text('$label:', style: const TextStyle(letterSpacing: 1.5, fontWeight: FontWeight.bold)),
               ),
               Expanded(
                 child: Container(
@@ -605,7 +605,7 @@ class _DashboardViewState extends State<DashboardView> {
                   child: Text(
                     title,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(letterSpacing: 5, fontWeight: FontWeight.w600),
+                    style: const TextStyle(letterSpacing: 2, fontWeight: FontWeight.w600),
                   ),
                 ),
                 if (trailing != null) trailing,
@@ -629,17 +629,11 @@ class _DashboardViewState extends State<DashboardView> {
           colors: [Color(0xFFECE8E6), Color(0xFFECE8E6)],
         ),
       ),
-      child: Stack(
-        children: [
-          CustomPaint(
-            size: const Size(double.infinity, 230),
-            painter: _HorizontalLinePainter(),
-          ),
-          ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            children: children,
-          ),
-        ],
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        itemCount: children.length,
+        separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.black26),
+        itemBuilder: (context, index) => children[index],
       ),
     );
   }
@@ -655,22 +649,4 @@ class _DashboardViewState extends State<DashboardView> {
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
-}
-
-class _HorizontalLinePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.black54
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8;
-
-    const gap = 22.0;
-    for (double y = 16; y < size.height; y += gap) {
-      canvas.drawLine(Offset(12, y), Offset(size.width - 12, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
