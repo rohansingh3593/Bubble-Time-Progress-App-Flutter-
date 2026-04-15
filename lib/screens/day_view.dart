@@ -144,7 +144,7 @@ class _DayViewState extends State<DayView> {
           final matrix = _calculateMatrix(todayTasks);
 
           return Padding(
-            padding: const EdgeInsets.all(12.0),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
             child: Column(
               children: [
                 Expanded(
@@ -189,12 +189,14 @@ class _DayViewState extends State<DayView> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          await showQuickAddTaskDialog(context, _currentDay, widget.hiveService);
-        },
-        tooltip: 'Add task',
-        child: const Icon(Icons.add),
+      floatingActionButton: SafeArea(
+        child: FloatingActionButton(
+          onPressed: () async {
+            await showQuickAddTaskDialog(context, _currentDay, widget.hiveService);
+          },
+          tooltip: 'Add task',
+          child: const Icon(Icons.add),
+        ),
       ),
     );
   }
