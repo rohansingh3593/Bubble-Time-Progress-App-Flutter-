@@ -50,6 +50,7 @@ class _DashboardViewState extends State<DashboardView> {
           final summary = _buildSummary(allTasks, todayStart);
           final scopedTaskCounts = _buildScopedTaskCounts(allTasks, todayStart);
           final yearProgress = _buildYearProgress(todayStart);
+          final timeProgress = _buildTimeProgress(today);
           final priorityCounts = _countByField(allTasks, (t) => t.priority, _priorityOrder);
           final statusCounts = _countByField(allTasks, (t) => t.status, _statusOrder);
           final categoryCounts = _countByField(allTasks, (t) => t.category, const []);
@@ -94,6 +95,8 @@ class _DashboardViewState extends State<DashboardView> {
               _scopeTaskHeader(scopedTaskCounts),
               const SizedBox(height: 12),
               _yearProgressPanel(yearProgress),
+              const SizedBox(height: 12),
+              _timeProgressSection(timeProgress),
               const SizedBox(height: 12),
               _priorityChart(priorityCounts),
               const SizedBox(height: 12),
@@ -210,6 +213,50 @@ class _DashboardViewState extends State<DashboardView> {
       'daysPassed': daysPassed,
       'daysRemaining': remaining,
       'progressPercent': ((daysPassed / totalDaysInYear) * 100).round(),
+    };
+  }
+
+  Map<String, Map<String, int>> _buildTimeProgress(DateTime now) {
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final yearStart = DateTime(now.year, 1, 1);
+    final nextYear = DateTime(now.year + 1, 1, 1);
+    final totalYearDays = nextYear.difference(yearStart).inDays;
+    final passedYearDays = todayStart.difference(yearStart).inDays + 1;
+
+    final monthStart = DateTime(now.year, now.month, 1);
+    final nextMonth = now.month == 12
+        ? DateTime(now.year + 1, 1, 1)
+        : DateTime(now.year, now.month + 1, 1);
+    final totalMonthDays = nextMonth.difference(monthStart).inDays;
+    final passedMonthDays = now.day;
+
+    final weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
+    final nextWeek = weekStart.add(const Duration(days: 7));
+    final totalWeekDays = nextWeek.difference(weekStart).inDays;
+    final passedWeekDays = now.weekday;
+
+    const totalDayHours = 24;
+    final passedDayHours = now.hour + 1;
+
+    Map<String, int> asProgress({
+      required int passed,
+      required int total,
+    }) {
+      final remaining = total - passed;
+      final progressPercent = ((passed / total) * 100).round();
+      return {
+        'passed': passed,
+        'total': total,
+        'remaining': remaining,
+        'percent': progressPercent,
+      };
+    }
+
+    return {
+      'Year': asProgress(passed: passedYearDays, total: totalYearDays),
+      'Month': asProgress(passed: passedMonthDays, total: totalMonthDays),
+      'Week': asProgress(passed: passedWeekDays, total: totalWeekDays),
+      'Day': asProgress(passed: passedDayHours, total: totalDayHours),
     };
   }
 
@@ -397,6 +444,69 @@ class _DashboardViewState extends State<DashboardView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _timeProgressSection(Map<String, Map<String, int>> timeProgress) {
+    return _panel(
+      title: 'TIME PROGRESS CARDS',
+      headerColor: const Color(0xFFC9BCE2),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: timeProgress.entries
+              .map((entry) => _timeProgressCard(entry.key, entry.value))
+              .toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _timeProgressCard(String label, Map<String, int> values) {
+    final passed = values['passed'] ?? 0;
+    final total = values['total'] ?? 1;
+    final remaining = values['remaining'] ?? 0;
+    final percent = values['percent'] ?? 0;
+
+    return SizedBox(
+      width: 160,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFB8AFD6)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text('Passed: $passed / $total'),
+            Text('Remaining: $remaining'),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: percent / 100,
+              minHeight: 7,
+              backgroundColor: Colors.grey[300],
+              color: const Color(0xFF8B6BD9),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '$percent%',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
       ),
     );
   }
