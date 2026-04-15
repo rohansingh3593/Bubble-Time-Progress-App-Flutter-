@@ -143,40 +143,43 @@ class _DayViewState extends State<DayView> {
           final todayTasks = widget.hiveService.getTasksForDate(_currentDay);
           final matrix = _calculateMatrix(todayTasks);
 
-          return Padding(
-            padding: const EdgeInsets.all(12.0),
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 110),
             child: Column(
               children: [
-                Expanded(
-                  child: GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 6,
-                      childAspectRatio: 1.0,
-                      crossAxisSpacing: 8.0,
-                      mainAxisSpacing: 8.0,
-                    ),
-                    itemCount: 24,
-                    itemBuilder: (context, index) {
-                      final hour = index;
-                      final isCurrentHour = isToday && hour == now.hour;
-                      final tasksInHour = todayTasks.where((task) => task.hourSlot == hour).toList();
-
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Expanded(
-                            child: BubbleWidget(
-                              color: _getBubbleColor(hour, isToday, isPastDay, tasksInHour, now.hour),
-                              isHighlighted: isCurrentHour,
-                              onTap: () => _openHourTaskDialog(hour),
-                            ),
-                          ),
-                          const SizedBox(height: 4.0),
-                          Text(_formatHour(hour), style: const TextStyle(fontSize: 10.0)),
-                        ],
-                      );
-                    },
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 6,
+                    childAspectRatio: 0.78,
+                    crossAxisSpacing: 8.0,
+                    mainAxisSpacing: 8.0,
                   ),
+                  itemCount: 24,
+                  itemBuilder: (context, index) {
+                    final hour = index;
+                    final isCurrentHour = isToday && hour == now.hour;
+                    final tasksInHour = todayTasks.where((task) => task.hourSlot == hour).toList();
+
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Expanded(
+                          child: BubbleWidget(
+                            color: _getBubbleColor(hour, isToday, isPastDay, tasksInHour, now.hour),
+                            isHighlighted: isCurrentHour,
+                            onTap: () => _openHourTaskDialog(hour),
+                          ),
+                        ),
+                        const SizedBox(height: 4.0),
+                        Text(
+                          _formatHour(hour),
+                          style: const TextStyle(fontSize: 10.0),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 10),
                 _metricsPanel(matrix),
@@ -189,12 +192,14 @@ class _DayViewState extends State<DayView> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          await showQuickAddTaskDialog(context, _currentDay, widget.hiveService);
-        },
-        tooltip: 'Add task',
-        child: const Icon(Icons.add),
+      floatingActionButton: SafeArea(
+        child: FloatingActionButton(
+          onPressed: () async {
+            await showQuickAddTaskDialog(context, _currentDay, widget.hiveService);
+          },
+          tooltip: 'Add task',
+          child: const Icon(Icons.add),
+        ),
       ),
     );
   }

@@ -9,6 +9,8 @@ class HiveService {
   static const _boxName = 'tasksBox';
   static const _categoriesKey = '__meta_categories__';
   static const _delegatesKey = '__meta_delegates__';
+  static const _schemaVersionKey = '__meta_schema_version__';
+  static const int _currentSchemaVersion = 1;
 
   static const List<String> _defaultCategories = [
     'Work',
@@ -25,6 +27,40 @@ class HiveService {
     }
 
     _box = await Hive.openBox<List>(_boxName);
+    await _runMigrationsIfNeeded();
+  }
+
+  Future<void> _runMigrationsIfNeeded() async {
+    final storedVersion = _readStoredSchemaVersion();
+    if (storedVersion >= _currentSchemaVersion) return;
+
+    if (storedVersion < 1) {
+      await _migrateToV1();
+    }
+
+    await _box.put(_schemaVersionKey, <int>[_currentSchemaVersion]);
+  }
+
+  int _readStoredSchemaVersion() {
+    final raw = _box.get(_schemaVersionKey);
+    if (raw == null) return 0;
+
+    if (raw is List && raw.isNotEmpty) {
+      final value = raw.first;
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value) ?? 0;
+    }
+
+    return 0;
+  }
+
+  Future<void> _migrateToV1() async {
+    final categories = (_box.get(_categoriesKey) ?? <String>[]).cast<String>();
+    final delegates = (_box.get(_delegatesKey) ?? <String>[]).cast<String>();
+
+    await _box.put(_categoriesKey, categories.toList());
+    await _box.put(_delegatesKey, delegates.toList());
   }
 
   String _formatKey(DateTime date) {
