@@ -142,6 +142,7 @@ class _TaskScreenState extends State<TaskScreen> {
                                     'Due: ${task.dueDate.month}/${task.dueDate.day}/${task.dueDate.year} • ${task.priority}',
                                   ),
                                   Text('Status: ${task.status} • Category: ${task.category}'),
+                                  Text('Urgent: ${task.urgent ? 'Yes' : 'No'} • Important: ${task.important ? 'Yes' : 'No'} • ${task.estimatedMinutes} min'),
                                   if (task.delegatedTo != null && task.delegatedTo!.isNotEmpty)
                                     Text('Delegate: ${task.delegatedTo}'),
                                   if (task.repeatTask)

@@ -35,6 +35,18 @@ class Task {
   @HiveField(9)
   String? repeatFrequency;
 
+  @HiveField(10)
+  bool urgent;
+
+  @HiveField(11)
+  bool important;
+
+  @HiveField(12)
+  int estimatedMinutes;
+
+  @HiveField(13)
+  int? hourSlot;
+
   Task({
     required this.task,
     this.done = false,
@@ -46,6 +58,10 @@ class Task {
     this.delegatedTo,
     this.repeatTask = false,
     this.repeatFrequency,
+    this.urgent = false,
+    this.important = false,
+    this.estimatedMinutes = 0,
+    this.hourSlot,
   });
 
   Task copyWith({
@@ -59,6 +75,10 @@ class Task {
     String? delegatedTo,
     bool? repeatTask,
     String? repeatFrequency,
+    bool? urgent,
+    bool? important,
+    int? estimatedMinutes,
+    int? hourSlot,
   }) {
     return Task(
       task: task ?? this.task,
@@ -71,6 +91,10 @@ class Task {
       delegatedTo: delegatedTo ?? this.delegatedTo,
       repeatTask: repeatTask ?? this.repeatTask,
       repeatFrequency: repeatFrequency ?? this.repeatFrequency,
+      urgent: urgent ?? this.urgent,
+      important: important ?? this.important,
+      estimatedMinutes: estimatedMinutes ?? this.estimatedMinutes,
+      hourSlot: hourSlot ?? this.hourSlot,
     );
   }
 }
