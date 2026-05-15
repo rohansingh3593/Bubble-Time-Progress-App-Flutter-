@@ -102,7 +102,12 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _screens,
+        children: _screens.asMap().entries.map((entry) {
+          return HeroMode(
+            enabled: entry.key == _selectedIndex,
+            child: entry.value,
+          );
+        }).toList(),
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
