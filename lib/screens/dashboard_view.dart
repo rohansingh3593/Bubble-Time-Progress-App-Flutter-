@@ -5,6 +5,7 @@ import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/rank_profile_card.dart';
+import 'journal_view.dart';
 
 class DashboardView extends StatefulWidget {
   final HiveService hiveService;
@@ -100,6 +101,7 @@ class _DashboardViewState extends State<DashboardView> {
               RankProfileCard(
                 profile: rankProfile,
                 onUsernameChanged: widget.hiveService.setUsername,
+                onTap: _openJournal,
               ),
               const SizedBox(height: 12),
               _summaryHeader(summary),
@@ -161,6 +163,15 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
+
+
+  void _openJournal() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => JournalView(hiveService: widget.hiveService),
+      ),
+    );
+  }
 
   Future<void> _editTask(Task task) async {
     final updated = await showTaskFormDialog(

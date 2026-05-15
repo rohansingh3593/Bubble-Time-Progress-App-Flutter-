@@ -9,6 +9,7 @@ import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/rank_profile_card.dart';
+import 'journal_view.dart';
 
 class StreakView extends StatelessWidget {
   final HiveService hiveService;
@@ -61,6 +62,11 @@ class StreakView extends StatelessWidget {
                 RankProfileCard(
                   profile: rankProfile,
                   onUsernameChanged: hiveService.setUsername,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => JournalView(hiveService: hiveService),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 14),
                 _TodayWeeklyPanel(stats: stats),

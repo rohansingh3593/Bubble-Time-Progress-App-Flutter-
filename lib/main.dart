@@ -8,7 +8,6 @@ import 'screens/month_view.dart';
 import 'screens/week_view.dart';
 import 'screens/day_view.dart';
 import 'screens/streak_view.dart';
-import 'screens/journal_view.dart';
 import 'constants/colors.dart';
 
 void main() async {
@@ -89,7 +88,6 @@ class _MainScreenState extends State<MainScreen> {
       WeekView(hiveService: widget.hiveService),
       DayView(hiveService: widget.hiveService),
       StreakView(hiveService: widget.hiveService),
-      JournalView(hiveService: widget.hiveService),
     ];
   }
 
@@ -131,10 +129,6 @@ class _MainScreenState extends State<MainScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.local_fire_department),
             label: 'Streak',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.auto_stories),
-            label: 'Journal',
           ),
         ],
         currentIndex: _selectedIndex,
