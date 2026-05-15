@@ -51,6 +51,7 @@ class StreakView extends StatelessWidget {
             allTasksByDate: allTasksByDate,
             journalEntries: journalEntries,
           );
+          final habits = _HabitTracker.buildHabits(allTasksByDate, stats.today);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
@@ -70,6 +71,14 @@ class StreakView extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 _TodayWeeklyPanel(stats: stats),
+                const SizedBox(height: 14),
+                _WeeklyDateIndicator(today: stats.today),
+                const SizedBox(height: 14),
+                _HabitTrackerSection(
+                  hiveService: hiveService,
+                  habits: habits,
+                  today: stats.today,
+                ),
                 const SizedBox(height: 14),
                 _YearProgressPanel(stats: stats),
                 const SizedBox(height: 14),
@@ -651,6 +660,472 @@ class _ActivityHeatmap extends StatelessWidget {
     return const Color(0xFFE5EAF0);
   }
 }
+
+
+class _WeeklyDateIndicator extends StatelessWidget {
+  final DateTime today;
+
+  const _WeeklyDateIndicator({required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    final weekStart = today.subtract(Duration(days: today.weekday - 1));
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('This Week', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          Row(
+            children: List.generate(7, (index) {
+              final date = weekStart.add(Duration(days: index));
+              final isToday = _isSameDate(date, today);
+              return Expanded(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isToday ? AppColors.accent : AppColors.background,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isToday ? AppColors.accent : Colors.black12),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        labels[index],
+                        style: TextStyle(
+                          color: isToday ? Colors.white : Colors.black54,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${date.day}',
+                        style: TextStyle(
+                          color: isToday ? Colors.white : AppColors.textPrimary,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HabitTrackerSection extends StatelessWidget {
+  final HiveService hiveService;
+  final List<_HabitTracker> habits;
+  final DateTime today;
+
+  const _HabitTrackerSection({
+    required this.hiveService,
+    required this.habits,
+    required this.today,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.track_changes, color: AppColors.taskCompleted),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('Daily Habit Tracker', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              ),
+              Text('${habits.length} habits', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Consistency is built one completed day at a time.',
+            style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 14),
+          if (habits.isEmpty)
+            const _EmptyState(
+              message: 'No daily habits found yet. Create a recurring Daily task such as Go To Gym, Skincare, Early Rise, Study Daily, or Reading Habit.',
+            )
+          else
+            ...habits.map(
+              (habit) => _HabitCard(
+                hiveService: hiveService,
+                habit: habit,
+                today: today,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HabitCard extends StatelessWidget {
+  final HiveService hiveService;
+  final _HabitTracker habit;
+  final DateTime today;
+
+  const _HabitCard({required this.hiveService, required this.habit, required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    final todayStatus = habit.statusFor(today);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _statusColor(todayStatus).withOpacity(0.14),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(Icons.repeat, color: _statusColor(todayStatus)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(habit.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Streak: ${habit.currentStreak} Days • ${habit.category}',
+                      style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+              _StatusBadge(status: todayStatus),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _HabitActivityGrid(habit: habit, today: today),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _HabitStatusButton(
+                  label: 'Completed',
+                  icon: Icons.check_circle,
+                  color: AppColors.taskCompleted,
+                  selected: todayStatus == _HabitDayStatus.completed,
+                  onPressed: () => _setTodayStatus(_HabitDayStatus.completed),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _HabitStatusButton(
+                  label: 'Cancelled',
+                  icon: Icons.cancel,
+                  color: Colors.redAccent,
+                  selected: todayStatus == _HabitDayStatus.cancelled,
+                  onPressed: () => _setTodayStatus(_HabitDayStatus.cancelled),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _HabitStatusButton(
+                  label: 'Missed',
+                  icon: Icons.remove_circle,
+                  color: AppColors.passed,
+                  selected: todayStatus == _HabitDayStatus.missed,
+                  onPressed: () => _setTodayStatus(_HabitDayStatus.missed),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _setTodayStatus(_HabitDayStatus status) async {
+    final existing = habit.taskFor(today);
+    final updated = (existing ?? habit.template).copyWith(
+      dueDate: today,
+      done: status == _HabitDayStatus.completed,
+      status: switch (status) {
+        _HabitDayStatus.completed => 'Completed',
+        _HabitDayStatus.cancelled => 'Cancelled',
+        _HabitDayStatus.missed => 'Missed',
+        _HabitDayStatus.none => 'Not Started',
+      },
+      repeatTask: true,
+      repeatFrequency: 'Daily',
+    );
+
+    if (existing == null) {
+      await hiveService.addTask(today, updated);
+    } else {
+      await hiveService.updateTaskByReference(existing, updated);
+    }
+  }
+
+  Color _statusColor(_HabitDayStatus status) {
+    switch (status) {
+      case _HabitDayStatus.completed:
+        return AppColors.taskCompleted;
+      case _HabitDayStatus.cancelled:
+        return Colors.redAccent;
+      case _HabitDayStatus.missed:
+        return AppColors.passed;
+      case _HabitDayStatus.none:
+        return AppColors.taskNone;
+    }
+  }
+}
+
+class _HabitActivityGrid extends StatelessWidget {
+  final _HabitTracker habit;
+  final DateTime today;
+
+  const _HabitActivityGrid({required this.habit, required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    final startDate = today.subtract(const Duration(days: 27));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('28-day activity', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.black54)),
+        const SizedBox(height: 8),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: 28,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 14,
+            crossAxisSpacing: 4,
+            mainAxisSpacing: 4,
+          ),
+          itemBuilder: (context, index) {
+            final date = startDate.add(Duration(days: index));
+            final status = habit.statusFor(date);
+            final isToday = _isSameDate(date, today);
+            return Tooltip(
+              message: '${date.month}/${date.day}: ${_statusLabel(status)}',
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _gridColor(status),
+                  borderRadius: BorderRadius.circular(5),
+                  border: isToday ? Border.all(color: AppColors.accent, width: 2) : null,
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Color _gridColor(_HabitDayStatus status) {
+    switch (status) {
+      case _HabitDayStatus.completed:
+        return AppColors.taskCompleted;
+      case _HabitDayStatus.cancelled:
+        return Colors.redAccent;
+      case _HabitDayStatus.missed:
+        return AppColors.passed;
+      case _HabitDayStatus.none:
+        return const Color(0xFFDCE3EA);
+    }
+  }
+}
+
+class _HabitStatusButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  const _HabitStatusButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: selected ? Colors.white : color,
+        backgroundColor: selected ? color : Colors.white,
+        side: BorderSide(color: color.withOpacity(0.7)),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final _HabitDayStatus status;
+
+  const _StatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (status) {
+      _HabitDayStatus.completed => AppColors.taskCompleted,
+      _HabitDayStatus.cancelled => Colors.redAccent,
+      _HabitDayStatus.missed => AppColors.passed,
+      _HabitDayStatus.none => AppColors.taskNone,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+      decoration: BoxDecoration(color: color.withOpacity(0.14), borderRadius: BorderRadius.circular(99)),
+      child: Text(
+        _statusLabel(status),
+        style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 11),
+      ),
+    );
+  }
+}
+
+class _HabitTracker {
+  final String title;
+  final String category;
+  final Task template;
+  final Map<DateTime, Task> tasksByDate;
+  final int currentStreak;
+
+  const _HabitTracker({
+    required this.title,
+    required this.category,
+    required this.template,
+    required this.tasksByDate,
+    required this.currentStreak,
+  });
+
+  Task? taskFor(DateTime date) => tasksByDate[_dateOnly(date)];
+
+  _HabitDayStatus statusFor(DateTime date) {
+    final day = _dateOnly(date);
+    final task = tasksByDate[day];
+    if (task == null) return _HabitDayStatus.none;
+    if (task.done || task.status == 'Completed') return _HabitDayStatus.completed;
+    if (task.status == 'Cancelled') return _HabitDayStatus.cancelled;
+    if (task.status == 'Missed' || task.status == 'Overdue') return _HabitDayStatus.missed;
+    if (day.isBefore(_dateOnly(DateTime.now()))) return _HabitDayStatus.missed;
+    return _HabitDayStatus.none;
+  }
+
+  static List<_HabitTracker> buildHabits(Map<DateTime, List<Task>> allTasksByDate, DateTime today) {
+    final grouped = <String, List<MapEntry<DateTime, Task>>>{};
+
+    for (final entry in allTasksByDate.entries) {
+      final date = _dateOnly(entry.key);
+      for (final task in entry.value) {
+        if (!_isHabitTask(task)) continue;
+        final key = task.task.trim().toLowerCase();
+        if (key.isEmpty) continue;
+        grouped.putIfAbsent(key, () => <MapEntry<DateTime, Task>>[]).add(MapEntry(date, task));
+      }
+    }
+
+    final habits = grouped.entries.map((entry) {
+      final records = entry.value..sort((a, b) => b.key.compareTo(a.key));
+      final byDate = <DateTime, Task>{};
+      for (final record in records) {
+        byDate.putIfAbsent(record.key, () => record.value);
+      }
+      final template = records.first.value;
+      return _HabitTracker(
+        title: template.task,
+        category: template.category,
+        template: template,
+        tasksByDate: byDate,
+        currentStreak: _calculateHabitStreak(byDate, today),
+      );
+    }).toList()
+      ..sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+
+    return habits;
+  }
+
+  static bool _isHabitTask(Task task) {
+    final category = task.category.toLowerCase();
+    final title = task.task.toLowerCase();
+    return (task.repeatTask && task.repeatFrequency == 'Daily') ||
+        category.contains('habit') ||
+        title.contains('habit') ||
+        title.contains('daily');
+  }
+
+  static int _calculateHabitStreak(Map<DateTime, Task> tasksByDate, DateTime today) {
+    var cursor = _dateOnly(today);
+    var streak = 0;
+
+    if (!_isTaskCompleted(tasksByDate[cursor])) {
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    while (_isTaskCompleted(tasksByDate[cursor])) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    return streak;
+  }
+
+  static bool _isTaskCompleted(Task? task) => task != null && (task.done || task.status == 'Completed');
+}
+
+enum _HabitDayStatus { completed, cancelled, missed, none }
+
+String _statusLabel(_HabitDayStatus status) {
+  switch (status) {
+    case _HabitDayStatus.completed:
+      return 'Completed';
+    case _HabitDayStatus.cancelled:
+      return 'Cancelled';
+    case _HabitDayStatus.missed:
+      return 'Missed';
+    case _HabitDayStatus.none:
+      return 'Not set';
+  }
+}
+
+bool _isSameDate(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
 class _DailyTaskCards extends StatelessWidget {
   final List<Task> tasks;
