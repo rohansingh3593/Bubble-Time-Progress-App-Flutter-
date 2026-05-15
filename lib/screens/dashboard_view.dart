@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
+import '../widgets/rank_profile_card.dart';
 
 class DashboardView extends StatefulWidget {
   final HiveService hiveService;
@@ -46,6 +48,10 @@ class _DashboardViewState extends State<DashboardView> {
           final todayStart = DateTime(today.year, today.month, today.day);
           final allByDate = widget.hiveService.getAllTasksByDate();
           final allTasks = allByDate.values.expand((list) => list).toList();
+          final rankProfile = RankProfile.calculate(
+            username: widget.hiveService.getUsername(),
+            allTasksByDate: allByDate,
+          );
 
           final summary = _buildSummary(allTasks, todayStart);
           final scopedTaskCounts = _buildScopedTaskCounts(allTasks, todayStart);
@@ -90,6 +96,11 @@ class _DashboardViewState extends State<DashboardView> {
           return ListView(
             padding: const EdgeInsets.all(12),
             children: [
+              RankProfileCard(
+                profile: rankProfile,
+                onUsernameChanged: widget.hiveService.setUsername,
+              ),
+              const SizedBox(height: 12),
               _summaryHeader(summary),
               const SizedBox(height: 12),
               _scopeTaskHeader(scopedTaskCounts),

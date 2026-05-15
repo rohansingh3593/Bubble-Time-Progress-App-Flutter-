@@ -3,9 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
+import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
+import '../widgets/rank_profile_card.dart';
 
 class StreakView extends StatelessWidget {
   final HiveService hiveService;
@@ -36,7 +38,12 @@ class StreakView extends StatelessWidget {
       body: ValueListenableBuilder(
         valueListenable: hiveService.getBoxListenable(),
         builder: (context, box, _) {
-          final stats = _JourneyStats.fromTasks(hiveService.getAllTasksByDate());
+          final allTasksByDate = hiveService.getAllTasksByDate();
+          final stats = _JourneyStats.fromTasks(allTasksByDate);
+          final rankProfile = RankProfile.calculate(
+            username: hiveService.getUsername(),
+            allTasksByDate: allTasksByDate,
+          );
 
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
@@ -44,6 +51,11 @@ class StreakView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _HeroStreakCard(stats: stats),
+                const SizedBox(height: 14),
+                RankProfileCard(
+                  profile: rankProfile,
+                  onUsernameChanged: hiveService.setUsername,
+                ),
                 const SizedBox(height: 14),
                 _TodayWeeklyPanel(stats: stats),
                 const SizedBox(height: 14),

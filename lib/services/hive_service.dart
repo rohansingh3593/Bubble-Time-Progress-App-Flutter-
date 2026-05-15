@@ -9,6 +9,7 @@ class HiveService {
   static const _boxName = 'tasksBox';
   static const _categoriesKey = '__meta_categories__';
   static const _delegatesKey = '__meta_delegates__';
+  static const _usernameKey = '__meta_username__';
   static const _schemaVersionKey = '__meta_schema_version__';
   static const int _currentSchemaVersion = 1;
 
@@ -96,6 +97,18 @@ class HiveService {
       saved.add(trimmed);
       await _box.put(_categoriesKey, saved);
     }
+  }
+
+  String getUsername() {
+    final saved = (_box.get(_usernameKey) ?? <String>['Productivity Hero']).cast<String>();
+    if (saved.isEmpty || saved.first.trim().isEmpty) return 'Productivity Hero';
+    return saved.first.trim();
+  }
+
+  Future<void> setUsername(String username) async {
+    final trimmed = username.trim();
+    if (trimmed.isEmpty) return;
+    await _box.put(_usernameKey, <String>[trimmed]);
   }
 
   List<String> getDelegates() {
