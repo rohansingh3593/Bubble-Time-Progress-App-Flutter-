@@ -1,0 +1,826 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+
+import '../constants/colors.dart';
+import '../models/task_model.dart';
+import '../services/hive_service.dart';
+import '../widgets/quick_add_task_dialog.dart';
+
+class StreakView extends StatelessWidget {
+  final HiveService hiveService;
+
+  const StreakView({super.key, required this.hiveService});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Text('Streak Journey'),
+        actions: [
+          IconButton(
+            tooltip: 'Add task for today',
+            icon: const Icon(Icons.add_task),
+            onPressed: () async {
+              final now = DateTime.now();
+              await showQuickAddTaskDialog(
+                context,
+                DateTime(now.year, now.month, now.day),
+                hiveService,
+              );
+            },
+          ),
+        ],
+      ),
+      body: ValueListenableBuilder(
+        valueListenable: hiveService.getBoxListenable(),
+        builder: (context, box, _) {
+          final stats = _JourneyStats.fromTasks(hiveService.getAllTasksByDate());
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _HeroStreakCard(stats: stats),
+                const SizedBox(height: 14),
+                _TodayWeeklyPanel(stats: stats),
+                const SizedBox(height: 14),
+                _YearProgressPanel(stats: stats),
+                const SizedBox(height: 14),
+                _ActivityHeatmap(stats: stats),
+                const SizedBox(height: 14),
+                _DailyTaskCards(tasks: stats.todayTasks),
+                const SizedBox(height: 14),
+                _PerformanceInsights(stats: stats),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _JourneyStats {
+  final DateTime today;
+  final int year;
+  final int totalDaysInYear;
+  final int dayOfYear;
+  final int completedDays;
+  final int activeDays;
+  final int currentDailyStreak;
+  final int currentWeeklyStreak;
+  final int longestStreak;
+  final int totalCompletedTasks;
+  final int totalTasksThisYear;
+  final int todayCompleted;
+  final int todayTotal;
+  final int weekCompleted;
+  final int weekTotal;
+  final String mostProductiveMonth;
+  final String bestStreakPeriod;
+  final String frequentlySkippedCategory;
+  final double habitConsistencyScore;
+  final List<Task> todayTasks;
+  final Map<DateTime, _DayActivity> activityByDate;
+
+  const _JourneyStats({
+    required this.today,
+    required this.year,
+    required this.totalDaysInYear,
+    required this.dayOfYear,
+    required this.completedDays,
+    required this.activeDays,
+    required this.currentDailyStreak,
+    required this.currentWeeklyStreak,
+    required this.longestStreak,
+    required this.totalCompletedTasks,
+    required this.totalTasksThisYear,
+    required this.todayCompleted,
+    required this.todayTotal,
+    required this.weekCompleted,
+    required this.weekTotal,
+    required this.mostProductiveMonth,
+    required this.bestStreakPeriod,
+    required this.frequentlySkippedCategory,
+    required this.habitConsistencyScore,
+    required this.todayTasks,
+    required this.activityByDate,
+  });
+
+  double get yearCompletionRatio => totalDaysInYear == 0 ? 0 : completedDays / totalDaysInYear;
+  double get yearCalendarRatio => totalDaysInYear == 0 ? 0 : dayOfYear / totalDaysInYear;
+  double get productivityRatio => totalTasksThisYear == 0 ? 0 : totalCompletedTasks / totalTasksThisYear;
+  double get todayRatio => todayTotal == 0 ? 0 : todayCompleted / todayTotal;
+  double get weeklyRatio => weekTotal == 0 ? 0 : weekCompleted / weekTotal;
+
+  factory _JourneyStats.fromTasks(Map<DateTime, List<Task>> allTasksByDate) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yearStart = DateTime(today.year, 1, 1);
+    final nextYear = DateTime(today.year + 1, 1, 1);
+    final totalDaysInYear = nextYear.difference(yearStart).inDays;
+    final dayOfYear = today.difference(yearStart).inDays + 1;
+    final weekStart = today.subtract(Duration(days: today.weekday - 1));
+    final nextWeek = weekStart.add(const Duration(days: 7));
+
+    final activityByDate = <DateTime, _DayActivity>{};
+    final monthCompleted = List<int>.filled(12, 0);
+    final skippedByCategory = <String, int>{};
+    var totalCompletedTasks = 0;
+    var totalTasksThisYear = 0;
+    var weekCompleted = 0;
+    var weekTotal = 0;
+
+    for (final entry in allTasksByDate.entries) {
+      final date = _dateOnly(entry.key);
+      if (date.year != today.year) continue;
+
+      final tasks = entry.value;
+      final eligibleTasks = tasks.where((task) => task.status != 'Cancelled').toList();
+      final completedTasks = eligibleTasks.where(_isCompletedTask).toList();
+      final activeTasks = tasks.where((task) => _isCompletedTask(task) || task.status == 'Cancelled').toList();
+
+      totalTasksThisYear += eligibleTasks.length;
+      totalCompletedTasks += completedTasks.length;
+      monthCompleted[date.month - 1] += completedTasks.length;
+
+      if (!date.isBefore(weekStart) && date.isBefore(nextWeek)) {
+        weekCompleted += completedTasks.length;
+        weekTotal += eligibleTasks.length;
+      }
+
+      for (final task in eligibleTasks.where((task) => !_isCompletedTask(task) && date.isBefore(today))) {
+        skippedByCategory.update(task.category, (value) => value + 1, ifAbsent: () => 1);
+      }
+
+      activityByDate[date] = _DayActivity(
+        total: eligibleTasks.length,
+        completed: completedTasks.length,
+        activityCount: activeTasks.length,
+      );
+    }
+
+    final todayActivity = activityByDate[today] ?? const _DayActivity.empty();
+    final completedDays = activityByDate.values.where((activity) => activity.isGoalComplete).length;
+    final activeDays = activityByDate.values.where((activity) => activity.hasMeaningfulActivity).length;
+    final dailyStreak = _calculateDailyStreak(today, activityByDate);
+    final streakInfo = _calculateLongestStreak(yearStart, totalDaysInYear, activityByDate);
+    final weeklyStreak = _calculateWeeklyStreak(today, activityByDate);
+
+    final mostProductiveMonthIndex = monthCompleted.indexOf(monthCompleted.reduce(math.max));
+    final mostProductiveMonth = monthCompleted[mostProductiveMonthIndex] == 0
+        ? 'No completed month yet'
+        : '${_monthNames[mostProductiveMonthIndex]} (${monthCompleted[mostProductiveMonthIndex]} tasks)';
+
+    final skippedCategory = skippedByCategory.isEmpty
+        ? 'No skipped pattern yet'
+        : skippedByCategory.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+
+    final recurringTasks = allTasksByDate.values
+        .expand((tasks) => tasks)
+        .where((task) => task.repeatTask && task.dueDate.year == today.year)
+        .toList();
+    final recurringCompleted = recurringTasks.where(_isCompletedTask).length;
+    final habitConsistencyScore = recurringTasks.isEmpty ? 0.0 : recurringCompleted / recurringTasks.length;
+
+    return _JourneyStats(
+      today: today,
+      year: today.year,
+      totalDaysInYear: totalDaysInYear,
+      dayOfYear: dayOfYear,
+      completedDays: completedDays,
+      activeDays: activeDays,
+      currentDailyStreak: dailyStreak,
+      currentWeeklyStreak: weeklyStreak,
+      longestStreak: streakInfo.length,
+      totalCompletedTasks: totalCompletedTasks,
+      totalTasksThisYear: totalTasksThisYear,
+      todayCompleted: todayActivity.completed,
+      todayTotal: todayActivity.total,
+      weekCompleted: weekCompleted,
+      weekTotal: weekTotal,
+      mostProductiveMonth: mostProductiveMonth,
+      bestStreakPeriod: streakInfo.label,
+      frequentlySkippedCategory: skippedCategory,
+      habitConsistencyScore: habitConsistencyScore,
+      todayTasks: allTasksByDate[today] ?? const <Task>[],
+      activityByDate: activityByDate,
+    );
+  }
+
+  static DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+
+  static bool _isCompletedTask(Task task) => task.done || task.status == 'Completed';
+
+  static int _calculateDailyStreak(DateTime today, Map<DateTime, _DayActivity> activityByDate) {
+    var cursor = today;
+    var streak = 0;
+
+    if (!(activityByDate[cursor]?.isGoalComplete ?? false)) {
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    while (activityByDate[cursor]?.isGoalComplete ?? false) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    return streak;
+  }
+
+  static _StreakInfo _calculateLongestStreak(
+    DateTime yearStart,
+    int totalDaysInYear,
+    Map<DateTime, _DayActivity> activityByDate,
+  ) {
+    var bestLength = 0;
+    DateTime? bestStart;
+    var currentLength = 0;
+    DateTime? currentStart;
+
+    for (var i = 0; i < totalDaysInYear; i++) {
+      final date = yearStart.add(Duration(days: i));
+      final complete = activityByDate[date]?.isGoalComplete ?? false;
+      if (complete) {
+        currentStart ??= date;
+        currentLength++;
+        if (currentLength > bestLength) {
+          bestLength = currentLength;
+          bestStart = currentStart;
+        }
+      } else {
+        currentLength = 0;
+        currentStart = null;
+      }
+    }
+
+    if (bestLength == 0 || bestStart == null) {
+      return const _StreakInfo(length: 0, label: 'Build your first streak');
+    }
+
+    final bestEnd = bestStart.add(Duration(days: bestLength - 1));
+    return _StreakInfo(
+      length: bestLength,
+      label: '${_shortDate(bestStart)} – ${_shortDate(bestEnd)}',
+    );
+  }
+
+  static int _calculateWeeklyStreak(DateTime today, Map<DateTime, _DayActivity> activityByDate) {
+    var weekStart = today.subtract(Duration(days: today.weekday - 1));
+    var streak = 0;
+
+    while (_weekHasGoalCompletion(weekStart, activityByDate)) {
+      streak++;
+      weekStart = weekStart.subtract(const Duration(days: 7));
+    }
+
+    return streak;
+  }
+
+  static bool _weekHasGoalCompletion(DateTime weekStart, Map<DateTime, _DayActivity> activityByDate) {
+    for (var i = 0; i < 7; i++) {
+      final date = weekStart.add(Duration(days: i));
+      if (activityByDate[date]?.isGoalComplete ?? false) return true;
+    }
+    return false;
+  }
+
+  static String _shortDate(DateTime date) => '${date.month}/${date.day}';
+}
+
+class _DayActivity {
+  final int total;
+  final int completed;
+  final int activityCount;
+
+  const _DayActivity({required this.total, required this.completed, required this.activityCount});
+  const _DayActivity.empty() : total = 0, completed = 0, activityCount = 0;
+
+  bool get isGoalComplete => total > 0 && completed == total;
+  bool get hasMeaningfulActivity => completed > 0 || activityCount > 0;
+  double get ratio => total == 0 ? 0 : completed / total;
+}
+
+class _StreakInfo {
+  final int length;
+  final String label;
+
+  const _StreakInfo({required this.length, required this.label});
+}
+
+class _HeroStreakCard extends StatelessWidget {
+  final _JourneyStats stats;
+
+  const _HeroStreakCard({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFF8A00), Color(0xFFE52E71), Color(0xFF7E57C2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFE52E71).withOpacity(0.24),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                child: const Icon(Icons.local_fire_department, color: Colors.white, size: 32),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Your consistency journey',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            '${stats.currentDailyStreak}',
+            style: const TextStyle(color: Colors.white, fontSize: 58, fontWeight: FontWeight.w900, height: 0.95),
+          ),
+          const Text('day active streak', style: TextStyle(color: Colors.white, fontSize: 16)),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(child: _HeroMetric(label: 'Weekly streak', value: '${stats.currentWeeklyStreak} wk')),
+              const SizedBox(width: 10),
+              Expanded(child: _HeroMetric(label: 'Longest', value: '${stats.longestStreak} days')),
+              const SizedBox(width: 10),
+              Expanded(child: _HeroMetric(label: 'Productivity', value: '${(stats.productivityRatio * 100).round()}%')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroMetric extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _HeroMetric({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
+          const SizedBox(height: 2),
+          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.82), fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
+class _TodayWeeklyPanel extends StatelessWidget {
+  final _JourneyStats stats;
+
+  const _TodayWeeklyPanel({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _ProgressTile(
+            icon: Icons.today,
+            title: "Today's progress",
+            value: '${stats.todayCompleted}/${stats.todayTotal}',
+            ratio: stats.todayRatio,
+            color: AppColors.taskCompleted,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _ProgressTile(
+            icon: Icons.calendar_view_week,
+            title: 'Weekly target',
+            value: '${stats.weekCompleted}/${stats.weekTotal}',
+            ratio: stats.weeklyRatio,
+            color: AppColors.accent,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProgressTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+  final double ratio;
+  final Color color;
+
+  const _ProgressTile({required this.icon, required this.title, required this.value, required this.ratio, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(height: 10),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(
+            value: ratio.clamp(0.0, 1.0).toDouble(),
+            minHeight: 8,
+            borderRadius: BorderRadius.circular(99),
+            color: color,
+            backgroundColor: color.withOpacity(0.16),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _YearProgressPanel extends StatelessWidget {
+  final _JourneyStats stats;
+
+  const _YearProgressPanel({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.timeline, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${stats.year} Year Progress Overview',
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                ),
+              ),
+              Text('${(stats.yearCalendarRatio * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.w900)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          LinearProgressIndicator(
+            value: stats.yearCalendarRatio.clamp(0.0, 1.0).toDouble(),
+            minHeight: 12,
+            borderRadius: BorderRadius.circular(99),
+            color: AppColors.primary,
+            backgroundColor: AppColors.primary.withOpacity(0.14),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _StatPill(label: 'Active days', value: '${stats.activeDays}/${stats.totalDaysInYear}'),
+              _StatPill(label: 'Completed days', value: '${stats.completedDays}'),
+              _StatPill(label: 'Consistency', value: '${(stats.yearCompletionRatio * 100).round()}%'),
+              _StatPill(label: 'Completed tasks', value: '${stats.totalCompletedTasks}'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _StatPill({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+          Text(label, style: const TextStyle(color: Colors.black54, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivityHeatmap extends StatelessWidget {
+  final _JourneyStats stats;
+
+  const _ActivityHeatmap({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final yearStart = DateTime(stats.year, 1, 1);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('365-Day Activity Heatmap', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text('Darker green days mean stronger task completion.', style: TextStyle(color: Colors.black54)),
+          const SizedBox(height: 14),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: stats.totalDaysInYear,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 28,
+              crossAxisSpacing: 3,
+              mainAxisSpacing: 3,
+            ),
+            itemBuilder: (context, index) {
+              final date = yearStart.add(Duration(days: index));
+              final activity = stats.activityByDate[date] ?? const _DayActivity.empty();
+              final color = _heatColor(activity);
+              final isToday = date == stats.today;
+
+              return Tooltip(
+                message: '${date.month}/${date.day}: ${activity.completed}/${activity.total} complete',
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(4),
+                    border: isToday ? Border.all(color: AppColors.accent, width: 2) : null,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _heatColor(_DayActivity activity) {
+    if (activity.total == 0 && !activity.hasMeaningfulActivity) return const Color(0xFFE5EAF0);
+    if (activity.ratio >= 1) return const Color(0xFF1B5E20);
+    if (activity.ratio >= 0.66) return const Color(0xFF43A047);
+    if (activity.ratio >= 0.33) return const Color(0xFF9CCC65);
+    if (activity.hasMeaningfulActivity) return const Color(0xFFFFC107);
+    return const Color(0xFFE5EAF0);
+  }
+}
+
+class _DailyTaskCards extends StatelessWidget {
+  final List<Task> tasks;
+
+  const _DailyTaskCards({required this.tasks});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Daily Task Cards', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          if (tasks.isEmpty)
+            const _EmptyState(message: 'No tasks scheduled today. Add one to start building a streak.')
+          else
+            ...tasks.map((task) => _TaskJourneyCard(task: task)),
+        ],
+      ),
+    );
+  }
+}
+
+class _TaskJourneyCard extends StatelessWidget {
+  final Task task;
+
+  const _TaskJourneyCard({required this.task});
+
+  @override
+  Widget build(BuildContext context) {
+    final isCompleted = task.done || task.status == 'Completed';
+    final progress = isCompleted ? 1.0 : task.status == 'In Progress' ? 0.5 : 0.12;
+    final difficulty = _difficultyLabel(task);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isCompleted ? AppColors.taskCompleted.withOpacity(0.5) : Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(isCompleted ? Icons.check_circle : Icons.radio_button_unchecked, color: isCompleted ? AppColors.taskCompleted : AppColors.taskPending),
+              const SizedBox(width: 8),
+              Expanded(child: Text(task.task, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+              Text('${task.estimatedMinutes}m', style: const TextStyle(fontWeight: FontWeight.w700)),
+            ],
+          ),
+          if (task.description.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(task.description, style: const TextStyle(color: Colors.black54)),
+          ],
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: progress,
+            minHeight: 8,
+            borderRadius: BorderRadius.circular(99),
+            color: isCompleted ? AppColors.taskCompleted : AppColors.taskPending,
+            backgroundColor: Colors.white,
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _Tag(label: task.category, icon: Icons.category),
+              _Tag(label: task.priority, icon: Icons.flag),
+              _Tag(label: difficulty, icon: Icons.speed),
+              if (task.repeatTask) _Tag(label: '${task.repeatFrequency ?? 'Recurring'} habit', icon: Icons.repeat),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _difficultyLabel(Task task) {
+    if (task.urgent && task.important) return 'High focus';
+    if (task.estimatedMinutes >= 90) return 'Deep work';
+    if (task.estimatedMinutes <= 20) return 'Quick win';
+    return 'Balanced';
+  }
+}
+
+class _Tag extends StatelessWidget {
+  final String label;
+  final IconData icon;
+
+  const _Tag({required this.label, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(99)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: AppColors.accent),
+          const SizedBox(width: 5),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _PerformanceInsights extends StatelessWidget {
+  final _JourneyStats stats;
+
+  const _PerformanceInsights({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Performance Insights', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          _InsightRow(icon: Icons.calendar_month, title: 'Most productive month', value: stats.mostProductiveMonth),
+          _InsightRow(icon: Icons.emoji_events, title: 'Best streak period', value: stats.bestStreakPeriod),
+          _InsightRow(icon: Icons.warning_amber, title: 'Frequently skipped tasks', value: stats.frequentlySkippedCategory),
+          _InsightRow(icon: Icons.repeat, title: 'Habit consistency score', value: '${(stats.habitConsistencyScore * 100).round()}%'),
+        ],
+      ),
+    );
+  }
+}
+
+class _InsightRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+
+  const _InsightRow({required this.icon, required this.title, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: AppColors.accent.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, color: AppColors.accent, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text(value, style: const TextStyle(color: Colors.black54)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final String message;
+
+  const _EmptyState({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(18)),
+      child: Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black54)),
+    );
+  }
+}
+
+BoxDecoration _panelDecoration() {
+  return BoxDecoration(
+    color: AppColors.surface,
+    borderRadius: BorderRadius.circular(24),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.05),
+        blurRadius: 18,
+        offset: const Offset(0, 8),
+      ),
+    ],
+  );
+}
+
+const _monthNames = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];

@@ -7,6 +7,7 @@ import 'screens/year_view.dart';
 import 'screens/month_view.dart';
 import 'screens/week_view.dart';
 import 'screens/day_view.dart';
+import 'screens/streak_view.dart';
 import 'constants/colors.dart';
 
 void main() async {
@@ -73,7 +74,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _selectedIndex = 2; // Default to Month view (index 2)
+  int _selectedIndex = 3; // Default to Month view (index 3)
 
   late final List<Widget> _screens;
 
@@ -83,6 +84,7 @@ class _MainScreenState extends State<MainScreen> {
     _screens = [
       DashboardView(hiveService: widget.hiveService),
       YearView(hiveService: widget.hiveService),
+      StreakView(hiveService: widget.hiveService),
       MonthView(hiveService: widget.hiveService),
       WeekView(hiveService: widget.hiveService),
       DayView(hiveService: widget.hiveService),
@@ -111,6 +113,10 @@ class _MainScreenState extends State<MainScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today),
             label: 'Year',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.local_fire_department),
+            label: 'Streak',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_view_month),
