@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../models/journal_entry.dart';
 import '../models/task_model.dart';
 
 class HiveService {
@@ -10,6 +11,7 @@ class HiveService {
   static const _categoriesKey = '__meta_categories__';
   static const _delegatesKey = '__meta_delegates__';
   static const _usernameKey = '__meta_username__';
+  static const _journalPrefix = '__journal__';
   static const _schemaVersionKey = '__meta_schema_version__';
   static const int _currentSchemaVersion = 1;
 
@@ -109,6 +111,41 @@ class HiveService {
     final trimmed = username.trim();
     if (trimmed.isEmpty) return;
     await _box.put(_usernameKey, <String>[trimmed]);
+  }
+
+
+  String _journalKey(DateTime date) {
+    return '$_journalPrefix${_formatKey(date)}';
+  }
+
+  JournalEntry? getJournalEntryForDate(DateTime date) {
+    final raw = _box.get(_journalKey(date));
+    if (raw == null) return null;
+    return JournalEntry.fromStorageList(raw.cast<dynamic>(), DateTime(date.year, date.month, date.day));
+  }
+
+  Future<void> saveJournalEntry(JournalEntry entry) async {
+    await _box.put(_journalKey(entry.date), entry.toStorageList());
+  }
+
+  Future<void> deleteJournalEntry(DateTime date) async {
+    await _box.delete(_journalKey(date));
+  }
+
+  List<JournalEntry> getAllJournalEntries() {
+    final entries = <JournalEntry>[];
+
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(_journalPrefix)) continue;
+      final dateText = key.substring(_journalPrefix.length);
+      final parsedDate = DateTime.tryParse(dateText);
+      final raw = _box.get(key);
+      if (parsedDate == null || raw == null) continue;
+      entries.add(JournalEntry.fromStorageList(raw.cast<dynamic>(), parsedDate));
+    }
+
+    entries.sort((a, b) => b.date.compareTo(a.date));
+    return entries;
   }
 
   List<String> getDelegates() {

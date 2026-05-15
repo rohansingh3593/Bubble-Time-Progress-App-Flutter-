@@ -51,6 +51,7 @@ class _DashboardViewState extends State<DashboardView> {
           final rankProfile = RankProfile.calculate(
             username: widget.hiveService.getUsername(),
             allTasksByDate: allByDate,
+            journalEntries: widget.hiveService.getAllJournalEntries(),
           );
 
           final summary = _buildSummary(allTasks, todayStart);

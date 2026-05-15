@@ -39,10 +39,15 @@ class StreakView extends StatelessWidget {
         valueListenable: hiveService.getBoxListenable(),
         builder: (context, box, _) {
           final allTasksByDate = hiveService.getAllTasksByDate();
-          final stats = _JourneyStats.fromTasks(allTasksByDate);
+          final journalEntries = hiveService.getAllJournalEntries();
+          final stats = _JourneyStats.fromTasks(
+            allTasksByDate,
+            journalEntries: journalEntries,
+          );
           final rankProfile = RankProfile.calculate(
             username: hiveService.getUsername(),
             allTasksByDate: allTasksByDate,
+            journalEntries: journalEntries,
           );
 
           return SingleChildScrollView(
@@ -128,7 +133,10 @@ class _JourneyStats {
   double get todayRatio => todayTotal == 0 ? 0 : todayCompleted / todayTotal;
   double get weeklyRatio => weekTotal == 0 ? 0 : weekCompleted / weekTotal;
 
-  factory _JourneyStats.fromTasks(Map<DateTime, List<Task>> allTasksByDate) {
+  factory _JourneyStats.fromTasks(
+    Map<DateTime, List<Task>> allTasksByDate, {
+    List<JournalEntry> journalEntries = const <JournalEntry>[],
+  }) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yearStart = DateTime(today.year, 1, 1);
@@ -172,7 +180,15 @@ class _JourneyStats {
         total: eligibleTasks.length,
         completed: completedTasks.length,
         activityCount: activeTasks.length,
+        journaled: activityByDate[date]?.journaled ?? false,
       );
+    }
+
+    for (final entry in journalEntries) {
+      final date = _dateOnly(entry.date);
+      if (date.year != today.year) continue;
+      final current = activityByDate[date] ?? const _DayActivity.empty();
+      activityByDate[date] = current.copyWith(journaled: true);
     }
 
     final todayActivity = activityByDate[today] ?? const _DayActivity.empty();
@@ -308,11 +324,22 @@ class _DayActivity {
   final int completed;
   final int activityCount;
 
-  const _DayActivity({required this.total, required this.completed, required this.activityCount});
-  const _DayActivity.empty() : total = 0, completed = 0, activityCount = 0;
+  final bool journaled;
 
-  bool get isGoalComplete => total > 0 && completed == total;
-  bool get hasMeaningfulActivity => completed > 0 || activityCount > 0;
+  const _DayActivity({required this.total, required this.completed, required this.activityCount, this.journaled = false});
+  const _DayActivity.empty() : total = 0, completed = 0, activityCount = 0, journaled = false;
+
+  _DayActivity copyWith({bool? journaled}) {
+    return _DayActivity(
+      total: total,
+      completed: completed,
+      activityCount: activityCount,
+      journaled: journaled ?? this.journaled,
+    );
+  }
+
+  bool get isGoalComplete => (total > 0 && completed == total) || (total == 0 && journaled);
+  bool get hasMeaningfulActivity => completed > 0 || activityCount > 0 || journaled;
   double get ratio => total == 0 ? 0 : completed / total;
 }
 

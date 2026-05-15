@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'journal_entry.dart';
 import 'task_model.dart';
 
 class RankProfile {
@@ -17,6 +18,8 @@ class RankProfile {
   final int recurringTasksCompleted;
   final int totalActiveDays;
   final int completedGoalDays;
+  final int journalEntries;
+  final int reflectiveDays;
   final int productivityScore;
   final double completionRate;
 
@@ -35,6 +38,8 @@ class RankProfile {
     required this.recurringTasksCompleted,
     required this.totalActiveDays,
     required this.completedGoalDays,
+    required this.journalEntries,
+    required this.reflectiveDays,
     required this.productivityScore,
     required this.completionRate,
   });
@@ -51,6 +56,7 @@ class RankProfile {
   factory RankProfile.calculate({
     required String username,
     required Map<DateTime, List<Task>> allTasksByDate,
+    List<JournalEntry> journalEntries = const <JournalEntry>[],
     DateTime? now,
   }) {
     final todayValue = now ?? DateTime.now();
@@ -82,15 +88,27 @@ class RankProfile {
       );
     }
 
-    final activeDays = dayActivity.values.where((activity) => activity.completed > 0).length;
+    for (final entry in journalEntries) {
+      final date = DateTime(entry.date.year, entry.date.month, entry.date.day);
+      final current = dayActivity[date];
+      dayActivity[date] = _RankDayActivity(
+        completed: current?.completed ?? 0,
+        goalComplete: current?.goalComplete ?? true,
+      );
+    }
+
+    final activeDays = dayActivity.values.where((activity) => activity.completed > 0 || activity.goalComplete).length;
     final activeStreak = _calculateActiveStreak(today, dayActivity);
     final longestStreak = _calculateLongestStreak(dayActivity);
+    final journalCount = journalEntries.length;
+    final reflectiveDays = journalEntries.where((entry) => entry.hasReflection).length;
     final completionRate = totalTasks == 0 ? 0.0 : completedTasks / totalTasks;
     final consistencyScore = activeDays * 4 + completedGoalDays * 8;
     final streakScore = activeStreak * 14 + longestStreak * 6;
     final taskScore = completedTasks * 10 + importantCompleted * 8 + recurringCompleted * 6;
+    final journalScore = journalCount * 8 + reflectiveDays * 4;
     final productivityScore = (completionRate * 100).round();
-    final xp = taskScore + consistencyScore + streakScore + productivityScore;
+    final xp = taskScore + consistencyScore + streakScore + journalScore + productivityScore;
     final level = math.max(1, (xp ~/ 120) + 1);
     final currentRank = RankTier.forLevel(level);
     final nextRank = RankTier.nextAfter(currentRank);
@@ -110,6 +128,8 @@ class RankProfile {
       recurringTasksCompleted: recurringCompleted,
       totalActiveDays: activeDays,
       completedGoalDays: completedGoalDays,
+      journalEntries: journalCount,
+      reflectiveDays: reflectiveDays,
       productivityScore: productivityScore,
       completionRate: completionRate,
     );

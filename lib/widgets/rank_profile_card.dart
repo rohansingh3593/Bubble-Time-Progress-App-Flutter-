@@ -117,6 +117,7 @@ class RankProfileCard extends StatelessWidget {
                 _RankMetric(label: 'Important', value: '${profile.importantTasksCompleted}'),
                 _RankMetric(label: 'Active days', value: '${profile.totalActiveDays}'),
                 _RankMetric(label: 'Score', value: '${profile.productivityScore}%'),
+                _RankMetric(label: 'Journal', value: '${profile.journalEntries}'),
               ],
             ),
           ],
