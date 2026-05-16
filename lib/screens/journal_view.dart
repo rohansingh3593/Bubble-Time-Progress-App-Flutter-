@@ -146,7 +146,7 @@ class _JournalViewState extends State<JournalView> {
               const SizedBox(height: 14),
               _JournalAnalyticsPanel(analytics: analytics),
               const SizedBox(height: 14),
-              _JournalHistory(entries: journalEntries),
+              _JournalHistory(entries: journalEntries, tasksByDate: allTasksByDate),
             ],
           );
         },
@@ -306,12 +306,14 @@ class _ProductivityConnection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activeTasks = tasks.where((task) => task.status != 'Cancelled').toList();
-    final completed = activeTasks.where((task) => task.done || task.status == 'Completed').length;
+    final completedTasks = activeTasks.where((task) => task.done || task.status == 'Completed').toList();
+    final completed = completedTasks.length;
     final score = activeTasks.isEmpty ? 0 : ((completed / activeTasks.length) * 100).round();
+    final accent = _taskAccentForTasks(activeTasks);
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: _calmPanelDecoration(),
+      decoration: _calmPanelDecoration(accentColor: accent),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -319,11 +321,11 @@ class _ProductivityConnection extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _MiniStat(label: 'Tasks', value: '$completed/${activeTasks.length}')),
+              Expanded(child: _MiniStat(label: 'Tasks', value: '$completed/${activeTasks.length}', accentColor: accent)),
               const SizedBox(width: 10),
-              Expanded(child: _MiniStat(label: 'Score', value: '$score%')),
+              Expanded(child: _MiniStat(label: 'Score', value: '$score%', accentColor: accent)),
               const SizedBox(width: 10),
-              Expanded(child: _MiniStat(label: 'Saved mood', value: entry?.mood ?? '—')),
+              Expanded(child: _MiniStat(label: 'Saved mood', value: entry?.mood ?? '—', accentColor: accent)),
             ],
           ),
           const SizedBox(height: 12),
@@ -331,9 +333,17 @@ class _ProductivityConnection extends StatelessWidget {
             value: activeTasks.isEmpty ? 0.0 : completed / activeTasks.length,
             minHeight: 9,
             borderRadius: BorderRadius.circular(99),
-            color: AppColors.taskCompleted,
-            backgroundColor: AppColors.taskCompleted.withOpacity(0.14),
+            color: accent,
+            backgroundColor: accent.withOpacity(0.14),
           ),
+          if (activeTasks.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: activeTasks.map((task) => _JournalTaskChip(task: task)).toList(),
+            ),
+          ],
         ],
       ),
     );
@@ -410,8 +420,9 @@ class _JournalAnalyticsPanel extends StatelessWidget {
 
 class _JournalHistory extends StatelessWidget {
   final List<JournalEntry> entries;
+  final Map<DateTime, List<Task>> tasksByDate;
 
-  const _JournalHistory({required this.entries});
+  const _JournalHistory({required this.entries, required this.tasksByDate});
 
   @override
   Widget build(BuildContext context) {
@@ -426,7 +437,7 @@ class _JournalHistory extends StatelessWidget {
           if (entries.isEmpty)
             const Text('No journal entries yet. Save your first reflection today.', style: TextStyle(color: Colors.black54))
           else
-            ...entries.take(8).map((entry) => _HistoryTile(entry: entry)),
+            ...entries.take(8).map((entry) => _HistoryTile(entry: entry, tasks: tasksByDate[_dateOnly(entry.date)] ?? const <Task>[])),
         ],
       ),
     );
@@ -435,23 +446,35 @@ class _JournalHistory extends StatelessWidget {
 
 class _HistoryTile extends StatelessWidget {
   final JournalEntry entry;
+  final List<Task> tasks;
 
-  const _HistoryTile({required this.entry});
+  const _HistoryTile({required this.entry, required this.tasks});
 
   @override
   Widget build(BuildContext context) {
     final preview = entry.reflection.trim().isEmpty ? 'No reflection text saved.' : entry.reflection.trim();
+    final accent = _taskAccentForTasks(tasks);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: accent.withOpacity(0.08),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withOpacity(0.24)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(_emojiForMood(entry.mood), style: const TextStyle(fontSize: 24)),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.16),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            alignment: Alignment.center,
+            child: Text(_emojiForMood(entry.mood), style: const TextStyle(fontSize: 22)),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -466,7 +489,10 @@ class _HistoryTile extends StatelessWidget {
                   style: const TextStyle(color: Colors.black54),
                 ),
                 const SizedBox(height: 4),
-                Text('Productivity: ${entry.completedTasks}/${entry.totalTasks} tasks • ${entry.productivityScore}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(
+                  'Productivity: ${entry.completedTasks}/${entry.totalTasks} tasks • ${entry.productivityScore}%',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: accent),
+                ),
               ],
             ),
           ),
@@ -479,17 +505,23 @@ class _HistoryTile extends StatelessWidget {
 class _MiniStat extends StatelessWidget {
   final String label;
   final String value;
+  final Color? accentColor;
 
-  const _MiniStat({required this.label, required this.value});
+  const _MiniStat({required this.label, required this.value, this.accentColor});
 
   @override
   Widget build(BuildContext context) {
+    final accent = accentColor ?? AppColors.accent;
     return Container(
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(
+        color: accent.withOpacity(0.09),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withOpacity(0.18)),
+      ),
       child: Column(
         children: [
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+          Text(value, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: accent)),
           const SizedBox(height: 2),
           Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black54, fontSize: 11)),
         ],
@@ -520,6 +552,52 @@ class _AnalyticsPill extends StatelessWidget {
     );
   }
 }
+
+
+class _JournalTaskChip extends StatelessWidget {
+  final Task task;
+
+  const _JournalTaskChip({required this.task});
+
+  @override
+  Widget build(BuildContext context) {
+    final taskColor = Color(task.colorValue);
+    final isCompleted = task.done || task.status == 'Completed';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: taskColor.withOpacity(isCompleted ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: taskColor.withOpacity(isCompleted ? 0.38 : 0.22)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(isCompleted ? Icons.check_circle : Icons.circle_outlined, size: 15, color: taskColor),
+          const SizedBox(width: 6),
+          Text(
+            task.task,
+            style: TextStyle(color: taskColor, fontSize: 12, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Color _taskAccentForTasks(List<Task> tasks) {
+  final activeTasks = tasks.where((task) => task.status != 'Cancelled').toList();
+  if (activeTasks.isEmpty) return AppColors.accent;
+
+  for (final task in activeTasks) {
+    if (task.done || task.status == 'Completed') return Color(task.colorValue);
+  }
+
+  return Color(activeTasks.first.colorValue);
+}
+
+DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
 class _JournalAnalytics {
   final int totalEntries;
@@ -583,10 +661,12 @@ class _MoodOption {
   const _MoodOption({required this.label, required this.emoji, required this.color});
 }
 
-BoxDecoration _calmPanelDecoration() {
+BoxDecoration _calmPanelDecoration({Color? accentColor}) {
+  final accent = accentColor;
   return BoxDecoration(
     color: AppColors.surface,
     borderRadius: BorderRadius.circular(24),
+    border: accent == null ? null : Border.all(color: accent.withOpacity(0.18)),
     boxShadow: [
       BoxShadow(
         color: Colors.black.withOpacity(0.05),

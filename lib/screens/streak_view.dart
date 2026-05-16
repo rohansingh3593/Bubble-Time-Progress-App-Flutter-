@@ -752,7 +752,7 @@ class _RecurringTaskListView extends StatelessWidget {
           const Text('Recurring Task List View', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
           const Text(
-            'Daily and weekly routines only. Task color identifies the habit; green/red show completion status.',
+            'Daily and weekly routines only. Completed days use the selected task color; cancelled and missed days stay red.',
             style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 14),
@@ -828,7 +828,11 @@ class _RecurringListRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: taskColor.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: taskColor.withOpacity(0.22)),
+      ),
       child: Row(
         children: [
           SizedBox(
