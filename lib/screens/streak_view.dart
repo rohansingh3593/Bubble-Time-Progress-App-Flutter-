@@ -74,6 +74,8 @@ class StreakView extends StatelessWidget {
                 const SizedBox(height: 14),
                 _WeeklyDateIndicator(today: stats.today),
                 const SizedBox(height: 14),
+                _RecurringTaskListView(habits: habits, today: stats.today),
+                const SizedBox(height: 14),
                 _HabitTrackerSection(
                   hiveService: hiveService,
                   habits: habits,
@@ -730,6 +732,146 @@ class _WeeklyDateIndicator extends StatelessWidget {
   }
 }
 
+
+class _RecurringTaskListView extends StatelessWidget {
+  final List<_HabitTracker> habits;
+  final DateTime today;
+
+  const _RecurringTaskListView({required this.habits, required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    final weekStart = today.subtract(Duration(days: today.weekday - 1));
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Recurring Task List View', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          const Text(
+            'Daily and weekly routines only. Task color identifies the habit; green/red show completion status.',
+            style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 14),
+          if (habits.isEmpty)
+            const _EmptyState(message: 'No daily or weekly recurring tasks to list yet.')
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _RecurringListHeader(weekStart: weekStart, today: today),
+                  const SizedBox(height: 8),
+                  ...habits.map((habit) => _RecurringListRow(habit: habit, weekStart: weekStart, today: today)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecurringListHeader extends StatelessWidget {
+  final DateTime weekStart;
+  final DateTime today;
+
+  const _RecurringListHeader({required this.weekStart, required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    return Row(
+      children: [
+        const SizedBox(width: 190, child: Text('Task', style: TextStyle(fontWeight: FontWeight.w800))),
+        ...List.generate(7, (index) {
+          final date = weekStart.add(Duration(days: index));
+          final isToday = _isSameDate(date, today);
+          return Container(
+            width: 34,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            decoration: BoxDecoration(
+              color: isToday ? AppColors.accent.withOpacity(0.14) : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              children: [
+                Text(labels[index], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                Text('${date.day}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: isToday ? AppColors.accent : Colors.black54)),
+              ],
+            ),
+          );
+        }),
+        const SizedBox(width: 90, child: Text('Status', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800))),
+      ],
+    );
+  }
+}
+
+class _RecurringListRow extends StatelessWidget {
+  final _HabitTracker habit;
+  final DateTime weekStart;
+  final DateTime today;
+
+  const _RecurringListRow({required this.habit, required this.weekStart, required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    final taskColor = Color(habit.template.colorValue);
+    final todayStatus = habit.statusFor(today);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 190,
+            child: Row(
+              children: [
+                const SizedBox(width: 10),
+                Container(width: 12, height: 12, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(habit.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
+                      Text("${habit.currentStreak} ${habit.repeatFrequency == 'Weekly' ? 'wk' : 'day'} streak", style: const TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...List.generate(7, (index) {
+            final date = weekStart.add(Duration(days: index));
+            final status = habit.statusFor(date);
+            return Container(
+              width: 34,
+              height: 34,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              decoration: BoxDecoration(
+                color: _statusBlockColor(status),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: _isSameDate(date, today) ? taskColor : Colors.transparent, width: 2),
+              ),
+              child: Icon(_statusIcon(status), size: 15, color: status == _HabitDayStatus.none ? Colors.white30 : Colors.white),
+            );
+          }),
+          SizedBox(width: 90, child: Center(child: _StatusBadge(status: todayStatus))),
+        ],
+      ),
+    );
+  }
+}
+
 class _HabitTrackerSection extends StatelessWidget {
   final HiveService hiveService;
   final List<_HabitTracker> habits;
@@ -814,14 +956,20 @@ class _HabitCard extends StatelessWidget {
                   color: _statusColor(todayStatus).withOpacity(0.14),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Icon(Icons.repeat, color: _statusColor(todayStatus)),
+                child: Icon(Icons.repeat, color: Color(habit.template.colorValue)),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(habit.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                    Row(
+                      children: [
+                        Container(width: 10, height: 10, decoration: BoxDecoration(color: Color(habit.template.colorValue), shape: BoxShape.circle)),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(habit.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
+                      ],
+                    ),
                     const SizedBox(height: 3),
                     Text(
                       "Streak: ${habit.currentStreak} ${habit.repeatFrequency == 'Weekly' ? 'Weeks' : 'Days'} • ${habit.repeatFrequency} • ${habit.category}",
@@ -1148,6 +1296,30 @@ class _HabitTracker {
   }
 
   static bool _isTaskCompleted(Task? task) => task != null && (task.done || task.status == 'Completed');
+}
+
+Color _statusBlockColor(_HabitDayStatus status) {
+  switch (status) {
+    case _HabitDayStatus.completed:
+      return AppColors.taskCompleted;
+    case _HabitDayStatus.cancelled:
+    case _HabitDayStatus.missed:
+      return Colors.redAccent;
+    case _HabitDayStatus.none:
+      return const Color(0xFF263238);
+  }
+}
+
+IconData _statusIcon(_HabitDayStatus status) {
+  switch (status) {
+    case _HabitDayStatus.completed:
+      return Icons.check;
+    case _HabitDayStatus.cancelled:
+    case _HabitDayStatus.missed:
+      return Icons.close;
+    case _HabitDayStatus.none:
+      return Icons.remove;
+  }
 }
 
 enum _HabitDayStatus { completed, cancelled, missed, none }

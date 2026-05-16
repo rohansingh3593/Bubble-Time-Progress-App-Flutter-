@@ -47,6 +47,9 @@ class Task {
   @HiveField(13)
   int? hourSlot;
 
+  @HiveField(14)
+  int colorValue;
+
   Task({
     required this.task,
     this.done = false,
@@ -62,6 +65,7 @@ class Task {
     this.important = false,
     this.estimatedMinutes = 0,
     this.hourSlot,
+    this.colorValue = 0xFF1E88E5,
   });
 
   Task copyWith({
@@ -79,6 +83,7 @@ class Task {
     bool? important,
     int? estimatedMinutes,
     int? hourSlot,
+    int? colorValue,
   }) {
     return Task(
       task: task ?? this.task,
@@ -95,6 +100,7 @@ class Task {
       important: important ?? this.important,
       estimatedMinutes: estimatedMinutes ?? this.estimatedMinutes,
       hourSlot: hourSlot ?? this.hourSlot,
+      colorValue: colorValue ?? this.colorValue,
     );
   }
 }

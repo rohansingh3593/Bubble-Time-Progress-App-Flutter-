@@ -20,6 +20,16 @@ const List<String> _statusOptions = [
 
 const List<String> _repeatFrequencyOptions = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
 
+const Map<String, int> _taskColorOptions = {
+  'Yellow': 0xFFFFC107,
+  'Green': 0xFF43A047,
+  'Blue': 0xFF1E88E5,
+  'Red': 0xFFE53935,
+  'Purple': 0xFF7E57C2,
+  'Orange': 0xFFFF8F00,
+  'Pink': 0xFFE91E63,
+};
+
 Future<Task?> showTaskFormDialog(
   BuildContext context, {
   required DateTime date,
@@ -50,6 +60,7 @@ Future<Task?> showTaskFormDialog(
   String repeatFrequency = initialTask?.repeatFrequency ?? 'Daily';
   bool selectedUrgent = initialTask?.urgent ?? false;
   bool selectedImportant = initialTask?.important ?? false;
+  int selectedColorValue = initialTask?.colorValue ?? _taskColorOptions['Blue']!;
 
   if (!categories.contains(selectedCategory)) categories.add(selectedCategory);
   if (selectedDelegate != null && selectedDelegate!.isNotEmpty && !delegates.contains(selectedDelegate)) delegates.add(selectedDelegate!);
@@ -227,6 +238,24 @@ Future<Task?> showTaskFormDialog(
                         const Text('Repeat Frequency', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
                         ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() => repeatFrequency = value); })),
+                        const SizedBox(height: 8),
+                        const Text('Task Color', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _taskColorOptions.entries.map((entry) {
+                            final selected = selectedColorValue == entry.value;
+                            final color = Color(entry.value);
+                            return ChoiceChip(
+                              selected: selected,
+                              label: Text(entry.key),
+                              avatar: CircleAvatar(backgroundColor: color, radius: 8),
+                              selectedColor: color.withOpacity(0.22),
+                              onSelected: (_) => setDialogState(() => selectedColorValue = entry.value),
+                            );
+                          }).toList(),
+                        ),
                       ],
                     ),
                   ),
@@ -264,6 +293,7 @@ Future<Task?> showTaskFormDialog(
                   important: selectedImportant,
                   estimatedMinutes: estimatedMinutes,
                   hourSlot: hourSlot,
+                  colorValue: selectedColorValue,
                 ));
               },
               child: Text(actionLabel),
