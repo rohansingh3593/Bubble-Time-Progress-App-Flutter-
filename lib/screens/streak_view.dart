@@ -856,12 +856,13 @@ class _RecurringListRow extends StatelessWidget {
           ...List.generate(7, (index) {
             final date = weekStart.add(Duration(days: index));
             final status = habit.statusFor(date);
+            final blockColor = _habitActivityBlockColor(habit, date, status, taskColor);
             return Container(
               width: 34,
               height: 34,
               margin: const EdgeInsets.symmetric(horizontal: 3),
               decoration: BoxDecoration(
-                color: _statusBlockColor(status, taskColor),
+                color: blockColor,
                 borderRadius: BorderRadius.circular(9),
                 border: Border.all(color: _isSameDate(date, today) ? taskColor : Colors.transparent, width: 2),
               ),
@@ -1086,11 +1087,12 @@ class _HabitActivityGrid extends StatelessWidget {
             final date = startDate.add(Duration(days: index));
             final status = habit.statusFor(date);
             final isToday = _isSameDate(date, today);
+            final blockColor = _habitActivityBlockColor(habit, date, status, taskColor);
             return Tooltip(
               message: '${date.month}/${date.day}: ${_statusLabel(status)}',
               child: Container(
                 decoration: BoxDecoration(
-                  color: _gridColor(status, taskColor),
+                  color: blockColor,
                   borderRadius: BorderRadius.circular(5),
                   border: isToday ? Border.all(color: AppColors.accent, width: 2) : null,
                 ),
@@ -1100,19 +1102,6 @@ class _HabitActivityGrid extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  Color _gridColor(_HabitDayStatus status, Color taskColor) {
-    switch (status) {
-      case _HabitDayStatus.completed:
-        return taskColor;
-      case _HabitDayStatus.cancelled:
-        return Colors.redAccent;
-      case _HabitDayStatus.missed:
-        return Colors.redAccent;
-      case _HabitDayStatus.none:
-        return const Color(0xFF263238);
-    }
   }
 }
 
@@ -1301,7 +1290,9 @@ class _HabitTracker {
     return false;
   }
 
-  static bool _isTaskCompleted(Task? task) => task != null && (task.done || _normalizedStatus(task) == 'completed');
+  static bool _isTaskCompleted(Task? task) => task != null && isTaskCompletedForGrid(task);
+
+  static bool isTaskCompletedForGrid(Task task) => task.done || _normalizedStatus(task) == 'completed';
 
   static bool _isTaskCancelled(Task task) => _normalizedStatus(task) == 'cancelled';
 
@@ -1319,10 +1310,16 @@ class _HabitTracker {
   static String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
 }
 
-Color _statusBlockColor(_HabitDayStatus status, Color taskColor) {
+
+Color _habitActivityBlockColor(_HabitTracker habit, DateTime date, _HabitDayStatus status, Color fallbackTaskColor) {
+  final task = habit.taskFor(date);
+  if (task != null && _HabitTracker.isTaskCompletedForGrid(task)) {
+    return Color(task.colorValue);
+  }
+
   switch (status) {
     case _HabitDayStatus.completed:
-      return taskColor;
+      return task == null ? fallbackTaskColor : Color(task.colorValue);
     case _HabitDayStatus.cancelled:
     case _HabitDayStatus.missed:
       return Colors.redAccent;
