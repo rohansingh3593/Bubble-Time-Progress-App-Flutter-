@@ -769,7 +769,8 @@ class _RecurringTaskListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final weekStart = today.subtract(Duration(days: today.weekday - 1));
+    final dailyHabits = habits.where(_isDailyStreakBoardHabit).toList();
+    final boardDates = _buildStreakBoardDates(dailyHabits, today);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -777,26 +778,21 @@ class _RecurringTaskListView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Recurring Task List View', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const Text('Daily Streak Board', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
           const Text(
-            'Daily and weekly routines only. Completed days use the selected task color; cancelled and missed days stay red.',
+            'Active daily recurring habits only. Completed days use the selected task color, missed or cancelled days stay red, and future or unset days stay neutral.',
             style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 14),
-          if (habits.isEmpty)
-            const _EmptyState(message: 'No daily or weekly recurring tasks to list yet.')
+          if (dailyHabits.isEmpty)
+            const _EmptyState(message: 'No active daily recurring habits yet. Add a daily repeating task to build a streak board.')
           else
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _RecurringListHeader(weekStart: weekStart, today: today),
-                  const SizedBox(height: 8),
-                  ...habits.map((habit) => _RecurringListRow(hiveService: hiveService, habit: habit, weekStart: weekStart, today: today)),
-                ],
-              ),
+            _DailyStreakBoard(
+              hiveService: hiveService,
+              habits: dailyHabits,
+              dates: boardDates,
+              today: today,
             ),
         ],
       ),
@@ -804,107 +800,237 @@ class _RecurringTaskListView extends StatelessWidget {
   }
 }
 
-class _RecurringListHeader extends StatelessWidget {
-  final DateTime weekStart;
+class _DailyStreakBoard extends StatefulWidget {
+  final HiveService hiveService;
+  final List<_HabitTracker> habits;
+  final List<DateTime> dates;
   final DateTime today;
 
-  const _RecurringListHeader({required this.weekStart, required this.today});
+  const _DailyStreakBoard({required this.hiveService, required this.habits, required this.dates, required this.today});
+
+  @override
+  State<_DailyStreakBoard> createState() => _DailyStreakBoardState();
+}
+
+class _DailyStreakBoardState extends State<_DailyStreakBoard> {
+  final ScrollController _dateScrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollToTodayAfterLayout();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DailyStreakBoard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dates.length != widget.dates.length || !_isSameDate(oldWidget.today, widget.today)) {
+      _scrollToTodayAfterLayout();
+    }
+  }
+
+  @override
+  void dispose() {
+    _dateScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(width: 190, child: Text('Task', style: TextStyle(fontWeight: FontWeight.w800))),
-        ...List.generate(7, (index) {
-          final date = weekStart.add(Duration(days: index));
-          final isToday = _isSameDate(date, today);
-          return Container(
-            width: 34,
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            decoration: BoxDecoration(
-              color: isToday ? AppColors.accent.withOpacity(0.14) : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
-            ),
+        SizedBox(
+          width: 150,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _StreakBoardTaskHeader(color: AppColors.accent),
+              const SizedBox(height: 8),
+              ...widget.habits.map((habit) => _StreakBoardTaskNameCell(hiveService: widget.hiveService, habit: habit, today: widget.today)),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _dateScrollController,
+            scrollDirection: Axis.horizontal,
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(labels[index], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-                Text('${date.day}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: isToday ? AppColors.accent : Colors.black54)),
+                _StreakBoardDateHeader(dates: widget.dates, today: widget.today),
+                const SizedBox(height: 8),
+                ...widget.habits.map((habit) => _StreakBoardActivityRow(habit: habit, dates: widget.dates, today: widget.today)),
               ],
             ),
-          );
-        }),
-        const SizedBox(width: 90, child: Text('Status', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800))),
+          ),
+        ),
       ],
+    );
+  }
+
+  void _scrollToTodayAfterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_dateScrollController.hasClients) return;
+      _dateScrollController.jumpTo(_dateScrollController.position.maxScrollExtent);
+    });
+  }
+}
+
+class _StreakBoardTaskHeader extends StatelessWidget {
+  final Color color;
+
+  const _StreakBoardTaskHeader({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 52,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.only(left: 4),
+      child: Text('Habit', style: TextStyle(color: color, fontWeight: FontWeight.w900)),
     );
   }
 }
 
-class _RecurringListRow extends StatelessWidget {
-  final HiveService hiveService;
-  final _HabitTracker habit;
-  final DateTime weekStart;
+class _StreakBoardDateHeader extends StatelessWidget {
+  final List<DateTime> dates;
   final DateTime today;
 
-  const _RecurringListRow({required this.hiveService, required this.habit, required this.weekStart, required this.today});
+  const _StreakBoardDateHeader({required this.dates, required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: dates.map((date) {
+        final isToday = _isSameDate(date, today);
+        return Container(
+          width: 42,
+          height: 52,
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: isToday ? AppColors.accent.withOpacity(0.14) : Colors.transparent,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: isToday ? AppColors.accent : Colors.transparent, width: 1.4),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(_weekdayLabel(date), style: TextStyle(fontSize: 11, color: isToday ? AppColors.accent : Colors.black54, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text('${date.day}', style: TextStyle(fontSize: 13, color: isToday ? AppColors.accent : Colors.black87, fontWeight: FontWeight.w900)),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _StreakBoardTaskNameCell extends StatelessWidget {
+  final HiveService hiveService;
+  final _HabitTracker habit;
+  final DateTime today;
+
+  const _StreakBoardTaskNameCell({required this.hiveService, required this.habit, required this.today});
 
   @override
   Widget build(BuildContext context) {
     final taskColor = Color(habit.template.colorValue);
-    final todayStatus = habit.statusFor(today);
-
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       onTap: () => _openTaskPerformanceDetail(context, hiveService, habit, today),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: _softTaskDecoration(taskColor, radius: 16),
+        height: 40,
+        margin: const EdgeInsets.only(bottom: 8, right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(color: taskColor.withOpacity(0.08), borderRadius: BorderRadius.circular(14), border: Border.all(color: taskColor.withOpacity(0.16))),
         child: Row(
-        children: [
-          SizedBox(
-            width: 190,
-            child: Row(
-              children: [
-                const SizedBox(width: 10),
-                Container(width: 12, height: 12, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(habit.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
-                      Text("${habit.currentStreak} ${habit.repeatFrequency == 'Weekly' ? 'wk' : 'day'} streak", style: const TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          ...List.generate(7, (index) {
-            final date = weekStart.add(Duration(days: index));
-            final status = habit.statusFor(date);
-            final blockColor = _habitActivityBlockColor(habit, date, status, taskColor);
-            return Container(
-              width: 34,
-              height: 34,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              decoration: BoxDecoration(
-                color: blockColor,
-                borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: _isSameDate(date, today) ? taskColor : Colors.transparent, width: 2),
+          children: [
+            Container(width: 10, height: 10, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(habit.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                  Text('${habit.currentStreak} day streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700, fontSize: 10)),
+                ],
               ),
-              child: Icon(_statusIcon(status), size: 15, color: status == _HabitDayStatus.none ? Colors.white30 : Colors.white),
-            );
-          }),
-          SizedBox(width: 90, child: Center(child: _StatusBadge(status: todayStatus, taskColor: taskColor))),
+            ),
           ],
         ),
       ),
     );
   }
 }
+
+class _StreakBoardActivityRow extends StatelessWidget {
+  final _HabitTracker habit;
+  final List<DateTime> dates;
+  final DateTime today;
+
+  const _StreakBoardActivityRow({required this.habit, required this.dates, required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    final taskColor = Color(habit.template.colorValue);
+    return Container(
+      height: 40,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: dates.map((date) {
+          final status = _boardStatusFor(habit, date, today);
+          final blockColor = _habitActivityBlockColor(habit, date, status, taskColor);
+          final isToday = _isSameDate(date, today);
+          return Tooltip(
+            message: '${habit.title} • ${_formatBoardDate(date)} • ${_statusLabel(status)}',
+            child: Container(
+              width: 42,
+              height: 40,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: blockColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: isToday ? taskColor : Colors.transparent, width: 2),
+                boxShadow: status == _HabitDayStatus.completed ? [BoxShadow(color: blockColor.withOpacity(0.22), blurRadius: 8, offset: const Offset(0, 3))] : null,
+              ),
+              child: Icon(_statusIcon(status), size: 15, color: status == _HabitDayStatus.none ? Colors.white30 : Colors.white),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+bool _isDailyStreakBoardHabit(_HabitTracker habit) => _HabitTracker._normalizedRepeatFrequency(habit.repeatFrequency) == 'daily';
+
+List<DateTime> _buildStreakBoardDates(List<_HabitTracker> habits, DateTime today) {
+  if (habits.isEmpty) return const <DateTime>[];
+  final endDate = _dateOnly(today);
+  final firstDate = habits.map((habit) => _dateOnly(habit.firstTrackedDate)).reduce((a, b) => a.isBefore(b) ? a : b);
+  final dates = <DateTime>[];
+  var cursor = firstDate;
+  while (!cursor.isAfter(endDate)) {
+    dates.add(cursor);
+    cursor = cursor.add(const Duration(days: 1));
+  }
+  return dates;
+}
+
+_HabitDayStatus _boardStatusFor(_HabitTracker habit, DateTime date, DateTime today) {
+  final day = _dateOnly(date);
+  if (day.isAfter(_dateOnly(today)) || day.isBefore(_dateOnly(habit.firstTrackedDate))) return _HabitDayStatus.none;
+  return habit.statusFor(day);
+}
+
+String _weekdayLabel(DateTime date) => const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][date.weekday - 1];
+
+String _formatBoardDate(DateTime date) => '${_weekdayLabel(date)} ${date.day} ${_monthNames[date.month - 1]} ${date.year}';
 
 class _HabitTrackerSection extends StatelessWidget {
   final HiveService hiveService;
