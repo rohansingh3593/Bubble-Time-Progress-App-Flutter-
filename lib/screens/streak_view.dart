@@ -261,7 +261,7 @@ class _JourneyStats {
 
   static DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
-  static bool _isCompletedTask(Task task) => task.done || task.status == 'Completed';
+  static bool _isCompletedTask(Task task) => task.done || task.status.trim().toLowerCase() == 'completed';
 
   static bool _isAllowedRecurringTask(Task task) {
     return task.repeatTask && (task.repeatFrequency == 'Daily' || task.repeatFrequency == 'Weekly');
@@ -1203,9 +1203,9 @@ class _HabitTracker {
       return _HabitDayStatus.none;
     }
 
-    if (task.done || task.status == 'Completed') return _HabitDayStatus.completed;
-    if (task.status == 'Cancelled') return _HabitDayStatus.cancelled;
-    if (task.status == 'Missed' || task.status == 'Overdue') return _HabitDayStatus.missed;
+    if (_isTaskCompleted(task)) return _HabitDayStatus.completed;
+    if (_isTaskCancelled(task)) return _HabitDayStatus.cancelled;
+    if (_isTaskMissed(task)) return _HabitDayStatus.missed;
     if (repeatFrequency == 'Daily' && !day.isAfter(today)) return _HabitDayStatus.missed;
     if (day.isBefore(today)) return _HabitDayStatus.missed;
     return _HabitDayStatus.none;
@@ -1228,7 +1228,10 @@ class _HabitTracker {
       final records = entry.value..sort((a, b) => b.key.compareTo(a.key));
       final byDate = <DateTime, Task>{};
       for (final record in records) {
-        byDate.putIfAbsent(record.key, () => record.value);
+        final existing = byDate[record.key];
+        if (existing == null || _statusPriority(record.value) > _statusPriority(existing)) {
+          byDate[record.key] = record.value;
+        }
       }
       final template = records.first.value;
       return _HabitTracker(
@@ -1294,7 +1297,22 @@ class _HabitTracker {
     return false;
   }
 
-  static bool _isTaskCompleted(Task? task) => task != null && (task.done || task.status == 'Completed');
+  static bool _isTaskCompleted(Task? task) => task != null && (task.done || _normalizedStatus(task) == 'completed');
+
+  static bool _isTaskCancelled(Task task) => _normalizedStatus(task) == 'cancelled';
+
+  static bool _isTaskMissed(Task task) {
+    final status = _normalizedStatus(task);
+    return status == 'missed' || status == 'overdue';
+  }
+
+  static int _statusPriority(Task task) {
+    if (_isTaskCompleted(task)) return 3;
+    if (_isTaskCancelled(task) || _isTaskMissed(task)) return 2;
+    return 1;
+  }
+
+  static String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
 }
 
 Color _statusBlockColor(_HabitDayStatus status, Color taskColor) {
