@@ -272,7 +272,10 @@ class _JourneyStats {
 
   static DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
-  static bool _isCompletedTask(Task task) => task.done || task.status.trim().toLowerCase() == 'completed';
+  static bool _isCompletedTask(Task task) {
+    final status = task.status.trim().toLowerCase();
+    return task.done || status == 'completed' || status == 'complete';
+  }
 
   static bool _isAllowedRecurringTask(Task task) {
     final frequency = _normalizedRepeatFrequency(task.repeatFrequency);
@@ -673,7 +676,7 @@ class _ActivityHeatmap extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: color,
                     borderRadius: BorderRadius.circular(4),
-                    border: isToday ? Border.all(color: AppColors.accent, width: 2) : null,
+                    border: isToday ? Border.all(color: color, width: 2) : null,
                   ),
                 ),
               );
@@ -917,7 +920,7 @@ class _HabitTrackerSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.track_changes, color: AppColors.taskCompleted),
+              Icon(Icons.track_changes, color: habits.isEmpty ? AppColors.taskCompleted : Color(habits.first.template.colorValue)),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text('Habit & Routine Tracker', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
@@ -1114,7 +1117,7 @@ class _HabitActivityGrid extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: blockColor,
                   borderRadius: BorderRadius.circular(5),
-                  border: isToday ? Border.all(color: AppColors.accent, width: 2) : null,
+                  border: isToday ? Border.all(color: taskColor, width: 2) : null,
                 ),
               ),
             );
@@ -1315,7 +1318,10 @@ class _HabitTracker {
 
   static bool _isTaskCompleted(Task? task) => task != null && isTaskCompletedForGrid(task);
 
-  static bool isTaskCompletedForGrid(Task task) => task.done || _normalizedStatus(task) == 'completed';
+  static bool isTaskCompletedForGrid(Task task) {
+    final status = _normalizedStatus(task);
+    return task.done || status == 'completed' || status == 'complete';
+  }
 
   static bool _isTaskCancelled(Task task) => _normalizedStatus(task) == 'cancelled';
 
