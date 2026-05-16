@@ -202,28 +202,38 @@ Future<Task?> showTaskFormDialog(
                     }
                   },
                 ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: selectedDelegate ?? '__none__',
-                  decoration: InputDecoration(labelText: 'Delegate (Optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
-                  items: [const DropdownMenuItem<String>(value: '__none__', child: Text('Unassigned')), ...delegates.map((d) => DropdownMenuItem<String>(value: d, child: Text(d))), const DropdownMenuItem<String>(value: '__add_delegate__', child: Text('➕ Add Delegate'))],
-                  onChanged: (value) async {
-                    if (value == null) return;
-                    if (value == '__none__') {
-                      setDialogState(() => selectedDelegate = null);
-                    } else if (value == '__add_delegate__') {
-                      final controller = TextEditingController();
-                      final added = await showDialog<String>(context: context, builder: (context) => AlertDialog(title: const Text('Add Delegate'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Person name')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save'))]));
-                      if (added != null && added.isNotEmpty) {
-                        await hiveService.addDelegate(added);
-                        if (!delegates.contains(added)) delegates.add(added);
-                        setDialogState(() => selectedDelegate = added);
+                if (!(repeatTask && repeatFrequency == 'Daily')) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedDelegate ?? '__none__',
+                    decoration: InputDecoration(labelText: 'Delegate (Optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                    items: [const DropdownMenuItem<String>(value: '__none__', child: Text('Unassigned')), ...delegates.map((d) => DropdownMenuItem<String>(value: d, child: Text(d))), const DropdownMenuItem<String>(value: '__add_delegate__', child: Text('➕ Add Delegate'))],
+                    onChanged: (value) async {
+                      if (value == null) return;
+                      if (value == '__none__') {
+                        setDialogState(() => selectedDelegate = null);
+                      } else if (value == '__add_delegate__') {
+                        final controller = TextEditingController();
+                        final added = await showDialog<String>(context: context, builder: (context) => AlertDialog(title: const Text('Add Delegate'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Person name')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save'))]));
+                        if (added != null && added.isNotEmpty) {
+                          await hiveService.addDelegate(added);
+                          if (!delegates.contains(added)) delegates.add(added);
+                          setDialogState(() => selectedDelegate = added);
+                        }
+                      } else {
+                        setDialogState(() => selectedDelegate = value);
                       }
-                    } else {
-                      setDialogState(() => selectedDelegate = value);
-                    }
-                  },
-                ),
+                    },
+                  ),
+                ] else ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: Color(0xFFF8F4FF), borderRadius: BorderRadius.all(Radius.circular(14)), border: Border.fromBorderSide(BorderSide(color: Colors.black12))),
+                    child: Text('Daily habits are personal all-day routines, so delegate scheduling is hidden.'),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -234,7 +244,10 @@ Future<Task?> showTaskFormDialog(
                     setDialogState(() {
                       repeatTask = value;
                       if (!repeatTask) repeatFrequency = 'Daily';
-                      if (repeatTask && repeatFrequency == 'Daily') hourSlot = null;
+                      if (repeatTask && repeatFrequency == 'Daily') {
+                        hourSlot = null;
+                        selectedDelegate = null;
+                      }
                     });
                   },
                 ),
@@ -248,7 +261,7 @@ Future<Task?> showTaskFormDialog(
                       children: [
                         const Text('Repeat Frequency', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
-                        ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() { repeatFrequency = value; if (repeatFrequency == 'Daily') hourSlot = null; }); })),
+                        ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() { repeatFrequency = value; if (repeatFrequency == 'Daily') { hourSlot = null; selectedDelegate = null; } }); })),
                         const SizedBox(height: 8),
                         const Text('Task Color', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
@@ -296,7 +309,7 @@ Future<Task?> showTaskFormDialog(
                   priority: selectedPriority,
                   status: selectedStatus,
                   category: selectedCategory,
-                  delegatedTo: selectedDelegate,
+                  delegatedTo: repeatTask && repeatFrequency == 'Daily' ? null : selectedDelegate,
                   done: selectedStatus == 'Completed',
                   repeatTask: repeatTask,
                   repeatFrequency: repeatTask ? repeatFrequency : null,
