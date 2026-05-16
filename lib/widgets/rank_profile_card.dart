@@ -7,6 +7,7 @@ class RankProfileCard extends StatelessWidget {
   final RankProfile profile;
   final Future<void> Function(String username)? onUsernameChanged;
   final VoidCallback? onTap;
+  final VoidCallback? onJourneyTap;
   final bool compact;
 
   const RankProfileCard({
@@ -14,6 +15,7 @@ class RankProfileCard extends StatelessWidget {
     required this.profile,
     this.onUsernameChanged,
     this.onTap,
+    this.onJourneyTap,
     this.compact = false,
   });
 
@@ -119,6 +121,19 @@ class RankProfileCard extends StatelessWidget {
                     : 'Tap your profile to reflect on your day and track your growth journey.',
                 style: TextStyle(color: Colors.white.withOpacity(0.84), fontWeight: FontWeight.w600),
               ),
+              if (onJourneyTap != null) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: onJourneyTap,
+                  icon: const Icon(Icons.auto_stories, color: Colors.white),
+                  label: const Text('Open Journey Timeline'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: BorderSide(color: Colors.white.withOpacity(0.65)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  ),
+                ),
+              ],
               const SizedBox(height: 14),
               Wrap(
                 spacing: 8,

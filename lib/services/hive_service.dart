@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/journal_entry.dart';
+import '../models/journey_entry.dart';
 import '../models/task_model.dart';
 
 class HiveService {
@@ -12,6 +13,7 @@ class HiveService {
   static const _delegatesKey = '__meta_delegates__';
   static const _usernameKey = '__meta_username__';
   static const _journalPrefix = '__journal__';
+  static const _journeyPrefix = '__journey__';
   static const _schemaVersionKey = '__meta_schema_version__';
   static const int _currentSchemaVersion = 1;
 
@@ -142,6 +144,33 @@ class HiveService {
       final raw = _box.get(key);
       if (parsedDate == null || raw == null) continue;
       entries.add(JournalEntry.fromStorageList(raw.cast<dynamic>(), parsedDate));
+    }
+
+    entries.sort((a, b) => b.date.compareTo(a.date));
+    return entries;
+  }
+
+
+  String _journeyKey(String id) {
+    return '$_journeyPrefix$id';
+  }
+
+  Future<void> saveJourneyEntry(JourneyEntry entry) async {
+    await _box.put(_journeyKey(entry.id), entry.toStorageList());
+  }
+
+  Future<void> deleteJourneyEntry(String id) async {
+    await _box.delete(_journeyKey(id));
+  }
+
+  List<JourneyEntry> getAllJourneyEntries() {
+    final entries = <JourneyEntry>[];
+
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(_journeyPrefix)) continue;
+      final raw = _box.get(key);
+      if (raw == null) continue;
+      entries.add(JourneyEntry.fromStorageList(raw.cast<dynamic>(), DateTime.now()));
     }
 
     entries.sort((a, b) => b.date.compareTo(a.date));

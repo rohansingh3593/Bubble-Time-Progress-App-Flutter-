@@ -10,6 +10,7 @@ import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/rank_profile_card.dart';
 import 'journal_view.dart';
+import 'journey_timeline_view.dart';
 
 class StreakView extends StatelessWidget {
   final HiveService hiveService;
@@ -66,6 +67,11 @@ class StreakView extends StatelessWidget {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => JournalView(hiveService: hiveService),
+                    ),
+                  ),
+                  onJourneyTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => JourneyTimelineView(hiveService: hiveService),
                     ),
                   ),
                 ),

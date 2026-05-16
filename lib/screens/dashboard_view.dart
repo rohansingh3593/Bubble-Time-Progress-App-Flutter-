@@ -6,6 +6,7 @@ import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/rank_profile_card.dart';
 import 'journal_view.dart';
+import 'journey_timeline_view.dart';
 
 class DashboardView extends StatefulWidget {
   final HiveService hiveService;
@@ -102,6 +103,7 @@ class _DashboardViewState extends State<DashboardView> {
                 profile: rankProfile,
                 onUsernameChanged: widget.hiveService.setUsername,
                 onTap: _openJournal,
+                onJourneyTap: _openJourneyTimeline,
               ),
               const SizedBox(height: 12),
               _summaryHeader(summary),
@@ -169,6 +171,14 @@ class _DashboardViewState extends State<DashboardView> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => JournalView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+  void _openJourneyTimeline() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => JourneyTimelineView(hiveService: widget.hiveService),
       ),
     );
   }
