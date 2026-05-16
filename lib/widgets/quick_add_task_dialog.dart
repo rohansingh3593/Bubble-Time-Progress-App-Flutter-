@@ -93,7 +93,7 @@ Future<Task?> showTaskFormDialog(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
-                    child: Text('Time Slot: ${_formatHour(hourSlot)}'),
+                    child: Text('Time Slot: ${_formatHour(hourSlot!)}'),
                   ),
                 if (hourSlot != null && !(repeatTask && repeatFrequency == 'Daily')) const SizedBox(height: 12),
                 Container(
