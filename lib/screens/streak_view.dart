@@ -1576,6 +1576,8 @@ class _TaskPerformanceDetailView extends StatelessWidget {
               const SizedBox(height: 14),
               _TaskStreakAnalytics(metrics: metrics, color: taskColor),
               const SizedBox(height: 14),
+              _TaskHabitCalendar(metrics: metrics, notes: notes, color: taskColor),
+              const SizedBox(height: 14),
               _TaskPerformanceActions(
                 color: taskColor,
                 onDone: () => _markTodayDone(habit),
@@ -1821,6 +1823,326 @@ class _TaskStreakAnalytics extends StatelessWidget {
         _TaskInfoRow(label: 'Longest Missed Period', value: '${metrics.longestMissedPeriod} ${_dayWord(metrics.longestMissedPeriod)}', icon: Icons.trending_down, color: Colors.redAccent),
       ],
     );
+  }
+}
+
+class _TaskHabitCalendar extends StatefulWidget {
+  final _TaskPerformanceMetrics metrics;
+  final List<JourneyEntry> notes;
+  final Color color;
+
+  const _TaskHabitCalendar({required this.metrics, required this.notes, required this.color});
+
+  @override
+  State<_TaskHabitCalendar> createState() => _TaskHabitCalendarState();
+}
+
+class _TaskHabitCalendarState extends State<_TaskHabitCalendar> {
+  late DateTime _visibleMonth;
+
+  @override
+  void initState() {
+    super.initState();
+    final today = _dateOnly(DateTime.now());
+    final currentMonth = DateTime(today.year, today.month);
+    final earliestMonth = DateTime(widget.metrics.startDate.year, widget.metrics.startDate.month);
+    _visibleMonth = currentMonth.isBefore(earliestMonth) ? earliestMonth : currentMonth;
+  }
+
+  @override
+  void didUpdateWidget(covariant _TaskHabitCalendar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final earliest = DateTime(widget.metrics.startDate.year, widget.metrics.startDate.month);
+    final latest = _latestAllowedMonth;
+    if (_visibleMonth.isBefore(earliest)) _visibleMonth = earliest;
+    if (_visibleMonth.isAfter(latest)) _visibleMonth = latest;
+  }
+
+  DateTime get _latestAllowedMonth {
+    final today = _dateOnly(DateTime.now());
+    return DateTime(today.year, today.month);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final earliestMonth = DateTime(widget.metrics.startDate.year, widget.metrics.startDate.month);
+    final canGoBack = _visibleMonth.isAfter(earliestMonth);
+    final canGoForward = _visibleMonth.isBefore(_latestAllowedMonth);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.calendar_month, color: widget.color),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Calendar View', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900))),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Task-specific monthly activity history. Tap any day to view completion details, notes, photos, and reflections.',
+            style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Previous month',
+                onPressed: canGoBack ? () => _changeMonth(-1) : null,
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Text(
+                  '${_monthNames[_visibleMonth.month - 1]} ${_visibleMonth.year}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Next month',
+                onPressed: canGoForward ? () => _changeMonth(1) : null,
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _CalendarLegend(color: widget.color),
+          const SizedBox(height: 12),
+          _CalendarWeekHeader(color: widget.color),
+          const SizedBox(height: 8),
+          _buildMonthGrid(),
+        ],
+      ),
+    );
+  }
+
+  void _changeMonth(int delta) {
+    setState(() {
+      _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month + delta);
+    });
+  }
+
+  Widget _buildMonthGrid() {
+    final firstDay = DateTime(_visibleMonth.year, _visibleMonth.month, 1);
+    final daysInMonth = DateTime(_visibleMonth.year, _visibleMonth.month + 1, 0).day;
+    final leadingBlankDays = firstDay.weekday % 7;
+    final cellCount = ((leadingBlankDays + daysInMonth + 6) ~/ 7) * 7;
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: cellCount,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 7,
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+      ),
+      itemBuilder: (context, index) {
+        final dayNumber = index - leadingBlankDays + 1;
+        if (dayNumber < 1 || dayNumber > daysInMonth) return const SizedBox.shrink();
+        final date = DateTime(_visibleMonth.year, _visibleMonth.month, dayNumber);
+        final row = _rowForDate(date);
+        final notes = _notesForDate(date);
+        final status = _calendarStatusFor(date, row);
+        final isToday = _isSameDate(date, DateTime.now());
+        final colors = _CalendarDayColors.fromStatus(status, row, widget.color, isToday: isToday);
+
+        return InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _showDayDetails(context, date, row, notes, status),
+          child: Container(
+            decoration: BoxDecoration(
+              color: colors.background,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: colors.border, width: isToday ? 2 : 1),
+            ),
+            child: Stack(
+              children: [
+                Center(
+                  child: Text(
+                    '$dayNumber',
+                    style: TextStyle(color: colors.foreground, fontWeight: FontWeight.w900),
+                  ),
+                ),
+                if (notes.isNotEmpty)
+                  Positioned(
+                    right: 5,
+                    bottom: 5,
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(color: colors.foreground, shape: BoxShape.circle),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  _TaskTimelineRow? _rowForDate(DateTime date) {
+    final day = _dateOnly(date);
+    for (final row in widget.metrics.historyRows) {
+      if (_isSameDate(row.date, day)) return row;
+    }
+    return null;
+  }
+
+  List<JourneyEntry> _notesForDate(DateTime date) {
+    final day = _dateOnly(date);
+    return widget.notes.where((entry) => _isSameDate(entry.date, day)).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  _HabitDayStatus _calendarStatusFor(DateTime date, _TaskTimelineRow? row) {
+    final day = _dateOnly(date);
+    final today = _dateOnly(DateTime.now());
+    if (day.isAfter(today) || day.isBefore(widget.metrics.startDate)) return _HabitDayStatus.none;
+    return row?.status ?? _HabitDayStatus.none;
+  }
+
+  void _showDayDetails(BuildContext context, DateTime date, _TaskTimelineRow? row, List<JourneyEntry> notes, _HabitDayStatus status) {
+    final statusColor = _CalendarDayColors.statusColor(status, row, widget.color);
+    final task = row?.task;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(width: 16, height: 16, decoration: BoxDecoration(color: statusColor, borderRadius: BorderRadius.circular(5))),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(_relativeDateLabel(date), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
+                  _StatusBadge(status: status, taskColor: widget.color),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _TaskInfoRow(label: 'Completion Details', value: _statusLabel(status), icon: _statusIcon(status), color: statusColor),
+              if (task != null) ...[
+                _TaskInfoRow(label: 'Task', value: task.task, icon: Icons.task_alt, color: widget.color),
+                _TaskInfoRow(label: 'Category', value: task.category, icon: Icons.category, color: widget.color),
+              ],
+              const SizedBox(height: 8),
+              Text('Notes, Photos & Reflections', style: TextStyle(color: widget.color, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              if (notes.isEmpty)
+                const _EmptyState(message: 'No notes, photos, mood, or reflection updates for this date yet.')
+              else
+                ...notes.map((entry) => _TaskNoteTile(entry: entry, color: widget.color)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CalendarWeekHeader extends StatelessWidget {
+  final Color color;
+
+  const _CalendarWeekHeader({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    return Row(
+      children: labels
+          .map(
+            (label) => Expanded(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 12),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _CalendarLegend extends StatelessWidget {
+  final Color color;
+
+  const _CalendarLegend({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _CalendarLegendItem(label: 'Completed', color: color),
+        const _CalendarLegendItem(label: 'Missed / Cancelled', color: Colors.redAccent),
+        const _CalendarLegendItem(label: 'No activity / Future', color: Color(0xFF263238)),
+      ],
+    );
+  }
+}
+
+class _CalendarLegendItem extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _CalendarLegendItem({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(color: color.withOpacity(0.10), borderRadius: BorderRadius.circular(99), border: Border.all(color: color.withOpacity(0.18))),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 9, height: 9, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
+  }
+}
+
+class _CalendarDayColors {
+  final Color background;
+  final Color foreground;
+  final Color border;
+
+  const _CalendarDayColors({required this.background, required this.foreground, required this.border});
+
+  factory _CalendarDayColors.fromStatus(_HabitDayStatus status, _TaskTimelineRow? row, Color taskColor, {required bool isToday}) {
+    final color = statusColor(status, row, taskColor);
+    final isNeutral = status == _HabitDayStatus.none;
+    return _CalendarDayColors(
+      background: isNeutral ? color.withOpacity(0.08) : color.withOpacity(0.18),
+      foreground: isNeutral ? color.withOpacity(0.72) : color,
+      border: isToday ? taskColor : color.withOpacity(isNeutral ? 0.12 : 0.30),
+    );
+  }
+
+  static Color statusColor(_HabitDayStatus status, _TaskTimelineRow? row, Color taskColor) {
+    switch (status) {
+      case _HabitDayStatus.completed:
+        final task = row?.task;
+        return task == null ? taskColor : Color(task.colorValue);
+      case _HabitDayStatus.cancelled:
+      case _HabitDayStatus.missed:
+        return Colors.redAccent;
+      case _HabitDayStatus.none:
+        return const Color(0xFF263238);
+    }
   }
 }
 
