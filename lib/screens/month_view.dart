@@ -24,18 +24,22 @@ class _MonthViewState extends State<MonthView> {
     _currentMonth = DateTime.now();
   }
 
-  Color _getBubbleColor(DateTime date, Map<String, int> summary, DateTime today) {
-    if (date.isBefore(today)) {
-      return AppColors.passed;
+  Color _getBubbleColor(DateTime date, List<Task> tasks, DateTime today) {
+    final selectedTaskColor = _selectedTaskColor(tasks);
+    if (selectedTaskColor != null) return selectedTaskColor;
+    if (date.isBefore(today)) return AppColors.passed;
+    return AppColors.taskNone;
+  }
+
+  Color? _selectedTaskColor(List<Task> tasks) {
+    final activeTasks = tasks.where((task) => task.status != 'Cancelled').toList();
+    if (activeTasks.isEmpty) return null;
+
+    for (final task in activeTasks) {
+      if (task.done || task.status == 'Completed') return Color(task.colorValue);
     }
 
-    if (summary['completed']! > 0 && summary['pending']! == 0) {
-      return AppColors.taskCompleted;
-    } else if (summary['pending']! > 0) {
-      return AppColors.taskPending;
-    } else {
-      return AppColors.taskNone;
-    }
+    return Color(activeTasks.first.colorValue);
   }
 
   Future<void> _openQuickAddForDate(DateTime date) async {
@@ -80,20 +84,6 @@ class _MonthViewState extends State<MonthView> {
   int _getDaysInMonth(DateTime month) {
     return DateTime(month.year, month.month + 1, 0).day;
   }
-
-
-  Map<String, int> _getCompletedSummaryForDate(DateTime date) {
-    final completedTasks = widget.hiveService
-        .getTasksForDate(date)
-        .where((task) => task.status == 'Completed')
-        .toList();
-
-    return {
-      'completed': completedTasks.length,
-      'pending': 0,
-    };
-  }
-
 
 
   List<Task> _getMonthlyRepeatingTasks() {
@@ -237,12 +227,12 @@ class _MonthViewState extends State<MonthView> {
 
                     final day = index - weekdayOffset + 1;
                     final date = DateTime(_currentMonth.year, _currentMonth.month, day);
-                    final summary = _getCompletedSummaryForDate(date);
+                    final tasksForDate = widget.hiveService.getTasksForDate(date);
                     final isToday = isCurrentMonth && day == now.day;
                     final todayStart = DateTime(now.year, now.month, now.day);
 
                     return BubbleWidget(
-                      color: _getBubbleColor(date, summary, todayStart),
+                      color: _getBubbleColor(date, tasksForDate, todayStart),
                       isHighlighted: isToday,
                       onTap: () => _openQuickAddForDate(date),
                       label: day.toString(),

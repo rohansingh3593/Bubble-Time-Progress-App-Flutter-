@@ -31,18 +31,22 @@ class _WeekViewState extends State<WeekView> {
     return DateTime(date.year, date.month, date.day - daysToSubtract);
   }
 
-  Color _getBubbleColor(DateTime date, Map<String, int> summary, DateTime today) {
-    if (date.isBefore(today)) {
-      return AppColors.passed;
+  Color _getBubbleColor(DateTime date, List<Task> tasks, DateTime today) {
+    final selectedTaskColor = _selectedTaskColor(tasks);
+    if (selectedTaskColor != null) return selectedTaskColor;
+    if (date.isBefore(today)) return AppColors.passed;
+    return AppColors.taskNone;
+  }
+
+  Color? _selectedTaskColor(List<Task> tasks) {
+    final activeTasks = tasks.where((task) => task.status != 'Cancelled').toList();
+    if (activeTasks.isEmpty) return null;
+
+    for (final task in activeTasks) {
+      if (task.done || task.status == 'Completed') return Color(task.colorValue);
     }
 
-    if (summary['completed']! > 0 && summary['pending']! == 0) {
-      return AppColors.taskCompleted;
-    } else if (summary['pending']! > 0) {
-      return AppColors.taskPending;
-    } else {
-      return AppColors.taskNone;
-    }
+    return Color(activeTasks.first.colorValue);
   }
 
   Future<void> _openQuickAddForDate(DateTime date) async {
@@ -83,18 +87,6 @@ class _WeekViewState extends State<WeekView> {
     final startStr = '${start.month}/${start.day}';
     final endStr = '${end.month}/${end.day}';
     return '$startStr - $endStr';
-  }
-
-  Map<String, int> _getCompletedSummaryForDate(DateTime date) {
-    final completedTasks = widget.hiveService
-        .getTasksForDate(date)
-        .where((task) => task.status == 'Completed')
-        .toList();
-
-    return {
-      'completed': completedTasks.length,
-      'pending': 0,
-    };
   }
 
   List<Task> _getWeeklyRepeatingTasks() {
@@ -240,7 +232,7 @@ class _WeekViewState extends State<WeekView> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: List.generate(7, (index) {
                       final date = weekDays[index];
-                      final summary = _getCompletedSummaryForDate(date);
+                      final tasksForDate = widget.hiveService.getTasksForDate(date);
                       final isToday = date.year == now.year && date.month == now.month && date.day == now.day;
 
                       return Expanded(
@@ -248,7 +240,7 @@ class _WeekViewState extends State<WeekView> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             BubbleWidget(
-                              color: _getBubbleColor(date, summary, todayStart),
+                              color: _getBubbleColor(date, tasksForDate, todayStart),
                               isHighlighted: isToday,
                               onTap: () => _openQuickAddForDate(date),
                             ),

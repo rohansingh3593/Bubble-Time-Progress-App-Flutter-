@@ -16,7 +16,7 @@ class BubbleWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bubbleColor = isHighlighted ? Colors.orange : color;
+    final bubbleColor = color;
 
     return AspectRatio(
       aspectRatio: 1.0,
@@ -33,7 +33,7 @@ class BubbleWidget extends StatelessWidget {
           boxShadow: isHighlighted
               ? [
                   BoxShadow(
-                    color: Colors.orange.withAlpha(120),
+                    color: bubbleColor.withAlpha(120),
                     spreadRadius: 1,
                     blurRadius: 6,
                   ),
