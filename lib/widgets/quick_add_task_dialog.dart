@@ -88,14 +88,14 @@ Future<Task?> showTaskFormDialog(
                   maxLines: 2,
                 ),
                 const SizedBox(height: 12),
-                if (hourSlot != null)
+                if (hourSlot != null && !(repeatTask && repeatFrequency == 'Daily'))
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
                     child: Text('Time Slot: ${_formatHour(hourSlot)}'),
                   ),
-                if (hourSlot != null) const SizedBox(height: 12),
+                if (hourSlot != null && !(repeatTask && repeatFrequency == 'Daily')) const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
@@ -149,12 +149,22 @@ Future<Task?> showTaskFormDialog(
                   ),
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: estimatedController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: 'Estimated Time (minutes) *', hintText: '30, 60, 120', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
-                ),
-                const SizedBox(height: 12),
+                if (!(repeatTask && repeatFrequency == 'Daily')) ...[
+                  TextField(
+                    controller: estimatedController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(labelText: 'Estimated Time (minutes) *', hintText: '30, 60, 120', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                  ),
+                  const SizedBox(height: 12),
+                ] else ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                    child: const Text('Daily habits are tracked all day. No scheduled hour or estimated time is required.'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 DropdownButtonFormField<String>(
                   value: selectedPriority,
                   decoration: InputDecoration(labelText: 'Priority', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
@@ -224,6 +234,7 @@ Future<Task?> showTaskFormDialog(
                     setDialogState(() {
                       repeatTask = value;
                       if (!repeatTask) repeatFrequency = 'Daily';
+                      if (repeatTask && repeatFrequency == 'Daily') hourSlot = null;
                     });
                   },
                 ),
@@ -237,7 +248,7 @@ Future<Task?> showTaskFormDialog(
                       children: [
                         const Text('Repeat Frequency', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
-                        ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() => repeatFrequency = value); })),
+                        ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() { repeatFrequency = value; if (repeatFrequency == 'Daily') hourSlot = null; }); })),
                         const SizedBox(height: 8),
                         const Text('Task Color', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
@@ -273,7 +284,7 @@ Future<Task?> showTaskFormDialog(
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task name is required')));
                   return;
                 }
-                if (estimatedMinutes <= 0) {
+                if (!(repeatTask && repeatFrequency == 'Daily') && estimatedMinutes <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Estimated time is required')));
                   return;
                 }
@@ -291,8 +302,8 @@ Future<Task?> showTaskFormDialog(
                   repeatFrequency: repeatTask ? repeatFrequency : null,
                   urgent: selectedUrgent,
                   important: selectedImportant,
-                  estimatedMinutes: estimatedMinutes,
-                  hourSlot: hourSlot,
+                  estimatedMinutes: repeatTask && repeatFrequency == 'Daily' ? 0 : estimatedMinutes,
+                  hourSlot: repeatTask && repeatFrequency == 'Daily' ? null : hourSlot,
                   colorValue: selectedColorValue,
                 ));
               },
