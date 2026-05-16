@@ -264,8 +264,11 @@ class _JourneyStats {
   static bool _isCompletedTask(Task task) => task.done || task.status.trim().toLowerCase() == 'completed';
 
   static bool _isAllowedRecurringTask(Task task) {
-    return task.repeatTask && (task.repeatFrequency == 'Daily' || task.repeatFrequency == 'Weekly');
+    final frequency = _normalizedRepeatFrequency(task.repeatFrequency);
+    return task.repeatTask && (frequency == 'daily' || frequency == 'weekly');
   }
+
+  static String _normalizedRepeatFrequency(String? repeatFrequency) => (repeatFrequency ?? '').trim().toLowerCase();
 
   static int _calculateDailyStreak(DateTime today, Map<DateTime, _DayActivity> activityByDate) {
     var cursor = today;
@@ -1197,16 +1200,15 @@ class _HabitTracker {
     final task = tasksByDate[day];
 
     if (task == null) {
-      if (repeatFrequency == 'Daily' && !day.isBefore(firstTrackedDate) && !day.isAfter(today)) {
+      if (_normalizedRepeatFrequency(repeatFrequency) == 'daily' && !day.isBefore(firstTrackedDate) && !day.isAfter(today)) {
         return _HabitDayStatus.missed;
       }
       return _HabitDayStatus.none;
     }
 
     if (_isTaskCompleted(task)) return _HabitDayStatus.completed;
-    if (_isTaskCancelled(task)) return _HabitDayStatus.cancelled;
-    if (_isTaskMissed(task)) return _HabitDayStatus.missed;
-    if (repeatFrequency == 'Daily' && !day.isAfter(today)) return _HabitDayStatus.missed;
+    if (_isTaskCancelled(task) || _isTaskMissed(task)) return _HabitDayStatus.missed;
+    if (_normalizedRepeatFrequency(repeatFrequency) == 'daily' && !day.isAfter(today)) return _HabitDayStatus.missed;
     if (day.isBefore(today)) return _HabitDayStatus.missed;
     return _HabitDayStatus.none;
   }
@@ -1250,12 +1252,14 @@ class _HabitTracker {
   }
 
   static bool _isHabitTask(Task task) {
-    return task.repeatTask &&
-        (task.repeatFrequency == 'Daily' || task.repeatFrequency == 'Weekly');
+    final frequency = _normalizedRepeatFrequency(task.repeatFrequency);
+    return task.repeatTask && (frequency == 'daily' || frequency == 'weekly');
   }
 
+  static String _normalizedRepeatFrequency(String? repeatFrequency) => (repeatFrequency ?? '').trim().toLowerCase();
+
   static int _calculateHabitStreak(Map<DateTime, Task> tasksByDate, DateTime today, String repeatFrequency) {
-    return repeatFrequency == 'Weekly'
+    return _normalizedRepeatFrequency(repeatFrequency) == 'weekly'
         ? _calculateWeeklyHabitStreak(tasksByDate, today)
         : _calculateDailyHabitStreak(tasksByDate, today);
   }

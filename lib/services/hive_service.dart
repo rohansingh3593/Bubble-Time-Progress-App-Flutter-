@@ -175,11 +175,10 @@ class HiveService {
     final tasks = getTasksForDate(date);
     if (index < 0 || index >= tasks.length) return;
 
-    final previous = tasks[index];
     tasks[index] = task;
     await _box.put(key, tasks);
 
-    await _handleRecurringIfNeeded(previous: previous, updated: task);
+    await _handleRecurringIfNeeded(updated: task);
   }
 
   Future<void> deleteTask(DateTime date, int index) async {
@@ -205,19 +204,15 @@ class HiveService {
     tasks[index] = updatedTask;
     await _box.put(key, tasks);
 
-    await _handleRecurringIfNeeded(previous: currentTask, updated: updatedTask);
+    await _handleRecurringIfNeeded(updated: updatedTask);
   }
 
   Future<void> _handleRecurringIfNeeded({
-    required Task previous,
     required Task updated,
   }) async {
     if (!updated.repeatTask) return;
 
-    final didBecomeTerminal =
-        !_isTerminalStatus(previous.status) && _isTerminalStatus(updated.status);
-
-    if (!didBecomeTerminal) return;
+    if (!_isTerminalStatus(updated.status)) return;
 
     final nextDueDate = _computeNextDueDate(updated.dueDate, updated.repeatFrequency);
     if (nextDueDate == null) return;
@@ -247,18 +242,22 @@ class HiveService {
   }
 
   bool _isTerminalStatus(String status) {
-    return status == 'Completed' || status == 'Cancelled';
+    final normalized = status.trim().toLowerCase();
+    return normalized == 'completed' ||
+        normalized == 'cancelled' ||
+        normalized == 'missed' ||
+        normalized == 'overdue';
   }
 
   DateTime? _computeNextDueDate(DateTime dueDate, String? repeatFrequency) {
-    switch (repeatFrequency) {
-      case 'Daily':
+    switch ((repeatFrequency ?? '').trim().toLowerCase()) {
+      case 'daily':
         return dueDate.add(const Duration(days: 1));
-      case 'Weekly':
+      case 'weekly':
         return dueDate.add(const Duration(days: 7));
-      case 'Monthly':
+      case 'monthly':
         return DateTime(dueDate.year, dueDate.month + 1, dueDate.day);
-      case 'Yearly':
+      case 'yearly':
         return DateTime(dueDate.year + 1, dueDate.month, dueDate.day);
       default:
         return null;
@@ -281,10 +280,9 @@ class HiveService {
       for (int i = 0; i < tasks.length; i++) {
         final candidate = tasks[i];
         if (identical(candidate, original) || _matchesTaskIdentity(candidate, original)) {
-          final previous = tasks[i];
           tasks[i] = updated;
           await _box.put(key, tasks);
-          await _handleRecurringIfNeeded(previous: previous, updated: updated);
+          await _handleRecurringIfNeeded(updated: updated);
           return true;
         }
       }
