@@ -250,7 +250,9 @@ class _JourneyStats {
       bestStreakPeriod: streakInfo.label,
       frequentlySkippedCategory: skippedCategory,
       habitConsistencyScore: habitConsistencyScore,
-      todayTasks: allTasksByDate[today] ?? const <Task>[],
+      todayTasks: (allTasksByDate[today] ?? const <Task>[])
+          .where(_isAllowedRecurringTask)
+          .toList(),
       activityByDate: activityByDate,
     );
   }
@@ -258,6 +260,10 @@ class _JourneyStats {
   static DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
   static bool _isCompletedTask(Task task) => task.done || task.status == 'Completed';
+
+  static bool _isAllowedRecurringTask(Task task) {
+    return task.repeatTask && (task.repeatFrequency == 'Daily' || task.repeatFrequency == 'Weekly');
+  }
 
   static int _calculateDailyStreak(DateTime today, Map<DateTime, _DayActivity> activityByDate) {
     var cursor = today;
@@ -748,7 +754,7 @@ class _HabitTrackerSection extends StatelessWidget {
               const Icon(Icons.track_changes, color: AppColors.taskCompleted),
               const SizedBox(width: 8),
               const Expanded(
-                child: Text('Daily Habit Tracker', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                child: Text('Habit & Routine Tracker', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
               ),
               Text('${habits.length} habits', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
             ],
@@ -761,7 +767,7 @@ class _HabitTrackerSection extends StatelessWidget {
           const SizedBox(height: 14),
           if (habits.isEmpty)
             const _EmptyState(
-              message: 'No daily habits found yet. Create a recurring Daily task such as Go To Gym, Skincare, Early Rise, Study Daily, or Reading Habit.',
+              message: 'No habits found yet. Turn Repeat Task ON and choose Daily or Weekly to track routines like Go To Gym, Skincare, Study Daily, or Reading Habit.',
             )
           else
             ...habits.map(
@@ -818,7 +824,7 @@ class _HabitCard extends StatelessWidget {
                     Text(habit.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
                     const SizedBox(height: 3),
                     Text(
-                      'Streak: ${habit.currentStreak} Days • ${habit.category}',
+                      "Streak: ${habit.currentStreak} ${habit.repeatFrequency == 'Weekly' ? 'Weeks' : 'Days'} • ${habit.repeatFrequency} • ${habit.category}",
                       style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
                     ),
                   ],
@@ -856,7 +862,7 @@ class _HabitCard extends StatelessWidget {
                 child: _HabitStatusButton(
                   label: 'Missed',
                   icon: Icons.remove_circle,
-                  color: AppColors.passed,
+                  color: Colors.redAccent,
                   selected: todayStatus == _HabitDayStatus.missed,
                   onPressed: () => _setTodayStatus(_HabitDayStatus.missed),
                 ),
@@ -880,7 +886,7 @@ class _HabitCard extends StatelessWidget {
         _HabitDayStatus.none => 'Not Started',
       },
       repeatTask: true,
-      repeatFrequency: 'Daily',
+      repeatFrequency: habit.repeatFrequency,
     );
 
     if (existing == null) {
@@ -897,7 +903,7 @@ class _HabitCard extends StatelessWidget {
       case _HabitDayStatus.cancelled:
         return Colors.redAccent;
       case _HabitDayStatus.missed:
-        return AppColors.passed;
+        return Colors.redAccent;
       case _HabitDayStatus.none:
         return AppColors.taskNone;
     }
@@ -954,7 +960,7 @@ class _HabitActivityGrid extends StatelessWidget {
       case _HabitDayStatus.cancelled:
         return Colors.redAccent;
       case _HabitDayStatus.missed:
-        return AppColors.passed;
+        return Colors.redAccent;
       case _HabitDayStatus.none:
         return const Color(0xFFDCE3EA);
     }
@@ -1002,7 +1008,7 @@ class _StatusBadge extends StatelessWidget {
     final color = switch (status) {
       _HabitDayStatus.completed => AppColors.taskCompleted,
       _HabitDayStatus.cancelled => Colors.redAccent,
-      _HabitDayStatus.missed => AppColors.passed,
+      _HabitDayStatus.missed => Colors.redAccent,
       _HabitDayStatus.none => AppColors.taskNone,
     };
 
@@ -1020,6 +1026,7 @@ class _StatusBadge extends StatelessWidget {
 class _HabitTracker {
   final String title;
   final String category;
+  final String repeatFrequency;
   final Task template;
   final Map<DateTime, Task> tasksByDate;
   final int currentStreak;
@@ -1027,6 +1034,7 @@ class _HabitTracker {
   const _HabitTracker({
     required this.title,
     required this.category,
+    required this.repeatFrequency,
     required this.template,
     required this.tasksByDate,
     required this.currentStreak,
@@ -1068,9 +1076,10 @@ class _HabitTracker {
       return _HabitTracker(
         title: template.task,
         category: template.category,
+        repeatFrequency: template.repeatFrequency ?? 'Daily',
         template: template,
         tasksByDate: byDate,
-        currentStreak: _calculateHabitStreak(byDate, today),
+        currentStreak: _calculateHabitStreak(byDate, today, template.repeatFrequency ?? 'Daily'),
       );
     }).toList()
       ..sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
@@ -1079,15 +1088,17 @@ class _HabitTracker {
   }
 
   static bool _isHabitTask(Task task) {
-    final category = task.category.toLowerCase();
-    final title = task.task.toLowerCase();
-    return (task.repeatTask && task.repeatFrequency == 'Daily') ||
-        category.contains('habit') ||
-        title.contains('habit') ||
-        title.contains('daily');
+    return task.repeatTask &&
+        (task.repeatFrequency == 'Daily' || task.repeatFrequency == 'Weekly');
   }
 
-  static int _calculateHabitStreak(Map<DateTime, Task> tasksByDate, DateTime today) {
+  static int _calculateHabitStreak(Map<DateTime, Task> tasksByDate, DateTime today, String repeatFrequency) {
+    return repeatFrequency == 'Weekly'
+        ? _calculateWeeklyHabitStreak(tasksByDate, today)
+        : _calculateDailyHabitStreak(tasksByDate, today);
+  }
+
+  static int _calculateDailyHabitStreak(Map<DateTime, Task> tasksByDate, DateTime today) {
     var cursor = _dateOnly(today);
     var streak = 0;
 
@@ -1101,6 +1112,29 @@ class _HabitTracker {
     }
 
     return streak;
+  }
+
+  static int _calculateWeeklyHabitStreak(Map<DateTime, Task> tasksByDate, DateTime today) {
+    var weekStart = _dateOnly(today).subtract(Duration(days: today.weekday - 1));
+    var streak = 0;
+
+    if (!_weekHasCompletedTask(tasksByDate, weekStart)) {
+      weekStart = weekStart.subtract(const Duration(days: 7));
+    }
+
+    while (_weekHasCompletedTask(tasksByDate, weekStart)) {
+      streak++;
+      weekStart = weekStart.subtract(const Duration(days: 7));
+    }
+
+    return streak;
+  }
+
+  static bool _weekHasCompletedTask(Map<DateTime, Task> tasksByDate, DateTime weekStart) {
+    for (var index = 0; index < 7; index++) {
+      if (_isTaskCompleted(tasksByDate[weekStart.add(Duration(days: index))])) return true;
+    }
+    return false;
   }
 
   static bool _isTaskCompleted(Task? task) => task != null && (task.done || task.status == 'Completed');
@@ -1140,10 +1174,10 @@ class _DailyTaskCards extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Daily Task Cards', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const Text('Recurring Task Cards', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 12),
           if (tasks.isEmpty)
-            const _EmptyState(message: 'No tasks scheduled today. Add one to start building a streak.')
+            const _EmptyState(message: 'No daily or weekly recurring tasks scheduled today. Add a repeating habit to start building a streak.')
           else
             ...tasks.map((task) => _TaskJourneyCard(task: task)),
         ],
