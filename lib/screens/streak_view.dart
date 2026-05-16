@@ -837,35 +837,43 @@ class _DailyStreakBoardState extends State<_DailyStreakBoard> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 150,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _StreakBoardTaskHeader(color: AppColors.accent),
-              const SizedBox(height: 8),
-              ...widget.habits.map((habit) => _StreakBoardTaskNameCell(hiveService: widget.hiveService, habit: habit, today: widget.today)),
-            ],
-          ),
-        ),
-        Expanded(
-          child: SingleChildScrollView(
-            controller: _dateScrollController,
-            scrollDirection: Axis.horizontal,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _StreakBoardDateHeader(dates: widget.dates, today: widget.today),
-                const SizedBox(height: 8),
-                ...widget.habits.map((habit) => _StreakBoardActivityRow(habit: habit, dates: widget.dates, today: widget.today)),
-              ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : MediaQuery.of(context).size.width - 32;
+        final layout = _StreakBoardLayout.fromWidth(availableWidth, widget.habits.length);
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: layout.taskColumnWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StreakBoardTaskHeader(color: AppColors.accent, layout: layout),
+                  SizedBox(height: layout.rowSpacing),
+                  ...widget.habits.map((habit) => _StreakBoardTaskNameCell(hiveService: widget.hiveService, habit: habit, today: widget.today, layout: layout)),
+                ],
+              ),
             ),
-          ),
-        ),
-      ],
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _dateScrollController,
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _StreakBoardDateHeader(dates: widget.dates, today: widget.today, layout: layout),
+                    SizedBox(height: layout.rowSpacing),
+                    ...widget.habits.map((habit) => _StreakBoardActivityRow(habit: habit, dates: widget.dates, today: widget.today, layout: layout)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -877,18 +885,82 @@ class _DailyStreakBoardState extends State<_DailyStreakBoard> {
   }
 }
 
+class _StreakBoardLayout {
+  final double taskColumnWidth;
+  final double blockSize;
+  final double rowHeight;
+  final double headerHeight;
+  final double dateCellWidth;
+  final double cellSpacing;
+  final double rowSpacing;
+  final double horizontalPadding;
+  final double titleFontSize;
+  final double streakFontSize;
+  final double dateFontSize;
+  final double dayFontSize;
+  final double iconSize;
+  final double radius;
+
+  const _StreakBoardLayout({
+    required this.taskColumnWidth,
+    required this.blockSize,
+    required this.rowHeight,
+    required this.headerHeight,
+    required this.dateCellWidth,
+    required this.cellSpacing,
+    required this.rowSpacing,
+    required this.horizontalPadding,
+    required this.titleFontSize,
+    required this.streakFontSize,
+    required this.dateFontSize,
+    required this.dayFontSize,
+    required this.iconSize,
+    required this.radius,
+  });
+
+  factory _StreakBoardLayout.fromWidth(double width, int habitCount) {
+    final isTiny = width < 340;
+    final isSmall = width < 430;
+    final isLarge = width >= 720;
+    final taskColumnWidth = _clampDouble(width * (isLarge ? 0.28 : 0.36), isTiny ? 104 : 118, isLarge ? 210 : 165);
+    final gridWidth = math.max(132, width - taskColumnWidth);
+    final targetVisibleDates = isLarge ? 12.0 : isSmall ? 5.0 : 7.0;
+    final cellSpacing = isTiny ? 2.0 : isSmall ? 2.5 : isLarge ? 4.0 : 3.0;
+    final blockSize = _clampDouble((gridWidth / targetVisibleDates) - (cellSpacing * 2), isTiny ? 28 : 32, isLarge ? 48 : 42);
+    final rowSpacing = habitCount > 8 || isTiny ? 5.0 : 8.0;
+
+    return _StreakBoardLayout(
+      taskColumnWidth: taskColumnWidth,
+      blockSize: blockSize,
+      rowHeight: math.max(36, blockSize),
+      headerHeight: blockSize + (isTiny ? 8 : 12),
+      dateCellWidth: blockSize,
+      cellSpacing: cellSpacing,
+      rowSpacing: rowSpacing,
+      horizontalPadding: isTiny ? 6 : 8,
+      titleFontSize: isTiny ? 10.5 : isSmall ? 11.5 : 12.5,
+      streakFontSize: isTiny ? 9 : 10,
+      dateFontSize: isTiny ? 9.5 : 11,
+      dayFontSize: isTiny ? 11.5 : 13,
+      iconSize: _clampDouble(blockSize * 0.38, 12, 16),
+      radius: _clampDouble(blockSize * 0.30, 9, 14),
+    );
+  }
+}
+
 class _StreakBoardTaskHeader extends StatelessWidget {
   final Color color;
+  final _StreakBoardLayout layout;
 
-  const _StreakBoardTaskHeader({required this.color});
+  const _StreakBoardTaskHeader({required this.color, required this.layout});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 52,
+      height: layout.headerHeight,
       alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.only(left: 4),
-      child: Text('Habit', style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+      padding: EdgeInsets.only(left: layout.horizontalPadding / 2),
+      child: Text('Habit', style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: layout.titleFontSize + 1)),
     );
   }
 }
@@ -896,8 +968,9 @@ class _StreakBoardTaskHeader extends StatelessWidget {
 class _StreakBoardDateHeader extends StatelessWidget {
   final List<DateTime> dates;
   final DateTime today;
+  final _StreakBoardLayout layout;
 
-  const _StreakBoardDateHeader({required this.dates, required this.today});
+  const _StreakBoardDateHeader({required this.dates, required this.today, required this.layout});
 
   @override
   Widget build(BuildContext context) {
@@ -905,21 +978,21 @@ class _StreakBoardDateHeader extends StatelessWidget {
       children: dates.map((date) {
         final isToday = _isSameDate(date, today);
         return Container(
-          width: 42,
-          height: 52,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          width: layout.dateCellWidth,
+          height: layout.headerHeight,
+          margin: EdgeInsets.symmetric(horizontal: layout.cellSpacing),
+          padding: EdgeInsets.symmetric(vertical: layout.cellSpacing),
           decoration: BoxDecoration(
             color: isToday ? AppColors.accent.withOpacity(0.14) : Colors.transparent,
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(layout.radius),
             border: Border.all(color: isToday ? AppColors.accent : Colors.transparent, width: 1.4),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(_weekdayLabel(date), style: TextStyle(fontSize: 11, color: isToday ? AppColors.accent : Colors.black54, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 2),
-              Text('${date.day}', style: TextStyle(fontSize: 13, color: isToday ? AppColors.accent : Colors.black87, fontWeight: FontWeight.w900)),
+              Text(_weekdayLabel(date), style: TextStyle(fontSize: layout.dateFontSize, color: isToday ? AppColors.accent : Colors.black54, fontWeight: FontWeight.w800)),
+              SizedBox(height: layout.cellSpacing / 2),
+              Text('${date.day}', style: TextStyle(fontSize: layout.dayFontSize, color: isToday ? AppColors.accent : Colors.black87, fontWeight: FontWeight.w900)),
             ],
           ),
         );
@@ -932,31 +1005,32 @@ class _StreakBoardTaskNameCell extends StatelessWidget {
   final HiveService hiveService;
   final _HabitTracker habit;
   final DateTime today;
+  final _StreakBoardLayout layout;
 
-  const _StreakBoardTaskNameCell({required this.hiveService, required this.habit, required this.today});
+  const _StreakBoardTaskNameCell({required this.hiveService, required this.habit, required this.today, required this.layout});
 
   @override
   Widget build(BuildContext context) {
     final taskColor = Color(habit.template.colorValue);
     return InkWell(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(layout.radius),
       onTap: () => _openTaskPerformanceDetail(context, hiveService, habit, today),
       child: Container(
-        height: 40,
-        margin: const EdgeInsets.only(bottom: 8, right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(color: taskColor.withOpacity(0.08), borderRadius: BorderRadius.circular(14), border: Border.all(color: taskColor.withOpacity(0.16))),
+        height: layout.rowHeight,
+        margin: EdgeInsets.only(bottom: layout.rowSpacing, right: layout.cellSpacing * 2),
+        padding: EdgeInsets.symmetric(horizontal: layout.horizontalPadding),
+        decoration: BoxDecoration(color: taskColor.withOpacity(0.08), borderRadius: BorderRadius.circular(layout.radius), border: Border.all(color: taskColor.withOpacity(0.16))),
         child: Row(
           children: [
-            Container(width: 10, height: 10, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
-            const SizedBox(width: 7),
+            Container(width: layout.iconSize * 0.7, height: layout.iconSize * 0.7, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
+            SizedBox(width: layout.cellSpacing * 2),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(habit.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
-                  Text('${habit.currentStreak} day streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700, fontSize: 10)),
+                  Text(habit.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w900, fontSize: layout.titleFontSize)),
+                  Text('${habit.currentStreak} day streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700, fontSize: layout.streakFontSize)),
                 ],
               ),
             ),
@@ -971,15 +1045,15 @@ class _StreakBoardActivityRow extends StatelessWidget {
   final _HabitTracker habit;
   final List<DateTime> dates;
   final DateTime today;
+  final _StreakBoardLayout layout;
 
-  const _StreakBoardActivityRow({required this.habit, required this.dates, required this.today});
+  const _StreakBoardActivityRow({required this.habit, required this.dates, required this.today, required this.layout});
 
   @override
   Widget build(BuildContext context) {
     final taskColor = Color(habit.template.colorValue);
-    return Container(
-      height: 40,
-      margin: const EdgeInsets.only(bottom: 8),
+    return SizedBox(
+      height: layout.rowHeight + layout.rowSpacing,
       child: Row(
         children: dates.map((date) {
           final status = _boardStatusFor(habit, date, today);
@@ -988,17 +1062,17 @@ class _StreakBoardActivityRow extends StatelessWidget {
           return Tooltip(
             message: '${habit.title} • ${_formatBoardDate(date)} • ${_statusLabel(status)}',
             child: Container(
-              width: 42,
-              height: 40,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: layout.blockSize,
+              height: layout.blockSize,
+              margin: EdgeInsets.symmetric(horizontal: layout.cellSpacing),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: blockColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: isToday ? taskColor : Colors.transparent, width: 2),
+                borderRadius: BorderRadius.circular(layout.radius),
+                border: Border.all(color: isToday ? taskColor : Colors.transparent, width: isToday ? 2 : 1),
                 boxShadow: status == _HabitDayStatus.completed ? [BoxShadow(color: blockColor.withOpacity(0.22), blurRadius: 8, offset: const Offset(0, 3))] : null,
               ),
-              child: Icon(_statusIcon(status), size: 15, color: status == _HabitDayStatus.none ? Colors.white30 : Colors.white),
+              child: Icon(_statusIcon(status), size: layout.iconSize, color: status == _HabitDayStatus.none ? Colors.white30 : Colors.white),
             ),
           );
         }).toList(),
@@ -1006,6 +1080,8 @@ class _StreakBoardActivityRow extends StatelessWidget {
     );
   }
 }
+
+double _clampDouble(double value, double min, double max) => value < min ? min : value > max ? max : value;
 
 bool _isDailyStreakBoardHabit(_HabitTracker habit) => _HabitTracker._normalizedRepeatFrequency(habit.repeatFrequency) == 'daily';
 
