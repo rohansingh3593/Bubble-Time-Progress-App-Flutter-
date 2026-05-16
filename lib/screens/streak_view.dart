@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
 import '../models/journal_entry.dart';
+import '../models/journey_entry.dart';
 import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
@@ -80,7 +81,7 @@ class StreakView extends StatelessWidget {
                 const SizedBox(height: 14),
                 _WeeklyDateIndicator(today: stats.today),
                 const SizedBox(height: 14),
-                _RecurringTaskListView(habits: habits, today: stats.today),
+                _RecurringTaskListView(hiveService: hiveService, habits: habits, today: stats.today),
                 const SizedBox(height: 14),
                 _HabitTrackerSection(
                   hiveService: hiveService,
@@ -92,7 +93,7 @@ class StreakView extends StatelessWidget {
                 const SizedBox(height: 14),
                 _ActivityHeatmap(stats: stats),
                 const SizedBox(height: 14),
-                _DailyTaskCards(tasks: stats.todayTasks),
+                _DailyTaskCards(hiveService: hiveService, tasks: stats.todayTasks, today: stats.today),
                 const SizedBox(height: 14),
                 _PerformanceInsights(stats: stats),
               ],
@@ -760,10 +761,11 @@ class _WeeklyDateIndicator extends StatelessWidget {
 
 
 class _RecurringTaskListView extends StatelessWidget {
+  final HiveService hiveService;
   final List<_HabitTracker> habits;
   final DateTime today;
 
-  const _RecurringTaskListView({required this.habits, required this.today});
+  const _RecurringTaskListView({required this.hiveService, required this.habits, required this.today});
 
   @override
   Widget build(BuildContext context) {
@@ -792,7 +794,7 @@ class _RecurringTaskListView extends StatelessWidget {
                 children: [
                   _RecurringListHeader(weekStart: weekStart, today: today),
                   const SizedBox(height: 8),
-                  ...habits.map((habit) => _RecurringListRow(habit: habit, weekStart: weekStart, today: today)),
+                  ...habits.map((habit) => _RecurringListRow(hiveService: hiveService, habit: habit, weekStart: weekStart, today: today)),
                 ],
               ),
             ),
@@ -840,22 +842,26 @@ class _RecurringListHeader extends StatelessWidget {
 }
 
 class _RecurringListRow extends StatelessWidget {
+  final HiveService hiveService;
   final _HabitTracker habit;
   final DateTime weekStart;
   final DateTime today;
 
-  const _RecurringListRow({required this.habit, required this.weekStart, required this.today});
+  const _RecurringListRow({required this.hiveService, required this.habit, required this.weekStart, required this.today});
 
   @override
   Widget build(BuildContext context) {
     final taskColor = Color(habit.template.colorValue);
     final todayStatus = habit.statusFor(today);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: _softTaskDecoration(taskColor, radius: 16),
-      child: Row(
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => _openTaskPerformanceDetail(context, hiveService, habit, today),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: _softTaskDecoration(taskColor, radius: 16),
+        child: Row(
         children: [
           SizedBox(
             width: 190,
@@ -893,7 +899,8 @@ class _RecurringListRow extends StatelessWidget {
             );
           }),
           SizedBox(width: 90, child: Center(child: _StatusBadge(status: todayStatus, taskColor: taskColor))),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -964,11 +971,14 @@ class _HabitCard extends StatelessWidget {
     final todayStatus = habit.statusFor(today);
     final taskColor = Color(habit.template.colorValue);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(14),
-      decoration: _softTaskDecoration(taskColor, radius: 22),
-      child: Column(
+    return InkWell(
+      borderRadius: BorderRadius.circular(22),
+      onTap: () => _openTaskPerformanceDetail(context, hiveService, habit, today),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(14),
+        decoration: _softTaskDecoration(taskColor, radius: 22),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -1041,7 +1051,8 @@ class _HabitCard extends StatelessWidget {
               ),
             ],
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1391,9 +1402,11 @@ bool _isSameDate(DateTime a, DateTime b) {
 DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
 class _DailyTaskCards extends StatelessWidget {
+  final HiveService hiveService;
   final List<Task> tasks;
+  final DateTime today;
 
-  const _DailyTaskCards({required this.tasks});
+  const _DailyTaskCards({required this.hiveService, required this.tasks, required this.today});
 
   @override
   Widget build(BuildContext context) {
@@ -1408,7 +1421,7 @@ class _DailyTaskCards extends StatelessWidget {
           if (tasks.isEmpty)
             const _EmptyState(message: 'No daily or weekly recurring tasks scheduled today. Add a repeating habit to start building a streak.')
           else
-            ...tasks.map((task) => _TaskJourneyCard(task: task)),
+            ...tasks.map((task) => _TaskJourneyCard(hiveService: hiveService, task: task, today: today)),
         ],
       ),
     );
@@ -1416,9 +1429,11 @@ class _DailyTaskCards extends StatelessWidget {
 }
 
 class _TaskJourneyCard extends StatelessWidget {
+  final HiveService hiveService;
   final Task task;
+  final DateTime today;
 
-  const _TaskJourneyCard({required this.task});
+  const _TaskJourneyCard({required this.hiveService, required this.task, required this.today});
 
   @override
   Widget build(BuildContext context) {
@@ -1427,11 +1442,17 @@ class _TaskJourneyCard extends StatelessWidget {
     final progress = isCompleted ? 1.0 : task.status == 'In Progress' ? 0.5 : 0.12;
     final difficulty = _difficultyLabel(task);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: _softTaskDecoration(taskColor, radius: 20, borderOpacity: isCompleted ? 0.65 : 0.28),
-      child: Column(
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () {
+        final habit = _habitForTask(hiveService, task, today);
+        _openTaskPerformanceDetail(context, hiveService, habit, today);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: _softTaskDecoration(taskColor, radius: 20, borderOpacity: isCompleted ? 0.65 : 0.28),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -1467,7 +1488,8 @@ class _TaskJourneyCard extends StatelessWidget {
               if (task.repeatTask) _Tag(label: '${task.repeatFrequency ?? 'Recurring'} habit', icon: Icons.repeat, color: taskColor),
             ],
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1477,6 +1499,526 @@ class _TaskJourneyCard extends StatelessWidget {
     if (task.estimatedMinutes >= 90) return 'Deep work';
     if (task.estimatedMinutes <= 20) return 'Quick win';
     return 'Balanced';
+  }
+}
+
+
+void _openTaskPerformanceDetail(BuildContext context, HiveService hiveService, _HabitTracker habit, DateTime today) {
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (context) => _TaskPerformanceDetailView(
+        hiveService: hiveService,
+        initialHabit: habit,
+        today: today,
+      ),
+    ),
+  );
+}
+
+_HabitTracker _habitForTask(HiveService hiveService, Task task, DateTime today) {
+  final habits = _HabitTracker.buildHabits(hiveService.getAllTasksByDate(), today);
+  for (final habit in habits) {
+    if (habit.title.trim().toLowerCase() == task.task.trim().toLowerCase()) return habit;
+  }
+
+  return _HabitTracker(
+    title: task.task,
+    category: task.category,
+    repeatFrequency: task.repeatFrequency ?? 'Daily',
+    firstTrackedDate: _dateOnly(task.dueDate),
+    template: task,
+    tasksByDate: <DateTime, Task>{_dateOnly(task.dueDate): task},
+    currentStreak: _HabitTracker.isTaskCompletedForGrid(task) ? 1 : 0,
+  );
+}
+
+class _TaskPerformanceDetailView extends StatelessWidget {
+  final HiveService hiveService;
+  final _HabitTracker initialHabit;
+  final DateTime today;
+
+  const _TaskPerformanceDetailView({
+    required this.hiveService,
+    required this.initialHabit,
+    required this.today,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+      valueListenable: hiveService.getBoxListenable(),
+      builder: (context, box, _) {
+        final habit = _currentHabit();
+        final taskColor = Color(habit.template.colorValue);
+        final todayStatus = habit.statusFor(today);
+        final metrics = _TaskPerformanceMetrics.fromHabit(habit, today);
+        final notes = hiveService
+            .getAllJourneyEntries()
+            .where((entry) => entry.relatedTaskName?.trim().toLowerCase() == habit.title.trim().toLowerCase())
+            .toList();
+
+        return Scaffold(
+          appBar: AppBar(title: Text(habit.title)),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+            children: [
+              _TaskPerformanceHero(
+                habit: habit,
+                status: todayStatus,
+                metrics: metrics,
+                color: taskColor,
+              ),
+              const SizedBox(height: 14),
+              _TaskPerformanceActions(
+                color: taskColor,
+                onDone: () => _markTodayDone(habit),
+                onAddNote: () => _addNote(context, habit),
+                onAddPicture: () => _addPicture(context, habit),
+              ),
+              const SizedBox(height: 14),
+              _TaskHistoryTimeline(habit: habit, notes: notes, color: taskColor),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  _HabitTracker _currentHabit() {
+    final habits = _HabitTracker.buildHabits(hiveService.getAllTasksByDate(), today);
+    for (final habit in habits) {
+      if (habit.title.trim().toLowerCase() == initialHabit.title.trim().toLowerCase()) return habit;
+    }
+    return initialHabit;
+  }
+
+  Future<void> _markTodayDone(_HabitTracker habit) async {
+    final existing = habit.taskFor(today);
+    final updated = (existing ?? habit.template).copyWith(
+      dueDate: today,
+      done: true,
+      status: 'Completed',
+      repeatTask: true,
+      repeatFrequency: habit.repeatFrequency,
+    );
+
+    if (existing == null) {
+      await hiveService.addTask(today, updated);
+    } else {
+      await hiveService.updateTaskByReference(existing, updated);
+    }
+  }
+
+  Future<void> _addNote(BuildContext context, _HabitTracker habit) async {
+    final controller = TextEditingController();
+    final note = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add note for ${habit.title}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 3,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            hintText: 'What did you notice about this habit today?',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (note == null || note.isEmpty) return;
+    await hiveService.saveJourneyEntry(
+      JourneyEntry(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        date: today,
+        type: 'Routine update',
+        title: '${habit.title} note',
+        description: note,
+        relatedTaskName: habit.title,
+        colorValue: habit.template.colorValue,
+      ),
+    );
+  }
+
+  Future<void> _addPicture(BuildContext context, _HabitTracker habit) async {
+    final controller = TextEditingController();
+    final image = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add picture for ${habit.title}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Image URL or path',
+            hintText: 'Progress photo, setup screenshot, personal moment...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (image == null || image.isEmpty) return;
+    await hiveService.saveJourneyEntry(
+      JourneyEntry(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        date: today,
+        type: 'Habit progress',
+        title: '${habit.title} progress photo',
+        description: 'Added a progress image for this habit.',
+        relatedTaskName: habit.title,
+        colorValue: habit.template.colorValue,
+        imageUrl: image,
+      ),
+    );
+  }
+}
+
+class _TaskPerformanceHero extends StatelessWidget {
+  final _HabitTracker habit;
+  final _HabitDayStatus status;
+  final _TaskPerformanceMetrics metrics;
+  final Color color;
+
+  const _TaskPerformanceHero({required this.habit, required this.status, required this.metrics, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _softTaskDecoration(color, radius: 26, borderOpacity: 0.34),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(color: color.withOpacity(0.20), borderRadius: BorderRadius.circular(18)),
+                child: Icon(Icons.analytics, color: color, size: 30),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(habit.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 4),
+                    Text('${habit.repeatFrequency} • ${habit.category}', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+              _StatusBadge(status: status, taskColor: color),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _PerformanceMetricChip(label: 'Current streak', value: '${metrics.currentStreak}', icon: Icons.local_fire_department, color: color),
+              _PerformanceMetricChip(label: 'Best streak', value: '${metrics.bestStreak}', icon: Icons.emoji_events, color: color),
+              _PerformanceMetricChip(label: 'Efficiency', value: '${metrics.efficiencyPercent}%', icon: Icons.trending_up, color: color),
+              _PerformanceMetricChip(label: 'Completed', value: '${metrics.completedCount}/${metrics.totalTracked}', icon: Icons.check_circle, color: color),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PerformanceMetricChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _PerformanceMetricChip({required this.label, required this.value, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.78),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(value, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w900)),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _TaskPerformanceActions extends StatelessWidget {
+  final Color color;
+  final VoidCallback onDone;
+  final VoidCallback onAddNote;
+  final VoidCallback onAddPicture;
+
+  const _TaskPerformanceActions({required this.color, required this.onDone, required this.onAddNote, required this.onAddPicture});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: onDone,
+            icon: const Icon(Icons.check),
+            label: const Text('Done'),
+            style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onAddNote,
+            icon: Icon(Icons.note_add, color: color),
+            label: const Text('Add Note'),
+            style: OutlinedButton.styleFrom(foregroundColor: color, side: BorderSide(color: color.withOpacity(0.55))),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onAddPicture,
+            icon: Icon(Icons.add_a_photo, color: color),
+            label: const Text('Add Picture'),
+            style: OutlinedButton.styleFrom(foregroundColor: color, side: BorderSide(color: color.withOpacity(0.55))),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TaskHistoryTimeline extends StatelessWidget {
+  final _HabitTracker habit;
+  final List<JourneyEntry> notes;
+  final Color color;
+
+  const _TaskHistoryTimeline({required this.habit, required this.notes, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <_TaskTimelineRow>[];
+    for (final entry in habit.tasksByDate.entries) {
+      rows.add(_TaskTimelineRow(date: entry.key, status: habit.statusFor(entry.key), task: entry.value));
+    }
+    rows.sort((a, b) => b.date.compareTo(a.date));
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Performance History', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 12),
+          if (rows.isEmpty && notes.isEmpty)
+            const _EmptyState(message: 'No performance history yet. Mark today done or add a note to start tracking this habit.')
+          else ...[
+            ..._groupRowsByMonth(rows, color),
+            if (notes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text('Notes & Photos', style: TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              ...notes.map((entry) => _TaskNoteTile(entry: entry, color: color)),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+
+List<Widget> _groupRowsByMonth(List<_TaskTimelineRow> rows, Color color) {
+  final widgets = <Widget>[];
+  String? activeMonth;
+  for (final row in rows) {
+    final label = '${_monthNames[row.date.month - 1]} ${row.date.year}';
+    if (label != activeMonth) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 8),
+          child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+        ),
+      );
+      activeMonth = label;
+    }
+    widgets.add(_TaskTimelineTile(row: row, color: color));
+  }
+  return widgets;
+}
+
+class _TaskTimelineRow {
+  final DateTime date;
+  final _HabitDayStatus status;
+  final Task task;
+
+  const _TaskTimelineRow({required this.date, required this.status, required this.task});
+}
+
+class _TaskTimelineTile extends StatelessWidget {
+  final _TaskTimelineRow row;
+  final Color color;
+
+  const _TaskTimelineTile({required this.row, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final blockColor = row.status == _HabitDayStatus.completed
+        ? Color(row.task.colorValue)
+        : row.status == _HabitDayStatus.none
+            ? const Color(0xFF263238)
+            : Colors.redAccent;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: blockColor.withOpacity(0.10), borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          Container(width: 16, height: 16, decoration: BoxDecoration(color: blockColor, borderRadius: BorderRadius.circular(5))),
+          const SizedBox(width: 10),
+          Expanded(child: Text('${row.date.month}/${row.date.day}/${row.date.year}', style: const TextStyle(fontWeight: FontWeight.w800))),
+          Text(_statusLabel(row.status), style: TextStyle(color: blockColor, fontWeight: FontWeight.w900)),
+        ],
+      ),
+    );
+  }
+}
+
+class _TaskNoteTile extends StatelessWidget {
+  final JourneyEntry entry;
+  final Color color;
+
+  const _TaskNoteTile({required this.entry, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(14), border: Border.all(color: color.withOpacity(0.16))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(entry.hasImage ? Icons.image : Icons.note, color: color, size: 18),
+              const SizedBox(width: 6),
+              Expanded(child: Text(entry.title, style: const TextStyle(fontWeight: FontWeight.w900))),
+              Text('${entry.date.month}/${entry.date.day}', style: const TextStyle(color: Colors.black54, fontSize: 12)),
+            ],
+          ),
+          if (entry.description.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(entry.description, style: const TextStyle(color: Colors.black87)),
+          ],
+          if (entry.hasImage) ...[
+            const SizedBox(height: 6),
+            Text(entry.imageUrl!, style: TextStyle(color: color, fontWeight: FontWeight.w700)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TaskPerformanceMetrics {
+  final int currentStreak;
+  final int bestStreak;
+  final int completedCount;
+  final int totalTracked;
+  final int efficiencyPercent;
+
+  const _TaskPerformanceMetrics({required this.currentStreak, required this.bestStreak, required this.completedCount, required this.totalTracked, required this.efficiencyPercent});
+
+  factory _TaskPerformanceMetrics.fromHabit(_HabitTracker habit, DateTime today) {
+    final total = habit.tasksByDate.length;
+    final completed = habit.tasksByDate.values.where(_HabitTracker.isTaskCompletedForGrid).length;
+    final efficiency = total == 0 ? 0 : ((completed / total) * 100).round();
+    return _TaskPerformanceMetrics(
+      currentStreak: habit.currentStreak,
+      bestStreak: _bestStreak(habit),
+      completedCount: completed,
+      totalTracked: total,
+      efficiencyPercent: efficiency,
+    );
+  }
+
+  static int _bestStreak(_HabitTracker habit) {
+    if (habit.repeatFrequency.trim().toLowerCase() == 'weekly') return _bestWeeklyStreak(habit.tasksByDate);
+    return _bestDailyStreak(habit.tasksByDate);
+  }
+
+  static int _bestDailyStreak(Map<DateTime, Task> tasksByDate) {
+    final dates = tasksByDate.keys.toList()..sort();
+    var best = 0;
+    var current = 0;
+    DateTime? previous;
+    for (final date in dates) {
+      final completed = _HabitTracker.isTaskCompletedForGrid(tasksByDate[date]!);
+      if (!completed) {
+        current = 0;
+      } else if (previous != null && date.difference(previous).inDays == 1) {
+        current++;
+      } else {
+        current = 1;
+      }
+      if (current > best) best = current;
+      previous = date;
+    }
+    return best;
+  }
+
+  static int _bestWeeklyStreak(Map<DateTime, Task> tasksByDate) {
+    final completedWeeks = <DateTime>{};
+    for (final entry in tasksByDate.entries) {
+      if (!_HabitTracker.isTaskCompletedForGrid(entry.value)) continue;
+      final date = entry.key;
+      completedWeeks.add(_dateOnly(date).subtract(Duration(days: date.weekday - 1)));
+    }
+    final weeks = completedWeeks.toList()..sort();
+    var best = 0;
+    var current = 0;
+    DateTime? previous;
+    for (final week in weeks) {
+      if (previous != null && week.difference(previous).inDays == 7) {
+        current++;
+      } else {
+        current = 1;
+      }
+      if (current > best) best = current;
+      previous = week;
+    }
+    return best;
   }
 }
 
