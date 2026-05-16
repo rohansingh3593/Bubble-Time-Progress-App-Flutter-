@@ -177,9 +177,13 @@ class _JourneyStats {
       if (date.year != today.year) continue;
 
       final tasks = entry.value;
-      final eligibleTasks = tasks.where((task) => task.status != 'Cancelled').toList();
+      final eligibleTasks = tasks.where((task) => task.status.trim().toLowerCase() != 'cancelled').toList();
       final completedTasks = eligibleTasks.where(_isCompletedTask).toList();
-      final activeTasks = tasks.where((task) => _isCompletedTask(task) || task.status == 'Cancelled').toList();
+      final activeTasks = tasks.where((task) {
+        final status = task.status.trim().toLowerCase();
+        return _isCompletedTask(task) || status == 'cancelled' || status == 'missed' || status == 'overdue';
+      }).toList();
+      final completedColorValue = completedTasks.isEmpty ? null : completedTasks.first.colorValue;
 
       totalTasksThisYear += eligibleTasks.length;
       totalCompletedTasks += completedTasks.length;
@@ -198,6 +202,7 @@ class _JourneyStats {
         total: eligibleTasks.length,
         completed: completedTasks.length,
         activityCount: activeTasks.length,
+        completedColorValue: completedColorValue,
         journaled: activityByDate[date]?.journaled ?? false,
       );
     }
@@ -353,17 +358,25 @@ class _DayActivity {
   final int total;
   final int completed;
   final int activityCount;
+  final int? completedColorValue;
 
   final bool journaled;
 
-  const _DayActivity({required this.total, required this.completed, required this.activityCount, this.journaled = false});
-  const _DayActivity.empty() : total = 0, completed = 0, activityCount = 0, journaled = false;
+  const _DayActivity({
+    required this.total,
+    required this.completed,
+    required this.activityCount,
+    this.completedColorValue,
+    this.journaled = false,
+  });
+  const _DayActivity.empty() : total = 0, completed = 0, activityCount = 0, completedColorValue = null, journaled = false;
 
   _DayActivity copyWith({bool? journaled}) {
     return _DayActivity(
       total: total,
       completed: completed,
       activityCount: activityCount,
+      completedColorValue: completedColorValue,
       journaled: journaled ?? this.journaled,
     );
   }
@@ -631,7 +644,7 @@ class _ActivityHeatmap extends StatelessWidget {
         children: [
           const Text('365-Day Activity Heatmap', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          const Text('Darker green days mean stronger task completion.', style: TextStyle(color: Colors.black54)),
+          const Text('Completed days use the selected task color; missed days stay red.', style: TextStyle(color: Colors.black54)),
           const SizedBox(height: 14),
           GridView.builder(
             shrinkWrap: true,
@@ -666,12 +679,10 @@ class _ActivityHeatmap extends StatelessWidget {
   }
 
   Color _heatColor(_DayActivity activity) {
-    if (activity.total == 0 && !activity.hasMeaningfulActivity) return const Color(0xFFE5EAF0);
-    if (activity.ratio >= 1) return const Color(0xFF1B5E20);
-    if (activity.ratio >= 0.66) return const Color(0xFF43A047);
-    if (activity.ratio >= 0.33) return const Color(0xFF9CCC65);
-    if (activity.hasMeaningfulActivity) return const Color(0xFFFFC107);
-    return const Color(0xFFE5EAF0);
+    if (activity.completed > 0) return Color(activity.completedColorValue ?? AppColors.taskCompleted.value);
+    if (activity.activityCount > 0) return Colors.redAccent;
+    if (activity.journaled) return AppColors.accent.withOpacity(0.65);
+    return const Color(0xFF263238);
   }
 }
 
