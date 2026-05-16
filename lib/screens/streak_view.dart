@@ -1230,7 +1230,8 @@ class _HabitTracker {
     }
 
     if (_isTaskCompleted(task)) return _HabitDayStatus.completed;
-    if (_isTaskCancelled(task) || _isTaskMissed(task)) return _HabitDayStatus.missed;
+    if (_isTaskCancelled(task)) return _HabitDayStatus.cancelled;
+    if (_isTaskMissed(task)) return _HabitDayStatus.missed;
     if (_normalizedRepeatFrequency(repeatFrequency) == 'daily' && !day.isAfter(today)) return _HabitDayStatus.missed;
     if (day.isBefore(today)) return _HabitDayStatus.missed;
     return _HabitDayStatus.none;
@@ -1569,6 +1570,12 @@ class _TaskPerformanceDetailView extends StatelessWidget {
                 color: taskColor,
               ),
               const SizedBox(height: 14),
+              _TaskStartInfoCard(metrics: metrics, color: taskColor),
+              const SizedBox(height: 14),
+              _TaskPerformanceBreakdown(metrics: metrics, color: taskColor),
+              const SizedBox(height: 14),
+              _TaskStreakAnalytics(metrics: metrics, color: taskColor),
+              const SizedBox(height: 14),
               _TaskPerformanceActions(
                 color: taskColor,
                 onDone: () => _markTodayDone(habit),
@@ -1576,7 +1583,7 @@ class _TaskPerformanceDetailView extends StatelessWidget {
                 onAddPicture: () => _addPicture(context, habit),
               ),
               const SizedBox(height: 14),
-              _TaskHistoryTimeline(habit: habit, notes: notes, color: taskColor),
+              _TaskHistoryTimeline(metrics: metrics, notes: notes, color: taskColor),
             ],
           ),
         );
@@ -1719,6 +1726,8 @@ class _TaskPerformanceHero extends StatelessWidget {
                     Text(habit.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
                     const SizedBox(height: 4),
                     Text('${habit.repeatFrequency} • ${habit.category}', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text('Complete journey from ${_formatFullDate(metrics.startDate)}', style: TextStyle(color: color, fontWeight: FontWeight.w800)),
                   ],
                 ),
               ),
@@ -1732,10 +1741,173 @@ class _TaskPerformanceHero extends StatelessWidget {
             children: [
               _PerformanceMetricChip(label: 'Current streak', value: '${metrics.currentStreak}', icon: Icons.local_fire_department, color: color),
               _PerformanceMetricChip(label: 'Best streak', value: '${metrics.bestStreak}', icon: Icons.emoji_events, color: color),
+              _PerformanceMetricChip(label: 'Completion', value: '${metrics.completionPercent}%', icon: Icons.pie_chart, color: color),
               _PerformanceMetricChip(label: 'Efficiency', value: '${metrics.efficiencyPercent}%', icon: Icons.trending_up, color: color),
-              _PerformanceMetricChip(label: 'Completed', value: '${metrics.completedCount}/${metrics.totalTracked}', icon: Icons.check_circle, color: color),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TaskStartInfoCard extends StatelessWidget {
+  final _TaskPerformanceMetrics metrics;
+  final Color color;
+
+  const _TaskStartInfoCard({required this.metrics, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return _TaskPerformancePanel(
+      title: 'Task Start Information',
+      icon: Icons.event_available,
+      color: color,
+      children: [
+        _TaskInfoRow(label: 'Started On', value: _formatFullDate(metrics.startDate), icon: Icons.flag_circle, color: color),
+        _TaskInfoRow(label: 'Active Days', value: '${metrics.activeDays} ${_dayWord(metrics.activeDays)}', icon: Icons.bolt, color: color),
+        _TaskInfoRow(label: 'Tracking For', value: '${metrics.trackingDays} ${_dayWord(metrics.trackingDays)}', icon: Icons.date_range, color: color),
+      ],
+    );
+  }
+}
+
+class _TaskPerformanceBreakdown extends StatelessWidget {
+  final _TaskPerformanceMetrics metrics;
+  final Color color;
+
+  const _TaskPerformanceBreakdown({required this.metrics, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return _TaskPerformancePanel(
+      title: 'Complete Performance Details',
+      icon: Icons.insights,
+      color: color,
+      children: [
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _PerformanceSummaryTile(label: 'Completed', value: '${metrics.completedCount}', icon: Icons.check_circle, color: color),
+            _PerformanceSummaryTile(label: 'Missed', value: '${metrics.missedCount}', icon: Icons.cancel, color: Colors.redAccent),
+            _PerformanceSummaryTile(label: 'Cancelled', value: '${metrics.cancelledCount}', icon: Icons.do_not_disturb_on, color: Colors.deepOrange),
+            _PerformanceSummaryTile(label: 'Tracked Days', value: '${metrics.totalTracked}', icon: Icons.timeline, color: color),
+            _PerformanceSummaryTile(label: 'Completion %', value: '${metrics.completionPercent}%', icon: Icons.percent, color: color),
+            _PerformanceSummaryTile(label: 'Efficiency', value: '${metrics.efficiencyPercent}%', icon: Icons.speed, color: color),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _TaskStreakAnalytics extends StatelessWidget {
+  final _TaskPerformanceMetrics metrics;
+  final Color color;
+
+  const _TaskStreakAnalytics({required this.metrics, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return _TaskPerformancePanel(
+      title: 'Streak Analytics',
+      icon: Icons.local_fire_department,
+      color: color,
+      children: [
+        _TaskInfoRow(label: 'Current Streak', value: '${metrics.currentStreak} consecutive completion ${_dayWord(metrics.currentStreak)}', icon: Icons.whatshot, color: color),
+        _TaskInfoRow(label: 'Current Consecutive Completion Days', value: '${metrics.currentConsecutiveCompletionDays} ${_dayWord(metrics.currentConsecutiveCompletionDays)}', icon: Icons.done_all, color: color),
+        _TaskInfoRow(label: 'Best Streak', value: '${metrics.bestStreak} ${_dayWord(metrics.bestStreak)}', icon: Icons.emoji_events, color: color),
+        _TaskInfoRow(label: 'Longest Missed Period', value: '${metrics.longestMissedPeriod} ${_dayWord(metrics.longestMissedPeriod)}', icon: Icons.trending_down, color: Colors.redAccent),
+      ],
+    );
+  }
+}
+
+class _TaskPerformancePanel extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final List<Widget> children;
+
+  const _TaskPerformancePanel({required this.title, required this.icon, required this.color, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900))),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _TaskInfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _TaskInfoRow({required this.label, required this.value, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(label, style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w800))),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+        ],
+      ),
+    );
+  }
+}
+
+class _PerformanceSummaryTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _PerformanceSummaryTile({required this.label, required this.value, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 145,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 8),
+          Text(value, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w900)),
+          Text(label, style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -1817,18 +1989,15 @@ class _TaskPerformanceActions extends StatelessWidget {
 }
 
 class _TaskHistoryTimeline extends StatelessWidget {
-  final _HabitTracker habit;
+  final _TaskPerformanceMetrics metrics;
   final List<JourneyEntry> notes;
   final Color color;
 
-  const _TaskHistoryTimeline({required this.habit, required this.notes, required this.color});
+  const _TaskHistoryTimeline({required this.metrics, required this.notes, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    final rows = <_TaskTimelineRow>[];
-    for (final entry in habit.tasksByDate.entries) {
-      rows.add(_TaskTimelineRow(date: entry.key, status: habit.statusFor(entry.key), task: entry.value));
-    }
+    final rows = _mergeNoteOnlyRows(metrics.historyRows, notes);
     rows.sort((a, b) => b.date.compareTo(a.date));
 
     return Container(
@@ -1837,27 +2006,34 @@ class _TaskHistoryTimeline extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Performance History', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+          const Text('Timeline View', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          Text(
+            'Today, yesterday, weekly history, monthly history, and the full task journey from ${_formatFullDate(metrics.startDate)}.',
+            style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 12),
-          if (rows.isEmpty && notes.isEmpty)
+          if (rows.isEmpty)
             const _EmptyState(message: 'No performance history yet. Mark today done or add a note to start tracking this habit.')
-          else ...[
-            ..._groupRowsByMonth(rows, color),
-            if (notes.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text('Notes & Photos', style: TextStyle(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 8),
-              ...notes.map((entry) => _TaskNoteTile(entry: entry, color: color)),
-            ],
-          ],
+          else
+            ..._groupRowsByMonth(rows, notes, color),
         ],
       ),
     );
   }
 }
 
+List<_TaskTimelineRow> _mergeNoteOnlyRows(List<_TaskTimelineRow> rows, List<JourneyEntry> notes) {
+  final merged = rows.toList();
+  for (final note in notes) {
+    final noteDate = _dateOnly(note.date);
+    if (merged.any((row) => _isSameDate(row.date, noteDate))) continue;
+    merged.add(_TaskTimelineRow(date: noteDate, status: _HabitDayStatus.none, task: null));
+  }
+  return merged;
+}
 
-List<Widget> _groupRowsByMonth(List<_TaskTimelineRow> rows, Color color) {
+List<Widget> _groupRowsByMonth(List<_TaskTimelineRow> rows, List<JourneyEntry> notes, Color color) {
   final widgets = <Widget>[];
   String? activeMonth;
   for (final row in rows) {
@@ -1871,7 +2047,9 @@ List<Widget> _groupRowsByMonth(List<_TaskTimelineRow> rows, Color color) {
       );
       activeMonth = label;
     }
-    widgets.add(_TaskTimelineTile(row: row, color: color));
+    final dayNotes = notes.where((entry) => _isSameDate(entry.date, row.date)).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    widgets.add(_TaskTimelineTile(row: row, notes: dayNotes, color: color));
   }
   return widgets;
 }
@@ -1879,38 +2057,71 @@ List<Widget> _groupRowsByMonth(List<_TaskTimelineRow> rows, Color color) {
 class _TaskTimelineRow {
   final DateTime date;
   final _HabitDayStatus status;
-  final Task task;
+  final Task? task;
 
   const _TaskTimelineRow({required this.date, required this.status, required this.task});
 }
 
 class _TaskTimelineTile extends StatelessWidget {
   final _TaskTimelineRow row;
+  final List<JourneyEntry> notes;
   final Color color;
 
-  const _TaskTimelineTile({required this.row, required this.color});
+  const _TaskTimelineTile({required this.row, required this.notes, required this.color});
 
   @override
   Widget build(BuildContext context) {
     final blockColor = row.status == _HabitDayStatus.completed
-        ? Color(row.task.colorValue)
+        ? (row.task == null ? color : Color(row.task!.colorValue))
         : row.status == _HabitDayStatus.none
             ? const Color(0xFF263238)
             : Colors.redAccent;
+    final hasTaskActivity = row.status != _HabitDayStatus.none;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: blockColor.withOpacity(0.10), borderRadius: BorderRadius.circular(14)),
-      child: Row(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: blockColor.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: blockColor.withOpacity(0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(width: 16, height: 16, decoration: BoxDecoration(color: blockColor, borderRadius: BorderRadius.circular(5))),
-          const SizedBox(width: 10),
-          Expanded(child: Text('${row.date.month}/${row.date.day}/${row.date.year}', style: const TextStyle(fontWeight: FontWeight.w800))),
-          Text(_statusLabel(row.status), style: TextStyle(color: blockColor, fontWeight: FontWeight.w900)),
+          Row(
+            children: [
+              Container(width: 16, height: 16, decoration: BoxDecoration(color: blockColor, borderRadius: BorderRadius.circular(5))),
+              const SizedBox(width: 10),
+              Expanded(child: Text(_relativeDateLabel(row.date), style: const TextStyle(fontWeight: FontWeight.w900))),
+              Text(_statusLabel(row.status), style: TextStyle(color: blockColor, fontWeight: FontWeight.w900)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            hasTaskActivity ? _dayActivityText(row) : 'Notes, photos, or reflections were added for this task.',
+            style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+          ),
+          if (notes.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...notes.map((entry) => _TaskNoteTile(entry: entry, color: color)),
+          ],
         ],
       ),
     );
+  }
+
+  String _dayActivityText(_TaskTimelineRow row) {
+    switch (row.status) {
+      case _HabitDayStatus.completed:
+        return 'Completed ${row.task?.task ?? 'task'}';
+      case _HabitDayStatus.cancelled:
+        return 'Cancelled ${row.task?.task ?? 'task'}';
+      case _HabitDayStatus.missed:
+        return 'Missed ${row.task?.task ?? 'task'}';
+      case _HabitDayStatus.none:
+        return 'No task status recorded.';
+    }
   }
 }
 
@@ -1925,7 +2136,7 @@ class _TaskNoteTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(14), border: Border.all(color: color.withOpacity(0.16))),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.72), borderRadius: BorderRadius.circular(14), border: Border.all(color: color.withOpacity(0.16))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1934,7 +2145,7 @@ class _TaskNoteTile extends StatelessWidget {
               Icon(entry.hasImage ? Icons.image : Icons.note, color: color, size: 18),
               const SizedBox(width: 6),
               Expanded(child: Text(entry.title, style: const TextStyle(fontWeight: FontWeight.w900))),
-              Text('${entry.date.month}/${entry.date.day}', style: const TextStyle(color: Colors.black54, fontSize: 12)),
+              Text(entry.hasImage ? 'Photo' : 'Note', style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w900)),
             ],
           ),
           if (entry.description.trim().isNotEmpty) ...[
@@ -1952,75 +2163,152 @@ class _TaskNoteTile extends StatelessWidget {
 }
 
 class _TaskPerformanceMetrics {
+  final DateTime startDate;
+  final int trackingDays;
+  final int activeDays;
   final int currentStreak;
+  final int currentConsecutiveCompletionDays;
   final int bestStreak;
+  final int longestMissedPeriod;
   final int completedCount;
+  final int missedCount;
+  final int cancelledCount;
   final int totalTracked;
+  final int completionPercent;
   final int efficiencyPercent;
+  final List<_TaskTimelineRow> historyRows;
 
-  const _TaskPerformanceMetrics({required this.currentStreak, required this.bestStreak, required this.completedCount, required this.totalTracked, required this.efficiencyPercent});
+  const _TaskPerformanceMetrics({
+    required this.startDate,
+    required this.trackingDays,
+    required this.activeDays,
+    required this.currentStreak,
+    required this.currentConsecutiveCompletionDays,
+    required this.bestStreak,
+    required this.longestMissedPeriod,
+    required this.completedCount,
+    required this.missedCount,
+    required this.cancelledCount,
+    required this.totalTracked,
+    required this.completionPercent,
+    required this.efficiencyPercent,
+    required this.historyRows,
+  });
 
   factory _TaskPerformanceMetrics.fromHabit(_HabitTracker habit, DateTime today) {
-    final total = habit.tasksByDate.length;
-    final completed = habit.tasksByDate.values.where(_HabitTracker.isTaskCompletedForGrid).length;
-    final efficiency = total == 0 ? 0 : ((completed / total) * 100).round();
+    final startDate = _dateOnly(habit.firstTrackedDate);
+    final endDate = _dateOnly(today);
+    final historyRows = _buildHistoryRows(habit, endDate);
+    final completed = historyRows.where((row) => row.status == _HabitDayStatus.completed).length;
+    final missed = historyRows.where((row) => row.status == _HabitDayStatus.missed).length;
+    final cancelled = historyRows.where((row) => row.status == _HabitDayStatus.cancelled).length;
+    final tracked = completed + missed + cancelled;
+    final trackingDays = math.max(1, endDate.difference(startDate).inDays + 1);
+    final activeDays = habit.tasksByDate.keys.where((date) => !date.isBefore(startDate) && !date.isAfter(endDate)).length;
+    final completionPercent = trackingDays == 0 ? 0 : ((completed / trackingDays) * 100).round();
+    final efficiency = tracked == 0 ? 0 : ((completed / tracked) * 100).round();
+
     return _TaskPerformanceMetrics(
+      startDate: startDate,
+      trackingDays: trackingDays,
+      activeDays: activeDays,
       currentStreak: habit.currentStreak,
-      bestStreak: _bestStreak(habit),
+      currentConsecutiveCompletionDays: _currentCompletionStreak(historyRows),
+      bestStreak: _bestStreak(historyRows),
+      longestMissedPeriod: _longestMissedPeriod(historyRows),
       completedCount: completed,
-      totalTracked: total,
-      efficiencyPercent: efficiency,
+      missedCount: missed,
+      cancelledCount: cancelled,
+      totalTracked: tracked,
+      completionPercent: _boundedPercent(completionPercent),
+      efficiencyPercent: _boundedPercent(efficiency),
+      historyRows: historyRows,
     );
   }
 
-  static int _bestStreak(_HabitTracker habit) {
-    if (habit.repeatFrequency.trim().toLowerCase() == 'weekly') return _bestWeeklyStreak(habit.tasksByDate);
-    return _bestDailyStreak(habit.tasksByDate);
+  static List<_TaskTimelineRow> _buildHistoryRows(_HabitTracker habit, DateTime today) {
+    final rows = <_TaskTimelineRow>[];
+    final startDate = _dateOnly(habit.firstTrackedDate);
+    final isDaily = _HabitTracker._normalizedRepeatFrequency(habit.repeatFrequency) == 'daily';
+
+    if (isDaily) {
+      var cursor = startDate;
+      while (!cursor.isAfter(today)) {
+        rows.add(_TaskTimelineRow(date: cursor, status: habit.statusFor(cursor), task: habit.taskFor(cursor)));
+        cursor = cursor.add(const Duration(days: 1));
+      }
+    } else {
+      for (final entry in habit.tasksByDate.entries) {
+        final day = _dateOnly(entry.key);
+        if (day.isBefore(startDate) || day.isAfter(today)) continue;
+        rows.add(_TaskTimelineRow(date: day, status: habit.statusFor(day), task: entry.value));
+      }
+      if (!rows.any((row) => _isSameDate(row.date, today))) {
+        rows.add(_TaskTimelineRow(date: today, status: habit.statusFor(today), task: habit.taskFor(today)));
+      }
+    }
+
+    rows.sort((a, b) => b.date.compareTo(a.date));
+    return rows;
   }
 
-  static int _bestDailyStreak(Map<DateTime, Task> tasksByDate) {
-    final dates = tasksByDate.keys.toList()..sort();
+  static int _currentCompletionStreak(List<_TaskTimelineRow> rows) {
+    final ascendingRows = rows.toList()..sort((a, b) => b.date.compareTo(a.date));
+    var streak = 0;
+    for (final row in ascendingRows) {
+      if (row.status == _HabitDayStatus.none) continue;
+      if (row.status != _HabitDayStatus.completed) break;
+      streak++;
+    }
+    return streak;
+  }
+
+  static int _bestStreak(List<_TaskTimelineRow> rows) {
+    final ascendingRows = rows.toList()..sort((a, b) => a.date.compareTo(b.date));
     var best = 0;
     var current = 0;
-    DateTime? previous;
-    for (final date in dates) {
-      final completed = _HabitTracker.isTaskCompletedForGrid(tasksByDate[date]!);
-      if (!completed) {
+    for (final row in ascendingRows) {
+      if (row.status == _HabitDayStatus.none) continue;
+      if (row.status == _HabitDayStatus.completed) {
+        current++;
+      } else {
         current = 0;
-      } else if (previous != null && date.difference(previous).inDays == 1) {
-        current++;
-      } else {
-        current = 1;
       }
       if (current > best) best = current;
-      previous = date;
     }
     return best;
   }
 
-  static int _bestWeeklyStreak(Map<DateTime, Task> tasksByDate) {
-    final completedWeeks = <DateTime>{};
-    for (final entry in tasksByDate.entries) {
-      if (!_HabitTracker.isTaskCompletedForGrid(entry.value)) continue;
-      final date = entry.key;
-      completedWeeks.add(_dateOnly(date).subtract(Duration(days: date.weekday - 1)));
-    }
-    final weeks = completedWeeks.toList()..sort();
-    var best = 0;
+  static int _longestMissedPeriod(List<_TaskTimelineRow> rows) {
+    final ascendingRows = rows.toList()..sort((a, b) => a.date.compareTo(b.date));
+    var longest = 0;
     var current = 0;
-    DateTime? previous;
-    for (final week in weeks) {
-      if (previous != null && week.difference(previous).inDays == 7) {
+    for (final row in ascendingRows) {
+      if (row.status == _HabitDayStatus.none) continue;
+      if (row.status == _HabitDayStatus.missed) {
         current++;
       } else {
-        current = 1;
+        current = 0;
       }
-      if (current > best) best = current;
-      previous = week;
+      if (current > longest) longest = current;
     }
-    return best;
+    return longest;
   }
 }
+
+int _boundedPercent(int value) => value < 0 ? 0 : value > 100 ? 100 : value;
+
+String _formatFullDate(DateTime date) => '${date.day} ${_monthNames[date.month - 1]} ${date.year}';
+
+String _relativeDateLabel(DateTime date) {
+  final today = _dateOnly(DateTime.now());
+  final day = _dateOnly(date);
+  if (_isSameDate(day, today)) return 'Today • ${_formatFullDate(day)}';
+  if (_isSameDate(day, today.subtract(const Duration(days: 1)))) return 'Yesterday • ${_formatFullDate(day)}';
+  return _formatFullDate(day);
+}
+
+String _dayWord(int count) => count == 1 ? 'Day' : 'Days';
 
 class _Tag extends StatelessWidget {
   final String label;
