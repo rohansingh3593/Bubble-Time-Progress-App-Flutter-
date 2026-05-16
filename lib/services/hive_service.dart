@@ -225,7 +225,7 @@ class HiveService {
           task.task == updated.task &&
           _isSameDate(task.dueDate, nextDueDate) &&
           task.repeatTask == true &&
-          task.repeatFrequency == updated.repeatFrequency,
+          _normalizedRepeatFrequency(task.repeatFrequency) == _normalizedRepeatFrequency(updated.repeatFrequency),
     );
 
     if (alreadyExists) return;
@@ -250,7 +250,7 @@ class HiveService {
   }
 
   DateTime? _computeNextDueDate(DateTime dueDate, String? repeatFrequency) {
-    switch ((repeatFrequency ?? '').trim().toLowerCase()) {
+    switch (_normalizedRepeatFrequency(repeatFrequency)) {
       case 'daily':
         return dueDate.add(const Duration(days: 1));
       case 'weekly':
@@ -262,6 +262,11 @@ class HiveService {
       default:
         return null;
     }
+  }
+
+  String _normalizedRepeatFrequency(String? repeatFrequency) {
+    final normalized = (repeatFrequency ?? '').trim().toLowerCase();
+    return normalized.isEmpty ? 'daily' : normalized;
   }
 
   bool _isSameDate(DateTime a, DateTime b) {

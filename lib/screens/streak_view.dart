@@ -268,7 +268,10 @@ class _JourneyStats {
     return task.repeatTask && (frequency == 'daily' || frequency == 'weekly');
   }
 
-  static String _normalizedRepeatFrequency(String? repeatFrequency) => (repeatFrequency ?? '').trim().toLowerCase();
+  static String _normalizedRepeatFrequency(String? repeatFrequency) {
+    final normalized = (repeatFrequency ?? '').trim().toLowerCase();
+    return normalized.isEmpty ? 'daily' : normalized;
+  }
 
   static int _calculateDailyStreak(DateTime today, Map<DateTime, _DayActivity> activityByDate) {
     var cursor = today;
@@ -1245,7 +1248,10 @@ class _HabitTracker {
     return task.repeatTask && (frequency == 'daily' || frequency == 'weekly');
   }
 
-  static String _normalizedRepeatFrequency(String? repeatFrequency) => (repeatFrequency ?? '').trim().toLowerCase();
+  static String _normalizedRepeatFrequency(String? repeatFrequency) {
+    final normalized = (repeatFrequency ?? '').trim().toLowerCase();
+    return normalized.isEmpty ? 'daily' : normalized;
+  }
 
   static int _calculateHabitStreak(Map<DateTime, Task> tasksByDate, DateTime today, String repeatFrequency) {
     return _normalizedRepeatFrequency(repeatFrequency) == 'weekly'
