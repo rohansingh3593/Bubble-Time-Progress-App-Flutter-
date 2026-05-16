@@ -1027,6 +1027,7 @@ class _HabitTracker {
   final String title;
   final String category;
   final String repeatFrequency;
+  final DateTime firstTrackedDate;
   final Task template;
   final Map<DateTime, Task> tasksByDate;
   final int currentStreak;
@@ -1035,6 +1036,7 @@ class _HabitTracker {
     required this.title,
     required this.category,
     required this.repeatFrequency,
+    required this.firstTrackedDate,
     required this.template,
     required this.tasksByDate,
     required this.currentStreak,
@@ -1044,12 +1046,21 @@ class _HabitTracker {
 
   _HabitDayStatus statusFor(DateTime date) {
     final day = _dateOnly(date);
+    final today = _dateOnly(DateTime.now());
     final task = tasksByDate[day];
-    if (task == null) return _HabitDayStatus.none;
+
+    if (task == null) {
+      if (repeatFrequency == 'Daily' && !day.isBefore(firstTrackedDate) && !day.isAfter(today)) {
+        return _HabitDayStatus.missed;
+      }
+      return _HabitDayStatus.none;
+    }
+
     if (task.done || task.status == 'Completed') return _HabitDayStatus.completed;
     if (task.status == 'Cancelled') return _HabitDayStatus.cancelled;
     if (task.status == 'Missed' || task.status == 'Overdue') return _HabitDayStatus.missed;
-    if (day.isBefore(_dateOnly(DateTime.now()))) return _HabitDayStatus.missed;
+    if (repeatFrequency == 'Daily' && !day.isAfter(today)) return _HabitDayStatus.missed;
+    if (day.isBefore(today)) return _HabitDayStatus.missed;
     return _HabitDayStatus.none;
   }
 
@@ -1077,6 +1088,7 @@ class _HabitTracker {
         title: template.task,
         category: template.category,
         repeatFrequency: template.repeatFrequency ?? 'Daily',
+        firstTrackedDate: records.map((record) => record.key).reduce((a, b) => a.isBefore(b) ? a : b),
         template: template,
         tasksByDate: byDate,
         currentStreak: _calculateHabitStreak(byDate, today, template.repeatFrequency ?? 'Daily'),
@@ -1102,9 +1114,7 @@ class _HabitTracker {
     var cursor = _dateOnly(today);
     var streak = 0;
 
-    if (!_isTaskCompleted(tasksByDate[cursor])) {
-      cursor = cursor.subtract(const Duration(days: 1));
-    }
+    if (!_isTaskCompleted(tasksByDate[cursor])) return 0;
 
     while (_isTaskCompleted(tasksByDate[cursor])) {
       streak++;
