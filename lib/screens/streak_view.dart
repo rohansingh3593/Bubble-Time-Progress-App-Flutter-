@@ -828,11 +828,7 @@ class _RecurringListRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: taskColor.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: taskColor.withOpacity(0.22)),
-      ),
+      decoration: _softTaskDecoration(taskColor, radius: 16),
       child: Row(
         children: [
           SizedBox(
@@ -944,11 +940,7 @@ class _HabitCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.black12),
-      ),
+      decoration: _softTaskDecoration(taskColor, radius: 22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1390,17 +1382,13 @@ class _TaskJourneyCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: taskColor.withOpacity(isCompleted ? 0.65 : 0.28)),
-      ),
+      decoration: _softTaskDecoration(taskColor, radius: 20, borderOpacity: isCompleted ? 0.65 : 0.28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(isCompleted ? Icons.check_circle : Icons.radio_button_unchecked, color: isCompleted ? taskColor : AppColors.taskPending),
+              Icon(isCompleted ? Icons.check_circle : Icons.radio_button_unchecked, color: taskColor),
               const SizedBox(width: 8),
               Container(width: 10, height: 10, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
               const SizedBox(width: 6),
@@ -1425,10 +1413,10 @@ class _TaskJourneyCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _Tag(label: task.category, icon: Icons.category),
-              _Tag(label: task.priority, icon: Icons.flag),
-              _Tag(label: difficulty, icon: Icons.speed),
-              if (task.repeatTask) _Tag(label: '${task.repeatFrequency ?? 'Recurring'} habit', icon: Icons.repeat),
+              _Tag(label: task.category, icon: Icons.category, color: taskColor),
+              _Tag(label: task.priority, icon: Icons.flag, color: taskColor),
+              _Tag(label: difficulty, icon: Icons.speed, color: taskColor),
+              if (task.repeatTask) _Tag(label: '${task.repeatFrequency ?? 'Recurring'} habit', icon: Icons.repeat, color: taskColor),
             ],
           ),
         ],
@@ -1447,18 +1435,25 @@ class _TaskJourneyCard extends StatelessWidget {
 class _Tag extends StatelessWidget {
   final String label;
   final IconData icon;
+  final Color? color;
 
-  const _Tag({required this.label, required this.icon});
+  const _Tag({required this.label, required this.icon, this.color});
 
   @override
   Widget build(BuildContext context) {
+    final accent = color ?? AppColors.accent;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(99)),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.78),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: accent.withOpacity(0.16)),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppColors.accent),
+          Icon(icon, size: 14, color: accent),
           const SizedBox(width: 5),
           Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
         ],
@@ -1525,6 +1520,22 @@ class _InsightRow extends StatelessWidget {
       ),
     );
   }
+}
+
+
+BoxDecoration _softTaskDecoration(Color taskColor, {required double radius, double borderOpacity = 0.24}) {
+  return BoxDecoration(
+    color: taskColor.withOpacity(0.10),
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: taskColor.withOpacity(borderOpacity)),
+    boxShadow: [
+      BoxShadow(
+        color: taskColor.withOpacity(0.06),
+        blurRadius: 12,
+        offset: const Offset(0, 6),
+      ),
+    ],
+  );
 }
 
 class _EmptyState extends StatelessWidget {
