@@ -58,23 +58,34 @@ class _YearViewState extends State<YearView> {
     }
   }
 
-  Color _getBubbleColor(DateTime date, List<Task> tasks, DateTime today) {
-    final selectedTaskColor = _selectedTaskColor(tasks);
-    if (selectedTaskColor != null) return selectedTaskColor;
-    if (date.isBefore(today)) return AppColors.passed;
-    return AppColors.taskNone;
-  }
-
-  Color? _selectedTaskColor(List<Task> tasks) {
-    final activeTasks = tasks.where((task) => task.status != 'Cancelled').toList();
-    if (activeTasks.isEmpty) return null;
-
-    for (final task in activeTasks) {
-      if (task.done || task.status == 'Completed') return Color(task.colorValue);
+  Color _getBubbleColor(DateTime date, Map<String, int> summary, DateTime today) {
+    final isPassed = date.isBefore(today);
+    if (isPassed) {
+      return AppColors.passed;
     }
 
-    return Color(activeTasks.first.colorValue);
+    if (summary['completed']! > 0 && summary['pending']! == 0) {
+      return AppColors.taskCompleted;
+    } else if (summary['pending']! > 0) {
+      return AppColors.taskPending;
+    } else {
+      return AppColors.taskNone;
+    }
   }
+
+
+  Map<String, int> _getCompletedSummaryForDate(DateTime date) {
+    final completedTasks = widget.hiveService
+        .getTasksForDate(date)
+        .where((task) => task.status == 'Completed')
+        .toList();
+
+    return {
+      'completed': completedTasks.length,
+      'pending': 0,
+    };
+  }
+
 
 
   List<Task> _getYearlyRepeatingTasks() {
@@ -225,11 +236,11 @@ class _YearViewState extends State<YearView> {
                       itemCount: daysInYear,
                       itemBuilder: (context, index) {
                         final date = DateTime(_currentYear.year, 1, index + 1);
-                        final tasksForDate = widget.hiveService.getTasksForDate(date);
+                        final summary = _getCompletedSummaryForDate(date);
                         final isToday = isCurrentYear && date.day == now.day && date.month == now.month;
 
                         return BubbleWidget(
-                          color: _getBubbleColor(date, tasksForDate, todayStart),
+                          color: _getBubbleColor(date, summary, todayStart),
                           isHighlighted: isToday,
                           onTap: () => _showTaskScreen(date),
                         );

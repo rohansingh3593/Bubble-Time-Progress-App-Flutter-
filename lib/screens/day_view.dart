@@ -33,22 +33,13 @@ class _DayViewState extends State<DayView> {
   }
 
   Color _getBubbleColor(int hour, bool isToday, bool isPastDay, List<Task> tasksInHour, int currentHour) {
-    final selectedTaskColor = _selectedTaskColor(tasksInHour);
-    if (selectedTaskColor != null) return selectedTaskColor;
     if (isToday && hour == currentHour) return Colors.orange;
     if (isPastDay || (isToday && hour < currentHour)) return AppColors.passed;
+
+    final completed = tasksInHour.where((task) => task.status == 'Completed').length;
+    if (tasksInHour.isNotEmpty && completed == tasksInHour.length) return AppColors.taskCompleted;
+    if (tasksInHour.isNotEmpty) return AppColors.taskPending;
     return AppColors.taskNone;
-  }
-
-  Color? _selectedTaskColor(List<Task> tasks) {
-    final activeTasks = tasks.where((task) => task.status != 'Cancelled').toList();
-    if (activeTasks.isEmpty) return null;
-
-    for (final task in activeTasks) {
-      if (task.done || task.status == 'Completed') return Color(task.colorValue);
-    }
-
-    return Color(activeTasks.first.colorValue);
   }
 
 
