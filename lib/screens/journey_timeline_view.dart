@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
+import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
@@ -17,23 +18,41 @@ class JourneyTimelineView extends StatelessWidget {
       body: ValueListenableBuilder(
         valueListenable: hiveService.getBoxListenable(),
         builder: (context, box, _) {
-          final entries = hiveService.getAllJourneyEntries();
-          final allTasks = hiveService.getAllTasksByDate().values.expand((tasks) => tasks).toList();
+          final manualEntries = hiveService.getAllJourneyEntries();
+          final tasksByDate = hiveService.getAllTasksByDate();
+          final journalEntries = hiveService.getAllJournalEntries();
+          final allTasks = tasksByDate.values.expand((tasks) => tasks).toList();
+          final dailyJourneys = _DailyJourney.build(
+            tasksByDate: tasksByDate,
+            journalEntries: journalEntries,
+            manualEntries: manualEntries,
+          );
+
+          final timelineWidgets = <Widget>[];
+          String? currentSection;
+          for (final journey in dailyJourneys) {
+            final section = _sectionLabelForDate(journey.date);
+            if (section != currentSection) {
+              timelineWidgets.add(_TimelineSectionHeader(label: section));
+              currentSection = section;
+            }
+            timelineWidgets.add(
+              _DailyJourneyCard(
+                journey: journey,
+                onDeleteEntry: hiveService.deleteJourneyEntry,
+              ),
+            );
+          }
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
             children: [
               _JourneyHero(onAdd: () => _showEntryDialog(context, allTasks)),
               const SizedBox(height: 14),
-              if (entries.isEmpty)
+              if (dailyJourneys.isEmpty)
                 const _EmptyJourneyState()
               else
-                ...entries.map(
-                  (entry) => _JourneyEntryCard(
-                    entry: entry,
-                    onDelete: () => hiveService.deleteJourneyEntry(entry.id),
-                  ),
-                ),
+                ...timelineWidgets,
             ],
           );
         },
@@ -58,6 +77,260 @@ class JourneyTimelineView extends StatelessWidget {
     if (created != null) {
       await hiveService.saveJourneyEntry(created);
     }
+  }
+}
+
+
+class _DailyJourney {
+  final DateTime date;
+  final List<Task> tasks;
+  final JournalEntry? journalEntry;
+  final List<JourneyEntry> manualEntries;
+
+  const _DailyJourney({
+    required this.date,
+    required this.tasks,
+    required this.journalEntry,
+    required this.manualEntries,
+  });
+
+  List<Task> get completedTasks => tasks.where(_isCompletedTask).toList();
+
+  List<Task> get habitUpdates {
+    return tasks.where((task) {
+      if (!task.repeatTask) return false;
+      final status = task.status.trim().toLowerCase();
+      return _isCompletedTask(task) ||
+          status == 'cancelled' ||
+          status == 'missed' ||
+          status == 'overdue' ||
+          status == 'in progress';
+    }).toList();
+  }
+
+
+  bool get hasActivity {
+    return tasks.isNotEmpty ||
+        journalEntry != null ||
+        manualEntries.isNotEmpty;
+  }
+
+  Color get accentColor {
+    if (completedTasks.isNotEmpty) return Color(completedTasks.first.colorValue);
+    if (habitUpdates.isNotEmpty) return Color(habitUpdates.first.colorValue);
+    if (tasks.isNotEmpty) return Color(tasks.first.colorValue);
+    if (manualEntries.isNotEmpty) return Color(manualEntries.first.colorValue);
+    return _moodColor(journalEntry?.mood);
+  }
+
+  static List<_DailyJourney> build({
+    required Map<DateTime, List<Task>> tasksByDate,
+    required List<JournalEntry> journalEntries,
+    required List<JourneyEntry> manualEntries,
+  }) {
+    final dates = <DateTime>{};
+    final journalsByDate = <DateTime, JournalEntry>{};
+    final manualByDate = <DateTime, List<JourneyEntry>>{};
+
+    for (final entry in tasksByDate.entries) {
+      dates.add(_dateOnly(entry.key));
+    }
+    for (final journal in journalEntries) {
+      final date = _dateOnly(journal.date);
+      dates.add(date);
+      journalsByDate[date] = journal;
+    }
+    for (final entry in manualEntries) {
+      final date = _dateOnly(entry.date);
+      dates.add(date);
+      manualByDate.putIfAbsent(date, () => <JourneyEntry>[]).add(entry);
+    }
+
+    final journeys = dates.map((date) {
+      final entries = manualByDate[date] ?? const <JourneyEntry>[];
+      return _DailyJourney(
+        date: date,
+        tasks: tasksByDate[date] ?? const <Task>[],
+        journalEntry: journalsByDate[date],
+        manualEntries: entries,
+      );
+    }).where((journey) => journey.hasActivity).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    return journeys;
+  }
+
+  static bool _isCompletedTask(Task task) => task.done || task.status.trim().toLowerCase() == 'completed';
+}
+
+class _TimelineSectionHeader extends StatelessWidget {
+  final String label;
+
+  const _TimelineSectionHeader({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, bottom: 8),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.textPrimary),
+      ),
+    );
+  }
+}
+
+class _DailyJourneyCard extends StatelessWidget {
+  final _DailyJourney journey;
+  final Future<void> Function(String id) onDeleteEntry;
+
+  const _DailyJourneyCard({required this.journey, required this.onDeleteEntry});
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = journey.accentColor;
+    final journal = journey.journalEntry;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: accent.withOpacity(0.09),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: accent.withOpacity(0.24)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(Icons.timeline, color: accent),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_friendlyDate(journey.date), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${journey.completedTasks.length} completed • ${journey.habitUpdates.length} habit updates • ${journal?.mood ?? 'No mood'}',
+                      style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (journal != null) _MoodReflectionPanel(journal: journal),
+          if (journey.completedTasks.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _TaskWrap(
+              title: 'Completed tasks',
+              tasks: journey.completedTasks,
+              icon: Icons.check_circle,
+            ),
+          ],
+          if (journey.habitUpdates.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _TaskWrap(
+              title: 'Habit updates',
+              tasks: journey.habitUpdates,
+              icon: Icons.repeat,
+            ),
+          ],
+          if (journey.manualEntries.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...journey.manualEntries.map(
+              (entry) => _JourneyEntryCard(
+                entry: entry,
+                onDelete: () {
+                  onDeleteEntry(entry.id);
+                },
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MoodReflectionPanel extends StatelessWidget {
+  final JournalEntry journal;
+
+  const _MoodReflectionPanel({required this.journal});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _moodColor(journal.mood);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withOpacity(0.24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(_moodEmoji(journal.mood), style: const TextStyle(fontSize: 22)),
+              const SizedBox(width: 8),
+              Text(journal.mood, style: const TextStyle(fontWeight: FontWeight.w900)),
+              const Spacer(),
+              Text('${journal.productivityScore}%', style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+            ],
+          ),
+          if (journal.reflection.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(journal.reflection.trim(), maxLines: 4, overflow: TextOverflow.ellipsis),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TaskWrap extends StatelessWidget {
+  final String title;
+  final List<Task> tasks;
+  final IconData icon;
+
+  const _TaskWrap({required this.title, required this.tasks, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: tasks.map((task) => _JourneyChip(label: task.task, icon: icon, color: Color(task.colorValue))).toList(),
+        ),
+      ],
+    );
   }
 }
 
@@ -475,5 +748,66 @@ class _JourneyEntryDialogState extends State<_JourneyEntryDialog> {
       byName.putIfAbsent(key, () => task);
     }
     return byName.values.toList()..sort((a, b) => a.task.compareTo(b.task));
+  }
+}
+
+
+DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+
+String _sectionLabelForDate(DateTime date) {
+  final now = DateTime.now();
+  final today = _dateOnly(now);
+  final yesterday = today.subtract(const Duration(days: 1));
+  final weekStart = today.subtract(Duration(days: today.weekday - 1));
+
+  if (_isSameDate(date, today)) return "Today's Activity";
+  if (_isSameDate(date, yesterday)) return 'Yesterday';
+  if (!date.isBefore(weekStart)) return 'Weekly History';
+  return 'Monthly Journey';
+}
+
+String _friendlyDate(DateTime date) {
+  final section = _sectionLabelForDate(date);
+  if (section == "Today's Activity" || section == 'Yesterday') return section;
+  return '${date.month}/${date.day}/${date.year}';
+}
+
+bool _isSameDate(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+Color _moodColor(String? mood) {
+  switch (mood) {
+    case 'Happy':
+      return const Color(0xFFFFC857);
+    case 'Good':
+      return const Color(0xFF7BC96F);
+    case 'Sad':
+      return const Color(0xFF64B5F6);
+    case 'Angry':
+      return const Color(0xFFE57373);
+    case 'Anxious':
+      return const Color(0xFFFFB74D);
+    case 'Neutral':
+      return const Color(0xFF90A4AE);
+    default:
+      return AppColors.accent;
+  }
+}
+
+String _moodEmoji(String mood) {
+  switch (mood) {
+    case 'Happy':
+      return '😊';
+    case 'Good':
+      return '🙂';
+    case 'Neutral':
+      return '😐';
+    case 'Sad':
+      return '😔';
+    case 'Angry':
+      return '😠';
+    case 'Anxious':
+      return '😟';
+    default:
+      return '📝';
   }
 }
