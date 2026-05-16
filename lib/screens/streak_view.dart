@@ -935,6 +935,7 @@ class _HabitCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final todayStatus = habit.statusFor(today);
+    final taskColor = Color(habit.template.colorValue);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -953,10 +954,10 @@ class _HabitCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _statusColor(todayStatus).withOpacity(0.14),
+                  color: _statusColor(todayStatus, taskColor).withOpacity(0.14),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Icon(Icons.repeat, color: Color(habit.template.colorValue)),
+                child: Icon(Icons.repeat, color: taskColor),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -965,7 +966,7 @@ class _HabitCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Container(width: 10, height: 10, decoration: BoxDecoration(color: Color(habit.template.colorValue), shape: BoxShape.circle)),
+                        Container(width: 10, height: 10, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
                         const SizedBox(width: 6),
                         Expanded(child: Text(habit.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
                       ],
@@ -978,7 +979,7 @@ class _HabitCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _StatusBadge(status: todayStatus, taskColor: Color(habit.template.colorValue)),
+              _StatusBadge(status: todayStatus, taskColor: taskColor),
             ],
           ),
           const SizedBox(height: 12),
@@ -990,7 +991,7 @@ class _HabitCard extends StatelessWidget {
                 child: _HabitStatusButton(
                   label: 'Completed',
                   icon: Icons.check_circle,
-                  color: AppColors.taskCompleted,
+                  color: taskColor,
                   selected: todayStatus == _HabitDayStatus.completed,
                   onPressed: () => _setTodayStatus(_HabitDayStatus.completed),
                 ),
@@ -1044,10 +1045,10 @@ class _HabitCard extends StatelessWidget {
     }
   }
 
-  Color _statusColor(_HabitDayStatus status) {
+  Color _statusColor(_HabitDayStatus status, Color taskColor) {
     switch (status) {
       case _HabitDayStatus.completed:
-        return AppColors.taskCompleted;
+        return taskColor;
       case _HabitDayStatus.cancelled:
         return Colors.redAccent;
       case _HabitDayStatus.missed:
@@ -1067,6 +1068,7 @@ class _HabitActivityGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final startDate = today.subtract(const Duration(days: 27));
+    final taskColor = Color(habit.template.colorValue);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1089,7 +1091,7 @@ class _HabitActivityGrid extends StatelessWidget {
               message: '${date.month}/${date.day}: ${_statusLabel(status)}',
               child: Container(
                 decoration: BoxDecoration(
-                  color: _gridColor(status, Color(habit.template.colorValue)),
+                  color: _gridColor(status, taskColor),
                   borderRadius: BorderRadius.circular(5),
                   border: isToday ? Border.all(color: AppColors.accent, width: 2) : null,
                 ),
@@ -1110,7 +1112,7 @@ class _HabitActivityGrid extends StatelessWidget {
       case _HabitDayStatus.missed:
         return Colors.redAccent;
       case _HabitDayStatus.none:
-        return const Color(0xFFDCE3EA);
+        return const Color(0xFF263238);
     }
   }
 }
@@ -1387,7 +1389,7 @@ class _TaskJourneyCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.background,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isCompleted ? taskColor.withOpacity(0.55) : Colors.black12),
+        border: Border.all(color: taskColor.withOpacity(isCompleted ? 0.65 : 0.28)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1411,7 +1413,7 @@ class _TaskJourneyCard extends StatelessWidget {
             value: progress,
             minHeight: 8,
             borderRadius: BorderRadius.circular(99),
-            color: isCompleted ? taskColor : AppColors.taskPending,
+            color: isCompleted ? taskColor : taskColor.withOpacity(0.55),
             backgroundColor: Colors.white,
           ),
           const SizedBox(height: 10),
