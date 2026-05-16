@@ -858,14 +858,14 @@ class _RecurringListRow extends StatelessWidget {
               height: 34,
               margin: const EdgeInsets.symmetric(horizontal: 3),
               decoration: BoxDecoration(
-                color: _statusBlockColor(status),
+                color: _statusBlockColor(status, taskColor),
                 borderRadius: BorderRadius.circular(9),
                 border: Border.all(color: _isSameDate(date, today) ? taskColor : Colors.transparent, width: 2),
               ),
               child: Icon(_statusIcon(status), size: 15, color: status == _HabitDayStatus.none ? Colors.white30 : Colors.white),
             );
           }),
-          SizedBox(width: 90, child: Center(child: _StatusBadge(status: todayStatus))),
+          SizedBox(width: 90, child: Center(child: _StatusBadge(status: todayStatus, taskColor: taskColor))),
         ],
       ),
     );
@@ -978,7 +978,7 @@ class _HabitCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _StatusBadge(status: todayStatus),
+              _StatusBadge(status: todayStatus, taskColor: Color(habit.template.colorValue)),
             ],
           ),
           const SizedBox(height: 12),
@@ -1089,7 +1089,7 @@ class _HabitActivityGrid extends StatelessWidget {
               message: '${date.month}/${date.day}: ${_statusLabel(status)}',
               child: Container(
                 decoration: BoxDecoration(
-                  color: _gridColor(status),
+                  color: _gridColor(status, Color(habit.template.colorValue)),
                   borderRadius: BorderRadius.circular(5),
                   border: isToday ? Border.all(color: AppColors.accent, width: 2) : null,
                 ),
@@ -1101,10 +1101,10 @@ class _HabitActivityGrid extends StatelessWidget {
     );
   }
 
-  Color _gridColor(_HabitDayStatus status) {
+  Color _gridColor(_HabitDayStatus status, Color taskColor) {
     switch (status) {
       case _HabitDayStatus.completed:
-        return AppColors.taskCompleted;
+        return taskColor;
       case _HabitDayStatus.cancelled:
         return Colors.redAccent;
       case _HabitDayStatus.missed:
@@ -1148,13 +1148,14 @@ class _HabitStatusButton extends StatelessWidget {
 
 class _StatusBadge extends StatelessWidget {
   final _HabitDayStatus status;
+  final Color? taskColor;
 
-  const _StatusBadge({required this.status});
+  const _StatusBadge({required this.status, this.taskColor});
 
   @override
   Widget build(BuildContext context) {
     final color = switch (status) {
-      _HabitDayStatus.completed => AppColors.taskCompleted,
+      _HabitDayStatus.completed => taskColor ?? AppColors.taskCompleted,
       _HabitDayStatus.cancelled => Colors.redAccent,
       _HabitDayStatus.missed => Colors.redAccent,
       _HabitDayStatus.none => AppColors.taskNone,
@@ -1298,10 +1299,10 @@ class _HabitTracker {
   static bool _isTaskCompleted(Task? task) => task != null && (task.done || task.status == 'Completed');
 }
 
-Color _statusBlockColor(_HabitDayStatus status) {
+Color _statusBlockColor(_HabitDayStatus status, Color taskColor) {
   switch (status) {
     case _HabitDayStatus.completed:
-      return AppColors.taskCompleted;
+      return taskColor;
     case _HabitDayStatus.cancelled:
     case _HabitDayStatus.missed:
       return Colors.redAccent;
@@ -1376,6 +1377,7 @@ class _TaskJourneyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCompleted = task.done || task.status == 'Completed';
+    final taskColor = Color(task.colorValue);
     final progress = isCompleted ? 1.0 : task.status == 'In Progress' ? 0.5 : 0.12;
     final difficulty = _difficultyLabel(task);
 
@@ -1385,15 +1387,17 @@ class _TaskJourneyCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.background,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isCompleted ? AppColors.taskCompleted.withOpacity(0.5) : Colors.black12),
+        border: Border.all(color: isCompleted ? taskColor.withOpacity(0.55) : Colors.black12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(isCompleted ? Icons.check_circle : Icons.radio_button_unchecked, color: isCompleted ? AppColors.taskCompleted : AppColors.taskPending),
+              Icon(isCompleted ? Icons.check_circle : Icons.radio_button_unchecked, color: isCompleted ? taskColor : AppColors.taskPending),
               const SizedBox(width: 8),
+              Container(width: 10, height: 10, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
+              const SizedBox(width: 6),
               Expanded(child: Text(task.task, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
               Text('${task.estimatedMinutes}m', style: const TextStyle(fontWeight: FontWeight.w700)),
             ],
@@ -1407,7 +1411,7 @@ class _TaskJourneyCard extends StatelessWidget {
             value: progress,
             minHeight: 8,
             borderRadius: BorderRadius.circular(99),
-            color: isCompleted ? AppColors.taskCompleted : AppColors.taskPending,
+            color: isCompleted ? taskColor : AppColors.taskPending,
             backgroundColor: Colors.white,
           ),
           const SizedBox(height: 10),
