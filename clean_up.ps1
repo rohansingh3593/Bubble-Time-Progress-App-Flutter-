@@ -1,3 +1,7 @@
+param(
+  [switch]$DeepScan
+)
+
 $ErrorActionPreference = 'Continue'
 
 Write-Host '--- Flutter Windows local data cleanup ---' -ForegroundColor Cyan
@@ -36,13 +40,12 @@ foreach ($path in $projectPaths) {
   }
 }
 
-# Candidate app-data roots (Windows runner commonly uses executable/org name folders)
+# Fast cleanup: only top-level app folders in AppData (no expensive recursion)
 $candidateRoots = @(
   "$env:LOCALAPPDATA",
   "$env:APPDATA"
 )
 
-# Keywords to match app folders/files for this project
 $keywords = @(
   'bubble',
   'progress',
@@ -57,19 +60,24 @@ $targets = New-Object System.Collections.Generic.HashSet[string]
 foreach ($root in $candidateRoots) {
   if (-not (Test-Path $root)) { continue }
 
-  # Add directories with likely app names
   Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue | ForEach-Object {
     $n = $_.Name.ToLowerInvariant()
     if ($keywords | Where-Object { $n -like "*$_*" }) {
       [void]$targets.Add($_.FullName)
     }
   }
+}
 
-  # Add files commonly used by local DB/storage systems
-  Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
-    $_.Extension -in '.hive', '.lock', '.db', '.sqlite', '.sqlite3', '.isar'
-  } | ForEach-Object {
-    [void]$targets.Add($_.FullName)
+# Optional deep scan for storage files can be enabled explicitly.
+if ($DeepScan) {
+  Write-Host 'DeepScan enabled: searching for storage files recursively. This can take time...' -ForegroundColor Yellow
+  foreach ($root in $candidateRoots) {
+    if (-not (Test-Path $root)) { continue }
+    Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+      $_.Extension -in '.hive', '.lock', '.db', '.sqlite', '.sqlite3', '.isar'
+    } | ForEach-Object {
+      [void]$targets.Add($_.FullName)
+    }
   }
 }
 
