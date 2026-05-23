@@ -1262,8 +1262,41 @@ class _HabitCard extends StatelessWidget {
     );
   }
 
+  bool _isOccurrenceLocked(Task task) {
+    final status = task.status.trim().toLowerCase();
+    return task.done || status == 'completed' || status == 'cancelled' || status == 'missed' || status == 'overdue';
+  }
+
+  String _occurrenceLabel() {
+    final normalized = habit.repeatFrequency.trim().toLowerCase();
+    switch (normalized) {
+      case 'daily':
+        return 'today';
+      case 'weekly':
+        return 'this week';
+      case 'monthly':
+        return 'this month';
+      case 'yearly':
+        return 'this year';
+      default:
+        return 'this period';
+    }
+  }
+
+  void _showLockedMessage(Task existing) {
+    final normalized = existing.status.trim().toLowerCase();
+    final statusLabel = existing.done || normalized == 'completed' ? 'completed' : existing.status.toLowerCase();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Task already $statusLabel for ${_occurrenceLabel()}. It unlocks in the next occurrence.')),
+    );
+  }
+
   Future<void> _setTodayStatus(_HabitDayStatus status) async {
     final existing = habit.taskFor(today);
+    if (existing != null && _isOccurrenceLocked(existing)) {
+      _showLockedMessage(existing);
+      return;
+    }
     final updated = (existing ?? habit.template).copyWith(
       dueDate: today,
       done: status == _HabitDayStatus.completed,
@@ -1807,8 +1840,41 @@ class _TaskPerformanceDetailView extends StatelessWidget {
     return initialHabit;
   }
 
+  bool _isOccurrenceLocked(Task task) {
+    final status = task.status.trim().toLowerCase();
+    return task.done || status == 'completed' || status == 'cancelled' || status == 'missed' || status == 'overdue';
+  }
+
+  String _occurrenceLabel(_HabitTracker habit) {
+    final normalized = habit.repeatFrequency.trim().toLowerCase();
+    switch (normalized) {
+      case 'daily':
+        return 'today';
+      case 'weekly':
+        return 'this week';
+      case 'monthly':
+        return 'this month';
+      case 'yearly':
+        return 'this year';
+      default:
+        return 'this period';
+    }
+  }
+
+  void _showLockedMessage(Task existing, _HabitTracker habit) {
+    final normalized = existing.status.trim().toLowerCase();
+    final statusLabel = existing.done || normalized == 'completed' ? 'completed' : existing.status.toLowerCase();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Task already $statusLabel for ${_occurrenceLabel(habit)}. It unlocks in the next occurrence.')),
+    );
+  }
+
   Future<void> _markTodayDone(_HabitTracker habit) async {
     final existing = habit.taskFor(today);
+    if (existing != null && _isOccurrenceLocked(existing)) {
+      _showLockedMessage(existing, habit);
+      return;
+    }
     final updated = (existing ?? habit.template).copyWith(
       dueDate: today,
       done: true,
