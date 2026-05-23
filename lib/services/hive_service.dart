@@ -33,8 +33,59 @@ class HiveService {
 
     _box = await Hive.openBox<List>(_boxName);
     await _runMigrationsIfNeeded();
+    await _dedupeRecurringTasksOnStartup();
   }
 
+
+  Future<void> _dedupeRecurringTasksOnStartup() async {
+    for (final key in _box.keys) {
+      if (key is! String) continue;
+      if (DateTime.tryParse(key) == null) continue;
+      final rawList = _box.get(key);
+      if (rawList == null) continue;
+      final tasks = rawList.cast<Task>().toList();
+      final deduped = _dedupeRecurringTasksForDate(tasks);
+      if (deduped.length != tasks.length) {
+        await _box.put(key, deduped);
+      }
+    }
+  }
+
+  List<Task> _dedupeRecurringTasksForDate(List<Task> tasks) {
+    final result = <Task>[];
+    final recurringIndex = <String, int>{};
+
+    for (final task in tasks) {
+      if (!task.repeatTask) {
+        result.add(task);
+        continue;
+      }
+
+      final recurringKey = _recurringIdentityKey(task);
+      if (!recurringIndex.containsKey(recurringKey)) {
+        recurringIndex[recurringKey] = result.length;
+        result.add(task);
+        continue;
+      }
+
+      final existingPos = recurringIndex[recurringKey]!;
+      final existing = result[existingPos];
+      final existingTerminal = _isTerminalStatus(existing.status) || existing.done;
+      final incomingTerminal = _isTerminalStatus(task.status) || task.done;
+
+      // Prefer finalized occurrence records over not-started duplicates.
+      if (!existingTerminal && incomingTerminal) {
+        result[existingPos] = task;
+      }
+    }
+
+    return result;
+  }
+
+  String _recurringIdentityKey(Task task) {
+    final due = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+    return '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${_normalizedRepeatFrequency(task.repeatFrequency)}|${_formatKey(due)}';
+  }
   Future<void> _runMigrationsIfNeeded() async {
     final storedVersion = _readStoredSchemaVersion();
     if (storedVersion >= _currentSchemaVersion) return;
@@ -196,7 +247,7 @@ class HiveService {
     final key = _formatKey(date);
     final tasks = getTasksForDate(date);
     tasks.add(task);
-    await _box.put(key, tasks);
+    await _box.put(key, _dedupeRecurringTasksForDate(tasks));
   }
 
   Future<void> updateTask(DateTime date, int index, Task task) async {
@@ -205,7 +256,7 @@ class HiveService {
     if (index < 0 || index >= tasks.length) return;
 
     tasks[index] = task;
-    await _box.put(key, tasks);
+    await _box.put(key, _dedupeRecurringTasksForDate(tasks));
 
     await _handleRecurringIfNeeded(updated: task);
   }
@@ -231,7 +282,7 @@ class HiveService {
     );
 
     tasks[index] = updatedTask;
-    await _box.put(key, tasks);
+    await _box.put(key, _dedupeRecurringTasksForDate(tasks));
 
     await _handleRecurringIfNeeded(updated: updatedTask);
   }
@@ -265,7 +316,7 @@ class HiveService {
       nextDateTasks.add(nextOccurrence);
     }
 
-    await _box.put(nextKey, nextDateTasks);
+    await _box.put(nextKey, _dedupeRecurringTasksForDate(nextDateTasks));
   }
 
   bool _isTerminalStatus(String status) {
@@ -313,7 +364,7 @@ class HiveService {
         final candidate = tasks[i];
         if (identical(candidate, original) || _matchesTaskIdentity(candidate, original)) {
           tasks[i] = updated;
-          await _box.put(key, tasks);
+          await _box.put(key, _dedupeRecurringTasksForDate(tasks));
           await _handleRecurringIfNeeded(updated: updated);
           return true;
         }
@@ -363,7 +414,7 @@ class HiveService {
       if (tasks == null) continue;
 
       result[DateTime(parsedDate.year, parsedDate.month, parsedDate.day)] =
-          tasks.cast<Task>().toList();
+          _dedupeRecurringTasksForDate(tasks.cast<Task>().toList());
     }
 
     return result;
