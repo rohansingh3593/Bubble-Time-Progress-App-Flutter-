@@ -249,23 +249,21 @@ class HiveService {
     final nextKey = _formatKey(nextDueDate);
     final nextDateTasks = getTasksForDate(nextDueDate);
 
-    final alreadyExists = nextDateTasks.any(
-      (task) =>
-          task.task == updated.task &&
-          _isSameDate(task.dueDate, nextDueDate) &&
-          task.repeatTask == true &&
-          _normalizedRepeatFrequency(task.repeatFrequency) == _normalizedRepeatFrequency(updated.repeatFrequency),
+    final nextOccurrence = updated.copyWith(
+      dueDate: nextDueDate,
+      done: false,
+      status: 'Not Started',
     );
 
-    if (alreadyExists) return;
-
-    nextDateTasks.add(
-      updated.copyWith(
-        dueDate: nextDueDate,
-        done: false,
-        status: 'Not Started',
-      ),
+    final existingIndex = nextDateTasks.indexWhere(
+      (task) => _isSameRecurringTaskIdentity(task, nextOccurrence),
     );
+
+    if (existingIndex >= 0) {
+      nextDateTasks[existingIndex] = nextOccurrence;
+    } else {
+      nextDateTasks.add(nextOccurrence);
+    }
 
     await _box.put(nextKey, nextDateTasks);
   }
@@ -331,8 +329,16 @@ class HiveService {
         a.dueDate.month == b.dueDate.month &&
         a.dueDate.day == b.dueDate.day &&
         a.priority == b.priority &&
-        a.status == b.status &&
         a.category == b.category;
+  }
+
+  bool _isSameRecurringTaskIdentity(Task a, Task b) {
+    return a.repeatTask &&
+        b.repeatTask &&
+        a.task.trim().toLowerCase() == b.task.trim().toLowerCase() &&
+        a.category.trim().toLowerCase() == b.category.trim().toLowerCase() &&
+        _normalizedRepeatFrequency(a.repeatFrequency) == _normalizedRepeatFrequency(b.repeatFrequency) &&
+        _isSameDate(a.dueDate, b.dueDate);
   }
 
   Map<String, int> getTaskSummaryForDate(DateTime date) {
