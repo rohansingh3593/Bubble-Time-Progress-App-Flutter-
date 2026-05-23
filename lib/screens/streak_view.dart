@@ -769,8 +769,8 @@ class _RecurringTaskListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dailyHabits = habits.where(_isDailyStreakBoardHabit).toList();
-    final boardDates = _buildStreakBoardDates(dailyHabits, today);
+    final boardHabits = habits.where(_isStreakBoardHabit).toList();
+    final boardDates = _buildStreakBoardDates(boardHabits, today);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -781,16 +781,16 @@ class _RecurringTaskListView extends StatelessWidget {
           const Text('Daily Streak Board', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
           const Text(
-            'Active daily recurring habits only. Completed days use the selected task color, missed or cancelled days stay red, and future or unset days stay neutral.',
+            'Active daily and weekly recurring habits. Completed days use the selected task color, missed or cancelled days stay red, and future or unset days stay neutral.',
             style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 14),
-          if (dailyHabits.isEmpty)
-            const _EmptyState(message: 'No active daily recurring habits yet. Add a daily repeating task to build a streak board.')
+          if (boardHabits.isEmpty)
+            const _EmptyState(message: 'No active daily or weekly recurring habits yet. Add a repeating task to build a streak board.')
           else
             _DailyStreakBoard(
               hiveService: hiveService,
-              habits: dailyHabits,
+              habits: boardHabits,
               dates: boardDates,
               today: today,
             ),
@@ -1030,7 +1030,7 @@ class _StreakBoardTaskNameCell extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(habit.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w900, fontSize: layout.titleFontSize)),
-                  Text('${habit.currentStreak} day streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700, fontSize: layout.streakFontSize)),
+                  Text('${habit.currentStreak} ${habit.repeatFrequency == 'Weekly' ? 'wk' : 'day'} streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700, fontSize: layout.streakFontSize)),
                 ],
               ),
             ),
@@ -1083,7 +1083,10 @@ class _StreakBoardActivityRow extends StatelessWidget {
 
 double _clampDouble(double value, double min, double max) => value < min ? min : value > max ? max : value;
 
-bool _isDailyStreakBoardHabit(_HabitTracker habit) => _HabitTracker._normalizedRepeatFrequency(habit.repeatFrequency) == 'daily';
+bool _isStreakBoardHabit(_HabitTracker habit) {
+  final frequency = _HabitTracker._normalizedRepeatFrequency(habit.repeatFrequency);
+  return frequency == 'daily' || frequency == 'weekly';
+}
 
 List<DateTime> _buildStreakBoardDates(List<_HabitTracker> habits, DateTime today) {
   if (habits.isEmpty) return const <DateTime>[];
@@ -1424,8 +1427,10 @@ class _HabitTracker {
     final today = _dateOnly(DateTime.now());
     final task = tasksByDate[day];
 
+    final isDaily = _normalizedRepeatFrequency(repeatFrequency) == 'daily';
+
     if (task == null) {
-      if (_normalizedRepeatFrequency(repeatFrequency) == 'daily' && !day.isBefore(firstTrackedDate) && !day.isAfter(today)) {
+      if (isDaily && !day.isBefore(firstTrackedDate) && !day.isAfter(today)) {
         return _HabitDayStatus.missed;
       }
       return _HabitDayStatus.none;
@@ -1434,8 +1439,7 @@ class _HabitTracker {
     if (_isTaskCompleted(task)) return _HabitDayStatus.completed;
     if (_isTaskCancelled(task)) return _HabitDayStatus.cancelled;
     if (_isTaskMissed(task)) return _HabitDayStatus.missed;
-    if (_normalizedRepeatFrequency(repeatFrequency) == 'daily' && !day.isAfter(today)) return _HabitDayStatus.missed;
-    if (day.isBefore(today)) return _HabitDayStatus.missed;
+    if (isDaily && !day.isAfter(today)) return _HabitDayStatus.missed;
     return _HabitDayStatus.none;
   }
 
