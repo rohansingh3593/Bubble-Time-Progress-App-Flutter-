@@ -1231,7 +1231,7 @@ class _HabitCard extends StatelessWidget {
                   icon: Icons.check_circle,
                   color: taskColor,
                   selected: todayStatus == _HabitDayStatus.completed,
-                  onPressed: () => _setTodayStatus(_HabitDayStatus.completed),
+                  onPressed: () => _setTodayStatus(context, _HabitDayStatus.completed),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1241,7 +1241,7 @@ class _HabitCard extends StatelessWidget {
                   icon: Icons.cancel,
                   color: Colors.redAccent,
                   selected: todayStatus == _HabitDayStatus.cancelled,
-                  onPressed: () => _setTodayStatus(_HabitDayStatus.cancelled),
+                  onPressed: () => _setTodayStatus(context, _HabitDayStatus.cancelled),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1251,7 +1251,7 @@ class _HabitCard extends StatelessWidget {
                   icon: Icons.remove_circle,
                   color: Colors.redAccent,
                   selected: todayStatus == _HabitDayStatus.missed,
-                  onPressed: () => _setTodayStatus(_HabitDayStatus.missed),
+                  onPressed: () => _setTodayStatus(context, _HabitDayStatus.missed),
                 ),
               ),
             ],
@@ -1283,7 +1283,7 @@ class _HabitCard extends StatelessWidget {
     }
   }
 
-  void _showLockedMessage(Task existing) {
+  void _showLockedMessage(BuildContext context, Task existing) {
     final normalized = existing.status.trim().toLowerCase();
     final statusLabel = existing.done || normalized == 'completed' ? 'completed' : existing.status.toLowerCase();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1291,10 +1291,10 @@ class _HabitCard extends StatelessWidget {
     );
   }
 
-  Future<void> _setTodayStatus(_HabitDayStatus status) async {
+  Future<void> _setTodayStatus(BuildContext context, _HabitDayStatus status) async {
     final existing = habit.taskFor(today);
     if (existing != null && _isOccurrenceLocked(existing)) {
-      _showLockedMessage(existing);
+      _showLockedMessage(context, existing);
       return;
     }
     final updated = (existing ?? habit.template).copyWith(
@@ -1819,7 +1819,7 @@ class _TaskPerformanceDetailView extends StatelessWidget {
               const SizedBox(height: 14),
               _TaskPerformanceActions(
                 color: taskColor,
-                onDone: () => _markTodayDone(habit),
+                onDone: () => _markTodayDone(context, habit),
                 onAddNote: () => _addNote(context, habit),
                 onAddPicture: () => _addPicture(context, habit),
               ),
@@ -1861,7 +1861,7 @@ class _TaskPerformanceDetailView extends StatelessWidget {
     }
   }
 
-  void _showLockedMessage(Task existing, _HabitTracker habit) {
+  void _showLockedMessage(BuildContext context, Task existing, _HabitTracker habit) {
     final normalized = existing.status.trim().toLowerCase();
     final statusLabel = existing.done || normalized == 'completed' ? 'completed' : existing.status.toLowerCase();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1869,10 +1869,10 @@ class _TaskPerformanceDetailView extends StatelessWidget {
     );
   }
 
-  Future<void> _markTodayDone(_HabitTracker habit) async {
+  Future<void> _markTodayDone(BuildContext context, _HabitTracker habit) async {
     final existing = habit.taskFor(today);
     if (existing != null && _isOccurrenceLocked(existing)) {
-      _showLockedMessage(existing, habit);
+      _showLockedMessage(context, existing, habit);
       return;
     }
     final updated = (existing ?? habit.template).copyWith(
