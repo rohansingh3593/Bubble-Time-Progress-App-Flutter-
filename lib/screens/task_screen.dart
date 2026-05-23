@@ -26,17 +26,57 @@ class _TaskScreenState extends State<TaskScreen> {
 
 
   /// Edits task with full form and saves updates.
+
+  String _normalizedRepeatFrequency(Task task) {
+    final normalized = task.repeatFrequency?.trim().toLowerCase();
+    switch (normalized) {
+      case 'daily':
+      case 'weekly':
+      case 'monthly':
+      case 'yearly':
+        return normalized!;
+      default:
+        return '';
+    }
+  }
+
+  bool _isRecurringTask(Task task) => task.repeatTask && _normalizedRepeatFrequency(task).isNotEmpty;
+
+  Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
+    return showDialog<Task>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Update ${task.task} status'),
+        content: const Text('Recurring tasks keep their details fixed. Update only this occurrence status.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed')),
+            child: const Text('Mark Missed'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed')),
+            child: const Text('Mark Completed'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _editTask(int index) async {
     final tasks = widget.hiveService.getTasksForDate(widget.date);
     if (index < 0 || index >= tasks.length) return;
+    final currentTask = tasks[index];
 
-    final updated = await showTaskFormDialog(
-      context,
-      date: widget.date,
-      initialTask: tasks[index],
-      title: 'Update Task',
-      actionLabel: 'Save Task',
-    );
+    final updated = _isRecurringTask(currentTask)
+        ? await _showRecurringStatusUpdateDialog(currentTask)
+        : await showTaskFormDialog(
+            context,
+            date: widget.date,
+            initialTask: currentTask,
+            title: 'Update Task',
+            actionLabel: 'Save Task',
+          );
 
     if (updated != null) {
       await widget.hiveService.updateTask(widget.date, index, updated);

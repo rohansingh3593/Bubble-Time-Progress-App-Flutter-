@@ -44,14 +44,53 @@ class _YearViewState extends State<YearView> {
   }
 
 
-  Future<void> _editTask(Task task) async {
-    final updated = await showTaskFormDialog(
-      context,
-      date: task.dueDate,
-      initialTask: task,
-      title: 'Update Task',
-      actionLabel: 'Save Task',
+
+  String _normalizedRepeatFrequency(Task task) {
+    final normalized = task.repeatFrequency?.trim().toLowerCase();
+    switch (normalized) {
+      case 'daily':
+      case 'weekly':
+      case 'monthly':
+      case 'yearly':
+        return normalized!;
+      default:
+        return '';
+    }
+  }
+
+  bool _isRecurringTask(Task task) => task.repeatTask && _normalizedRepeatFrequency(task).isNotEmpty;
+
+  Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
+    return showDialog<Task>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Update ${task.task} status'),
+        content: const Text('Recurring tasks keep their details fixed. Update only this occurrence status.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed')),
+            child: const Text('Mark Missed'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed')),
+            child: const Text('Mark Completed'),
+          ),
+        ],
+      ),
     );
+  }
+
+  Future<void> _editTask(Task task) async {
+    final updated = _isRecurringTask(task)
+        ? await _showRecurringStatusUpdateDialog(task)
+        : await showTaskFormDialog(
+            context,
+            date: task.dueDate,
+            initialTask: task,
+            title: 'Update Task',
+            actionLabel: 'Save Task',
+          );
 
     if (updated != null) {
       await widget.hiveService.updateTaskByReference(task, updated);
