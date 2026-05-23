@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/colors.dart';
 import '../services/hive_service.dart';
+import '../models/task_model.dart';
 import '../widgets/quick_add_task_dialog.dart';
 
 class TaskScreen extends StatefulWidget {
