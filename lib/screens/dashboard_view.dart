@@ -50,28 +50,29 @@ class _DashboardViewState extends State<DashboardView> {
           final todayStart = DateTime(today.year, today.month, today.day);
           final allByDate = widget.hiveService.getAllTasksByDate();
           final allTasks = allByDate.values.expand((list) => list).toList();
+          final dashboardTasks = _dedupeTasksForDashboard(allTasks);
           final rankProfile = RankProfile.calculate(
             username: widget.hiveService.getUsername(),
             allTasksByDate: allByDate,
             journalEntries: widget.hiveService.getAllJournalEntries(),
           );
 
-          final summary = _buildSummary(allTasks, todayStart);
-          final scopedTaskCounts = _buildScopedTaskCounts(allTasks, todayStart);
+          final summary = _buildSummary(dashboardTasks, todayStart);
+          final scopedTaskCounts = _buildScopedTaskCounts(dashboardTasks, todayStart);
           final yearProgress = _buildYearProgress(todayStart);
           final timeProgress = _buildTimeProgress(today);
-          final priorityCounts = _countByField(allTasks, (t) => t.priority, _priorityOrder);
-          final statusCounts = _countByField(allTasks, (t) => t.status, _statusOrder);
-          final categoryCounts = _countByField(allTasks, (t) => t.category, const []);
+          final priorityCounts = _countByField(dashboardTasks, (t) => t.priority, _priorityOrder);
+          final statusCounts = _countByField(dashboardTasks, (t) => t.status, _statusOrder);
+          final categoryCounts = _countByField(dashboardTasks, (t) => t.category, const []);
           final delegatedCounts = _countByField(
-            allTasks,
+            dashboardTasks,
             (t) => (t.delegatedTo == null || t.delegatedTo!.trim().isEmpty)
                 ? 'Unassigned'
                 : t.delegatedTo!.trim(),
             const [],
           );
 
-          final todayTasks = allTasks
+          final todayTasks = dashboardTasks
               .where((task) => _isSameDay(task.dueDate, todayStart))
               .toList();
 
@@ -85,16 +86,16 @@ class _DashboardViewState extends State<DashboardView> {
           _selectedPerson = personOptions.contains(_selectedPerson) ? _selectedPerson : 'All';
           _selectedCategory = categoryOptions.contains(_selectedCategory) ? _selectedCategory : 'All';
 
-          final priorityTasks = _filterBy(allTasks, _selectedPriority, (task) => task.priority);
-          final statusTasks = _filterBy(allTasks, _selectedStatus, (task) => task.status);
+          final priorityTasks = _filterBy(dashboardTasks, _selectedPriority, (task) => task.priority);
+          final statusTasks = _filterBy(dashboardTasks, _selectedStatus, (task) => task.status);
           final personTasks = _filterBy(
-            allTasks,
+            dashboardTasks,
             _selectedPerson,
             (task) => (task.delegatedTo == null || task.delegatedTo!.trim().isEmpty)
                 ? 'Unassigned'
                 : task.delegatedTo!.trim(),
           );
-          final categoryTasks = _filterBy(allTasks, _selectedCategory, (task) => task.category);
+          final categoryTasks = _filterBy(dashboardTasks, _selectedCategory, (task) => task.category);
 
           return ListView(
             padding: const EdgeInsets.all(12),
@@ -165,6 +166,31 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
+
+
+  List<Task> _dedupeTasksForDashboard(List<Task> tasks) {
+    final oneTimeTasks = <Task>[];
+    final recurringByIdentity = <String, Task>{};
+
+    for (final task in tasks) {
+      if (!_isRecurringTask(task)) {
+        oneTimeTasks.add(task);
+        continue;
+      }
+
+      final key = _recurringDashboardKey(task);
+      final existing = recurringByIdentity[key];
+      if (existing == null || task.dueDate.isAfter(existing.dueDate)) {
+        recurringByIdentity[key] = task;
+      }
+    }
+
+    return [...oneTimeTasks, ...recurringByIdentity.values];
+  }
+
+  String _recurringDashboardKey(Task task) {
+    return '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${_normalizedRepeatFrequency(task)}|${(task.delegatedTo ?? '').trim().toLowerCase()}|${task.priority.trim().toLowerCase()}';
+  }
 
 
   void _openJournal() {
