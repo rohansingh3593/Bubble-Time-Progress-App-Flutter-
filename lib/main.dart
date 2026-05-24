@@ -7,6 +7,7 @@ import 'screens/year_view.dart';
 import 'screens/month_view.dart';
 import 'screens/week_view.dart';
 import 'screens/day_view.dart';
+import 'screens/streak_view.dart';
 import 'constants/colors.dart';
 
 void main() async {
@@ -86,6 +87,7 @@ class _MainScreenState extends State<MainScreen> {
       MonthView(hiveService: widget.hiveService),
       WeekView(hiveService: widget.hiveService),
       DayView(hiveService: widget.hiveService),
+      StreakView(hiveService: widget.hiveService),
     ];
   }
 
@@ -100,7 +102,12 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _screens,
+        children: _screens.asMap().entries.map((entry) {
+          return HeroMode(
+            enabled: entry.key == _selectedIndex,
+            child: entry.value,
+          );
+        }).toList(),
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
@@ -123,6 +130,10 @@ class _MainScreenState extends State<MainScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.today),
             label: 'Day',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.local_fire_department),
+            label: 'Streak',
           ),
         ],
         currentIndex: _selectedIndex,

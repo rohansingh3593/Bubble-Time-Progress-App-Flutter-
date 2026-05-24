@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
+import '../widgets/rank_profile_card.dart';
+import 'journal_view.dart';
+import 'journey_timeline_view.dart';
 
 class DashboardView extends StatefulWidget {
   final HiveService hiveService;
@@ -46,23 +50,29 @@ class _DashboardViewState extends State<DashboardView> {
           final todayStart = DateTime(today.year, today.month, today.day);
           final allByDate = widget.hiveService.getAllTasksByDate();
           final allTasks = allByDate.values.expand((list) => list).toList();
+          final dashboardTasks = _dedupeTasksForDashboard(allTasks);
+          final rankProfile = RankProfile.calculate(
+            username: widget.hiveService.getUsername(),
+            allTasksByDate: allByDate,
+            journalEntries: widget.hiveService.getAllJournalEntries(),
+          );
 
-          final summary = _buildSummary(allTasks, todayStart);
-          final scopedTaskCounts = _buildScopedTaskCounts(allTasks, todayStart);
+          final summary = _buildSummary(dashboardTasks, todayStart);
+          final scopedTaskCounts = _buildScopedTaskCounts(dashboardTasks, todayStart);
           final yearProgress = _buildYearProgress(todayStart);
           final timeProgress = _buildTimeProgress(today);
-          final priorityCounts = _countByField(allTasks, (t) => t.priority, _priorityOrder);
-          final statusCounts = _countByField(allTasks, (t) => t.status, _statusOrder);
-          final categoryCounts = _countByField(allTasks, (t) => t.category, const []);
+          final priorityCounts = _countByField(dashboardTasks, (t) => t.priority, _priorityOrder);
+          final statusCounts = _countByField(dashboardTasks, (t) => t.status, _statusOrder);
+          final categoryCounts = _countByField(dashboardTasks, (t) => t.category, const []);
           final delegatedCounts = _countByField(
-            allTasks,
+            dashboardTasks,
             (t) => (t.delegatedTo == null || t.delegatedTo!.trim().isEmpty)
                 ? 'Unassigned'
                 : t.delegatedTo!.trim(),
             const [],
           );
 
-          final todayTasks = allTasks
+          final todayTasks = dashboardTasks
               .where((task) => _isSameDay(task.dueDate, todayStart))
               .toList();
 
@@ -76,20 +86,27 @@ class _DashboardViewState extends State<DashboardView> {
           _selectedPerson = personOptions.contains(_selectedPerson) ? _selectedPerson : 'All';
           _selectedCategory = categoryOptions.contains(_selectedCategory) ? _selectedCategory : 'All';
 
-          final priorityTasks = _filterBy(allTasks, _selectedPriority, (task) => task.priority);
-          final statusTasks = _filterBy(allTasks, _selectedStatus, (task) => task.status);
+          final priorityTasks = _filterBy(dashboardTasks, _selectedPriority, (task) => task.priority);
+          final statusTasks = _filterBy(dashboardTasks, _selectedStatus, (task) => task.status);
           final personTasks = _filterBy(
-            allTasks,
+            dashboardTasks,
             _selectedPerson,
             (task) => (task.delegatedTo == null || task.delegatedTo!.trim().isEmpty)
                 ? 'Unassigned'
                 : task.delegatedTo!.trim(),
           );
-          final categoryTasks = _filterBy(allTasks, _selectedCategory, (task) => task.category);
+          final categoryTasks = _filterBy(dashboardTasks, _selectedCategory, (task) => task.category);
 
           return ListView(
             padding: const EdgeInsets.all(12),
             children: [
+              RankProfileCard(
+                profile: rankProfile,
+                onUsernameChanged: widget.hiveService.setUsername,
+                onTap: _openJournal,
+                onJourneyTap: _openJourneyTimeline,
+              ),
+              const SizedBox(height: 12),
               _summaryHeader(summary),
               const SizedBox(height: 12),
               _scopeTaskHeader(scopedTaskCounts),
@@ -150,14 +167,149 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
 
-  Future<void> _editTask(Task task) async {
-    final updated = await showTaskFormDialog(
-      context,
-      date: task.dueDate,
-      initialTask: task,
-      title: 'Update Task',
-      actionLabel: 'Save Task',
+
+  List<Task> _dedupeTasksForDashboard(List<Task> tasks) {
+    final oneTimeTasks = <Task>[];
+    final recurringByIdentity = <String, Task>{};
+
+    for (final task in tasks) {
+      if (!_isRecurringTask(task)) {
+        oneTimeTasks.add(task);
+        continue;
+      }
+
+      final key = _recurringDashboardKey(task);
+      final existing = recurringByIdentity[key];
+      if (existing == null) {
+        recurringByIdentity[key] = task;
+        continue;
+      }
+
+      final existingDate = DateTime(existing.dueDate.year, existing.dueDate.month, existing.dueDate.day);
+      final incomingDate = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+      if (incomingDate.isAfter(existingDate)) {
+        recurringByIdentity[key] = task;
+        continue;
+      }
+
+      if (incomingDate.isAtSameMomentAs(existingDate)) {
+        final existingDone = existing.done || existing.status.trim().toLowerCase() == 'completed';
+        final incomingDone = task.done || task.status.trim().toLowerCase() == 'completed';
+        if (!existingDone && incomingDone) {
+          recurringByIdentity[key] = task;
+        }
+      }
+    }
+
+    return [...oneTimeTasks, ...recurringByIdentity.values];
+  }
+
+  String _recurringDashboardKey(Task task) {
+    return '${task.task.trim().toLowerCase()}|${_normalizedRepeatFrequency(task)}';
+  }
+
+
+  void _openJournal() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => JournalView(hiveService: widget.hiveService),
+      ),
     );
+  }
+
+  void _openJourneyTimeline() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => JourneyTimelineView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+
+  String _normalizedRepeatFrequency(Task task) {
+    final normalized = task.repeatFrequency?.trim().toLowerCase();
+    switch (normalized) {
+      case 'daily':
+      case 'weekly':
+      case 'monthly':
+      case 'yearly':
+        return normalized!;
+      default:
+        return '';
+    }
+  }
+
+  bool _isRecurringTask(Task task) => task.repeatTask && _normalizedRepeatFrequency(task).isNotEmpty;
+
+
+  String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
+
+  bool _isOccurrenceLocked(Task task) {
+    final status = _normalizedStatus(task);
+    return task.done || status == 'completed' || status == 'cancelled' || status == 'missed' || status == 'overdue';
+  }
+
+  String _occurrenceLabel(Task task) {
+    switch (_normalizedRepeatFrequency(task)) {
+      case 'daily':
+        return 'today';
+      case 'weekly':
+        return 'this week';
+      case 'monthly':
+        return 'this month';
+      case 'yearly':
+        return 'this year';
+      default:
+        return 'this period';
+    }
+  }
+
+  Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
+    if (_isOccurrenceLocked(task)) {
+      final period = _occurrenceLabel(task);
+      final statusLabel = task.done || _normalizedStatus(task) == 'completed' ? 'completed' : task.status.toLowerCase();
+      return showDialog<Task>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Already updated'),
+          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+          ],
+        ),
+      );
+    }
+
+    return showDialog<Task>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Update ${task.task} status'),
+        content: const Text('Recurring tasks keep their details fixed. Update only this occurrence status.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed')),
+            child: const Text('Mark Missed'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed')),
+            child: const Text('Mark Completed'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editTask(Task task) async {
+    final updated = _isRecurringTask(task)
+        ? await _showRecurringStatusUpdateDialog(task)
+        : await showTaskFormDialog(
+            context,
+            date: task.dueDate,
+            initialTask: task,
+            title: 'Update Task',
+            actionLabel: 'Save Task',
+          );
 
     if (updated != null) {
       await widget.hiveService.updateTaskByReference(task, updated);
