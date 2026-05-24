@@ -180,8 +180,24 @@ class _DashboardViewState extends State<DashboardView> {
 
       final key = _recurringDashboardKey(task);
       final existing = recurringByIdentity[key];
-      if (existing == null || task.dueDate.isAfter(existing.dueDate)) {
+      if (existing == null) {
         recurringByIdentity[key] = task;
+        continue;
+      }
+
+      final existingDate = DateTime(existing.dueDate.year, existing.dueDate.month, existing.dueDate.day);
+      final incomingDate = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+      if (incomingDate.isAfter(existingDate)) {
+        recurringByIdentity[key] = task;
+        continue;
+      }
+
+      if (incomingDate.isAtSameMomentAs(existingDate)) {
+        final existingDone = existing.done || existing.status.trim().toLowerCase() == 'completed';
+        final incomingDone = task.done || task.status.trim().toLowerCase() == 'completed';
+        if (!existingDone && incomingDone) {
+          recurringByIdentity[key] = task;
+        }
       }
     }
 
@@ -189,7 +205,7 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   String _recurringDashboardKey(Task task) {
-    return '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${_normalizedRepeatFrequency(task)}|${(task.delegatedTo ?? '').trim().toLowerCase()}|${task.priority.trim().toLowerCase()}';
+    return '${task.task.trim().toLowerCase()}|${_normalizedRepeatFrequency(task)}';
   }
 
 
