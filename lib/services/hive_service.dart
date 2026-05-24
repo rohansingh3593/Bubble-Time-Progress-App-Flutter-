@@ -33,9 +33,50 @@ class HiveService {
 
     _box = await Hive.openBox<List>(_boxName);
     await _runMigrationsIfNeeded();
+    await _normalizeTaskNamesOnStartup();
     await _dedupeRecurringTasksOnStartup();
   }
 
+
+
+  Future<void> _normalizeTaskNamesOnStartup() async {
+    for (final key in _box.keys) {
+      if (key is! String) continue;
+      if (DateTime.tryParse(key) == null) continue;
+      final rawList = _box.get(key);
+      if (rawList == null) continue;
+      final tasks = rawList.cast<Task>().toList();
+      bool changed = false;
+      final normalized = tasks.map((task) {
+        final title = _toTitleCase(task.task);
+        if (title != task.task) {
+          changed = true;
+          return task.copyWith(task: title);
+        }
+        return task;
+      }).toList();
+      if (changed) {
+        await _box.put(key, normalized);
+      }
+    }
+  }
+
+  String _toTitleCase(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return trimmed;
+    final words = trimmed.split(RegExp(r'\s+'));
+    return words
+        .map((word) {
+          if (word.isEmpty) return word;
+          final lower = word.toLowerCase();
+          return lower[0].toUpperCase() + lower.substring(1);
+        })
+        .join(' ');
+  }
+
+  Task _withNormalizedTaskName(Task task) {
+    return task.copyWith(task: _toTitleCase(task.task));
+  }
 
   Future<void> _dedupeRecurringTasksOnStartup() async {
     for (final key in _box.keys) {
@@ -246,13 +287,15 @@ class HiveService {
   Future<void> addTask(DateTime date, Task task) async {
     final key = _formatKey(date);
     final tasks = getTasksForDate(date);
-    tasks.add(task);
+    final normalizedTask = _withNormalizedTaskName(task);
+    tasks.add(normalizedTask);
     await _box.put(key, _dedupeRecurringTasksForDate(tasks));
   }
 
   Future<void> updateTask(DateTime date, int index, Task task) async {
-    if (task.repeatTask) {
-      await _updateRecurringTaskForCurrentOccurrence(task);
+    final normalizedTask = _withNormalizedTaskName(task);
+    if (normalizedTask.repeatTask) {
+      await _updateRecurringTaskForCurrentOccurrence(normalizedTask);
       return;
     }
 
@@ -260,10 +303,10 @@ class HiveService {
     final tasks = getTasksForDate(date);
     if (index < 0 || index >= tasks.length) return;
 
-    tasks[index] = task;
+    tasks[index] = normalizedTask;
     await _box.put(key, _dedupeRecurringTasksForDate(tasks));
 
-    await _handleRecurringIfNeeded(updated: task);
+    await _handleRecurringIfNeeded(updated: normalizedTask);
   }
 
   Future<void> deleteTask(DateTime date, int index) async {
@@ -375,8 +418,9 @@ class HiveService {
 
   Future<bool> _updateRecurringTaskForCurrentOccurrence(Task updated) async {
     final now = DateTime.now();
-    final occurrenceDate = _currentOccurrenceDate(updated.repeatFrequency, now);
-    final normalizedUpdated = updated.copyWith(dueDate: occurrenceDate, repeatTask: true);
+    final normalizedTask = _withNormalizedTaskName(updated);
+    final occurrenceDate = _currentOccurrenceDate(normalizedTask.repeatFrequency, now);
+    final normalizedUpdated = normalizedTask.copyWith(dueDate: occurrenceDate, repeatTask: true);
     final key = _formatKey(occurrenceDate);
     final tasks = getTasksForDate(occurrenceDate);
 
@@ -393,8 +437,9 @@ class HiveService {
   }
 
   Future<bool> updateTaskByReference(Task original, Task updated) async {
-    if (updated.repeatTask) {
-      return _updateRecurringTaskForCurrentOccurrence(updated);
+    final normalizedUpdated = _withNormalizedTaskName(updated);
+    if (normalizedUpdated.repeatTask) {
+      return _updateRecurringTaskForCurrentOccurrence(normalizedUpdated);
     }
 
     for (final key in _box.keys) {
@@ -407,9 +452,9 @@ class HiveService {
       for (int i = 0; i < tasks.length; i++) {
         final candidate = tasks[i];
         if (identical(candidate, original) || _matchesTaskIdentity(candidate, original)) {
-          tasks[i] = updated;
+          tasks[i] = normalizedUpdated;
           await _box.put(key, _dedupeRecurringTasksForDate(tasks));
-          await _handleRecurringIfNeeded(updated: updated);
+          await _handleRecurringIfNeeded(updated: normalizedUpdated);
           return true;
         }
       }
