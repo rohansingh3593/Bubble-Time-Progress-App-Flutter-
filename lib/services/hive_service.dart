@@ -251,6 +251,11 @@ class HiveService {
   }
 
   Future<void> updateTask(DateTime date, int index, Task task) async {
+    if (task.repeatTask) {
+      await _updateRecurringTaskForCurrentOccurrence(task);
+      return;
+    }
+
     final key = _formatKey(date);
     final tasks = getTasksForDate(date);
     if (index < 0 || index >= tasks.length) return;
@@ -352,7 +357,46 @@ class HiveService {
   }
 
 
+  DateTime _currentOccurrenceDate(String? repeatFrequency, DateTime now) {
+    final day = DateTime(now.year, now.month, now.day);
+    switch (_normalizedRepeatFrequency(repeatFrequency)) {
+      case 'daily':
+        return day;
+      case 'weekly':
+        return day.subtract(Duration(days: day.weekday - 1)); // Monday
+      case 'monthly':
+        return DateTime(day.year, day.month, 1);
+      case 'yearly':
+        return DateTime(day.year, 1, 1);
+      default:
+        return day;
+    }
+  }
+
+  Future<bool> _updateRecurringTaskForCurrentOccurrence(Task updated) async {
+    final now = DateTime.now();
+    final occurrenceDate = _currentOccurrenceDate(updated.repeatFrequency, now);
+    final normalizedUpdated = updated.copyWith(dueDate: occurrenceDate, repeatTask: true);
+    final key = _formatKey(occurrenceDate);
+    final tasks = getTasksForDate(occurrenceDate);
+
+    final existingIndex = tasks.indexWhere((task) => _isSameRecurringTaskIdentity(task, normalizedUpdated));
+    if (existingIndex >= 0) {
+      tasks[existingIndex] = normalizedUpdated;
+    } else {
+      tasks.add(normalizedUpdated);
+    }
+
+    await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+    await _handleRecurringIfNeeded(updated: normalizedUpdated);
+    return true;
+  }
+
   Future<bool> updateTaskByReference(Task original, Task updated) async {
+    if (updated.repeatTask) {
+      return _updateRecurringTaskForCurrentOccurrence(updated);
+    }
+
     for (final key in _box.keys) {
       if (key is! String) continue;
 
