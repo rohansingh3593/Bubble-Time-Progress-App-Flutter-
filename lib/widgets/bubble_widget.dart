@@ -16,37 +16,39 @@ class BubbleWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bubbleColor = isHighlighted ? Colors.orange : color;
+
     return AspectRatio(
       aspectRatio: 1.0,
       child: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: color,
+          color: bubbleColor,
           border: isHighlighted
               ? Border.all(
-                  color: Colors.white,
-                  width: 3.0,
+                  color: Colors.orange.shade100,
+                  width: 2.5,
                 )
               : null,
           boxShadow: isHighlighted
               ? [
                   BoxShadow(
-                    color: Colors.white.withAlpha(128),
-                    spreadRadius: 2,
-                    blurRadius: 5,
+                    color: Colors.orange.withAlpha(120),
+                    spreadRadius: 1,
+                    blurRadius: 6,
                   ),
                 ]
               : null,
         ),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(50), // For ripple effect
+          borderRadius: BorderRadius.circular(50),
           child: Center(
             child: label != null
                 ? Text(
                     label!,
                     style: TextStyle(
-                      color: Colors.white,
+                      color: isHighlighted ? Colors.black87 : Colors.white,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),

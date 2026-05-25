@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import '../models/task_model.dart';
-import '../services/hive_service.dart';
 import '../constants/colors.dart';
+import '../services/hive_service.dart';
+import '../models/task_model.dart';
+import '../widgets/quick_add_task_dialog.dart';
 
 class TaskScreen extends StatefulWidget {
   final DateTime date;
@@ -18,52 +19,107 @@ class TaskScreen extends StatefulWidget {
 }
 
 class _TaskScreenState extends State<TaskScreen> {
-  /// Adds a new task with an inline dialog.
+  /// Adds a new task with full details dialog.
   /// No setState needed - reactive ValueListenableBuilder will trigger rebuild.
   Future<void> _addTaskWithDialog() async {
-    final controller = TextEditingController();
-    try {
-      final result = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Add Task'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(
-              hintText: 'Enter task description',
-              border: OutlineInputBorder(),
-            ),
-            autofocus: true,
-            maxLines: 2,
-            minLines: 1,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(controller.text),
-              child: const Text('Add Task'),
-            ),
-          ],
-        ),
-      );
+    await showQuickAddTaskDialog(context, widget.date, widget.hiveService);
+  }
 
-      if (result != null && result.trim().isNotEmpty) {
-        final task = Task(task: result.trim());
-        // No setState needed - reactive ValueListenableBuilder will trigger rebuild
-        await widget.hiveService.addTask(widget.date, task);
-      }
-    } finally {
-      controller.dispose();
+
+  /// Edits task with full form and saves updates.
+
+  String _normalizedRepeatFrequency(Task task) {
+    final normalized = task.repeatFrequency?.trim().toLowerCase();
+    switch (normalized) {
+      case 'daily':
+      case 'weekly':
+      case 'monthly':
+      case 'yearly':
+        return normalized!;
+      default:
+        return '';
     }
   }
 
-  /// Toggles task completion status.
-  /// No setState needed - reactive ValueListenableBuilder will trigger rebuild.
-  Future<void> _toggleTask(int index) async {
-    await widget.hiveService.toggleTaskStatus(widget.date, index);
+  bool _isRecurringTask(Task task) => task.repeatTask && _normalizedRepeatFrequency(task).isNotEmpty;
+
+
+  String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
+
+  bool _isOccurrenceLocked(Task task) {
+    final status = _normalizedStatus(task);
+    return task.done || status == 'completed' || status == 'cancelled' || status == 'missed' || status == 'overdue';
+  }
+
+  String _occurrenceLabel(Task task) {
+    switch (_normalizedRepeatFrequency(task)) {
+      case 'daily':
+        return 'today';
+      case 'weekly':
+        return 'this week';
+      case 'monthly':
+        return 'this month';
+      case 'yearly':
+        return 'this year';
+      default:
+        return 'this period';
+    }
+  }
+
+  Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
+    if (_isOccurrenceLocked(task)) {
+      final period = _occurrenceLabel(task);
+      final statusLabel = task.done || _normalizedStatus(task) == 'completed' ? 'completed' : task.status.toLowerCase();
+      return showDialog<Task>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Already updated'),
+          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+          ],
+        ),
+      );
+    }
+
+    return showDialog<Task>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Update ${task.task} status'),
+        content: const Text('Recurring tasks keep their details fixed. Update only this occurrence status.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed')),
+            child: const Text('Mark Missed'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed')),
+            child: const Text('Mark Completed'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editTask(int index) async {
+    final tasks = widget.hiveService.getTasksForDate(widget.date);
+    if (index < 0 || index >= tasks.length) return;
+    final currentTask = tasks[index];
+
+    final updated = _isRecurringTask(currentTask)
+        ? await _showRecurringStatusUpdateDialog(currentTask)
+        : await showTaskFormDialog(
+            context,
+            date: widget.date,
+            initialTask: currentTask,
+            title: 'Update Task',
+            actionLabel: 'Save Task',
+          );
+
+    if (updated != null) {
+      await widget.hiveService.updateTask(widget.date, index, updated);
+    }
   }
 
   /// Deletes a task with confirmation.
@@ -102,6 +158,14 @@ class _TaskScreenState extends State<TaskScreen> {
 
         return Container(
           padding: const EdgeInsets.all(16.0),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFFF7F3FF), Color(0xFFF3FBFF)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          ),
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.8,
           ),
@@ -129,23 +193,82 @@ class _TaskScreenState extends State<TaskScreen> {
                         itemCount: tasks.length,
                         itemBuilder: (context, index) {
                           final task = tasks[index];
-                          return ListTile(
-                            leading: Checkbox(
-                              value: task.done,
-                              onChanged: (_) => _toggleTask(index),
+                          final taskColor = Color(task.colorValue);
+                          final isCompleted = task.done || task.status == 'Completed';
+
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            elevation: 3,
+                            color: taskColor.withOpacity(0.08),
+                            shadowColor: taskColor.withOpacity(0.28),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              side: BorderSide(color: taskColor.withOpacity(isCompleted ? 0.65 : 0.32), width: 1.4),
                             ),
-                            title: Text(
-                              task.task,
-                              style: TextStyle(
-                                decoration: task.done
-                                    ? TextDecoration.lineThrough
-                                    : null,
-                                color: task.done ? Colors.grey : null,
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              leading: Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: taskColor.withOpacity(isCompleted ? 0.22 : 0.16),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: taskColor.withOpacity(0.45)),
+                                ),
+                                child: Icon(
+                                  isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                                  color: taskColor,
+                                ),
                               ),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deleteTask(index),
+                              title: Text(
+                                task.task,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                  color: isCompleted ? taskColor.withOpacity(0.72) : AppColors.textPrimary,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (task.description.isNotEmpty)
+                                    Text(task.description),
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      _TaskColorChip(label: task.priority, icon: Icons.flag, color: taskColor),
+                                      _TaskColorChip(label: task.status, icon: Icons.timeline, color: taskColor),
+                                      _TaskColorChip(label: task.category, icon: Icons.category, color: taskColor),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Due: ${task.dueDate.month}/${task.dueDate.day}/${task.dueDate.year}',
+                                    style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
+                                  ),
+                                  Text('Urgent: ${task.urgent ? 'Yes' : 'No'} • Important: ${task.important ? 'Yes' : 'No'} • ${task.estimatedMinutes} min'),
+                                  if (task.delegatedTo != null && task.delegatedTo!.isNotEmpty)
+                                    Text('Delegate: ${task.delegatedTo}'),
+                                  if (task.repeatTask)
+                                    Text('Repeats: ${task.repeatFrequency ?? 'Daily'}'),
+                                ],
+                              ),
+                              trailing: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(Icons.edit, color: taskColor),
+                                    onPressed: () => _editTask(index),
+                                    tooltip: 'Update task',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    onPressed: () => _deleteTask(index),
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         },
@@ -163,6 +286,34 @@ class _TaskScreenState extends State<TaskScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class _TaskColorChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const _TaskColorChip({required this.label, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.28)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w800)),
+        ],
+      ),
     );
   }
 }

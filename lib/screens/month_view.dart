@@ -3,7 +3,7 @@ import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
-import 'task_screen.dart';
+import '../models/task_model.dart';
 
 class MonthView extends StatefulWidget {
   final HiveService hiveService;
@@ -16,6 +16,7 @@ class MonthView extends StatefulWidget {
 
 class _MonthViewState extends State<MonthView> {
   late DateTime _currentMonth;
+  bool _showMonthlyTasks = true;
 
   @override
   void initState() {
@@ -37,21 +38,110 @@ class _MonthViewState extends State<MonthView> {
     }
   }
 
-  void _showTaskScreen(DateTime date) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        expand: false,
-        builder: (context, scrollController) => SingleChildScrollView(
-          controller: scrollController,
-          child: TaskScreen(
-            date: date,
-            hiveService: widget.hiveService,
-          ),
+  Future<void> _openQuickAddForDate(DateTime date) async {
+    final selectedDate = DateTime(date.year, date.month, date.day);
+    final task = await showTaskFormDialog(
+      context,
+      date: selectedDate,
+      title: 'Add Task',
+      actionLabel: 'Save Task',
+    );
+
+    if (task != null) {
+      await widget.hiveService.addTask(selectedDate, task);
+    }
+  }
+
+
+
+  String _normalizedRepeatFrequency(Task task) {
+    final normalized = task.repeatFrequency?.trim().toLowerCase();
+    switch (normalized) {
+      case 'daily':
+      case 'weekly':
+      case 'monthly':
+      case 'yearly':
+        return normalized!;
+      default:
+        return '';
+    }
+  }
+
+  bool _isRecurringTask(Task task) => task.repeatTask && _normalizedRepeatFrequency(task).isNotEmpty;
+
+
+  String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
+
+  bool _isOccurrenceLocked(Task task) {
+    final status = _normalizedStatus(task);
+    return task.done || status == 'completed' || status == 'cancelled' || status == 'missed' || status == 'overdue';
+  }
+
+  String _occurrenceLabel(Task task) {
+    switch (_normalizedRepeatFrequency(task)) {
+      case 'daily':
+        return 'today';
+      case 'weekly':
+        return 'this week';
+      case 'monthly':
+        return 'this month';
+      case 'yearly':
+        return 'this year';
+      default:
+        return 'this period';
+    }
+  }
+
+  Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
+    if (_isOccurrenceLocked(task)) {
+      final period = _occurrenceLabel(task);
+      final statusLabel = task.done || _normalizedStatus(task) == 'completed' ? 'completed' : task.status.toLowerCase();
+      return showDialog<Task>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Already updated'),
+          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+          ],
         ),
+      );
+    }
+
+    return showDialog<Task>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Update ${task.task} status'),
+        content: const Text('Recurring tasks keep their details fixed. Update only this occurrence status.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed')),
+            child: const Text('Mark Missed'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed')),
+            child: const Text('Mark Completed'),
+          ),
+        ],
       ),
     );
+  }
+
+  Future<void> _editTask(Task task) async {
+    final updated = _isRecurringTask(task)
+        ? await _showRecurringStatusUpdateDialog(task)
+        : await showTaskFormDialog(
+            context,
+            date: task.dueDate,
+            initialTask: task,
+            title: 'Update Task',
+            actionLabel: 'Save Task',
+          );
+
+    if (updated != null) {
+      await widget.hiveService.updateTaskByReference(task, updated);
+    }
   }
 
   List<String> _getDayHeaders() {
@@ -66,6 +156,93 @@ class _MonthViewState extends State<MonthView> {
 
   int _getDaysInMonth(DateTime month) {
     return DateTime(month.year, month.month + 1, 0).day;
+  }
+
+
+  Map<String, int> _getCompletedSummaryForDate(DateTime date) {
+    final completedTasks = widget.hiveService
+        .getTasksForDate(date)
+        .where((task) => task.status == 'Completed')
+        .toList();
+
+    return {
+      'completed': completedTasks.length,
+      'pending': 0,
+    };
+  }
+
+
+
+  List<Task> _getMonthlyRepeatingTasks() {
+    final allTasksByDate = widget.hiveService.getAllTasksByDate();
+    final monthStart = DateTime(_currentMonth.year, _currentMonth.month, 1);
+    final monthEnd = DateTime(_currentMonth.year, _currentMonth.month + 1, 0);
+
+    return allTasksByDate.values
+        .expand((tasks) => tasks)
+        .where((task) {
+          final dueDate = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+          return task.repeatTask &&
+              task.repeatFrequency == 'Monthly' &&
+              !dueDate.isBefore(monthStart) &&
+              !dueDate.isAfter(monthEnd);
+        })
+        .toList();
+  }
+
+  Widget _monthlyTasksPanel(List<Task> tasks) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFECE8E6),
+        border: Border.all(color: Colors.black38),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _showMonthlyTasks = !_showMonthlyTasks),
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Color(0xFFAED9AE),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      "MONTHLY TASKS",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(letterSpacing: 4, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Icon(_showMonthlyTasks ? Icons.expand_more : Icons.chevron_right, color: Colors.green[800]),
+                ],
+              ),
+            ),
+          ),
+          if (_showMonthlyTasks)
+            SizedBox(
+              height: 140,
+              child: tasks.isEmpty
+                  ? const Center(child: Text('Nothing for this month, Great Job !'))
+                  : ListView.builder(
+                      itemCount: tasks.length,
+                      itemBuilder: (context, index) {
+                        final task = tasks[index];
+                        return ListTile(
+                          dense: true,
+                          onTap: () => _editTask(task),
+                          title: Text(task.task),
+                          subtitle: Text('${task.priority} • ${task.status}'),
+                        );
+                      },
+                    ),
+            ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -104,6 +281,7 @@ class _MonthViewState extends State<MonthView> {
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
         builder: (context, box, _) {
+          final monthlyTasks = _getMonthlyRepeatingTasks();
           return Column(
             children: [
               // Day headers
@@ -136,19 +314,21 @@ class _MonthViewState extends State<MonthView> {
 
                     final day = index - weekdayOffset + 1;
                     final date = DateTime(_currentMonth.year, _currentMonth.month, day);
-                    final summary = widget.hiveService.getTaskSummaryForDate(date);
+                    final summary = _getCompletedSummaryForDate(date);
                     final isToday = isCurrentMonth && day == now.day;
                     final todayStart = DateTime(now.year, now.month, now.day);
 
                     return BubbleWidget(
                       color: _getBubbleColor(date, summary, todayStart),
                       isHighlighted: isToday,
-                      onTap: () => _showTaskScreen(date),
+                      onTap: () => _openQuickAddForDate(date),
                       label: day.toString(),
                     );
                   },
                 ),
               ),
+              const SizedBox(height: 8),
+              _monthlyTasksPanel(monthlyTasks),
             ],
           );
         },
