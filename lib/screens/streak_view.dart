@@ -1294,11 +1294,23 @@ class _HabitTrackerSection extends StatelessWidget {
               message: 'No habits found yet. Turn Repeat Task ON and choose Daily or Weekly to track routines like Go To Gym, Skincare, Study Daily, or Reading Habit.',
             )
           else
-            ...habits.map(
-              (habit) => _HabitCard(
-                hiveService: hiveService,
-                habit: habit,
-                today: today,
+            ...habits.asMap().entries.map(
+              (entry) => TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 1),
+                duration: Duration(milliseconds: 380 + (entry.key * 120)),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, child) => Opacity(
+                  opacity: value,
+                  child: Transform.translate(
+                    offset: Offset(0, 24 * (1 - value)),
+                    child: child,
+                  ),
+                ),
+                child: _HabitCard(
+                  hiveService: hiveService,
+                  habit: entry.value,
+                  today: today,
+                ),
               ),
             ),
         ],
@@ -1322,7 +1334,12 @@ class _HabitCard extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(22),
       onTap: () => _openTaskPerformanceDetail(context, hiveService, habit, today),
-      child: Container(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.97, end: 1),
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutBack,
+        builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+        child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(14),
         decoration: _softTaskDecoration(taskColor, radius: 22),
@@ -1403,6 +1420,7 @@ class _HabitCard extends StatelessWidget {
           ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1507,11 +1525,31 @@ class _HabitActivityGrid extends StatelessWidget {
             final blockColor = _habitActivityBlockColor(habit, date, status, taskColor);
             return Tooltip(
               message: '${date.month}/${date.day}: ${_statusLabel(status)}',
-              child: Container(
-                decoration: BoxDecoration(
-                  color: blockColor,
-                  borderRadius: BorderRadius.circular(5),
-                  border: isToday ? Border.all(color: taskColor, width: 2) : null,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.85, end: 1),
+                duration: Duration(milliseconds: 250 + (index * 14)),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, child) => Transform.scale(
+                  scale: isToday ? value * 1.03 : value,
+                  child: child,
+                ),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeOut,
+                  decoration: BoxDecoration(
+                    color: blockColor,
+                    borderRadius: BorderRadius.circular(5),
+                    boxShadow: isToday
+                        ? [
+                            BoxShadow(
+                              color: taskColor.withOpacity(0.30),
+                              blurRadius: 8,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
+                    border: isToday ? Border.all(color: taskColor, width: 2) : null,
+                  ),
                 ),
               ),
             );
