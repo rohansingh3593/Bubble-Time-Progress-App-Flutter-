@@ -919,14 +919,23 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
               ],
             ),
             const SizedBox(height: 8),
-            LinearProgressIndicator(
-              value: percent / 100,
-              minHeight: 8,
-              backgroundColor: Colors.grey[300],
-              color: const Color(0xFF8B6BD9),
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: percent / 100),
+              duration: const Duration(milliseconds: 1200),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) => LinearProgressIndicator(
+                value: value,
+                minHeight: 8,
+                backgroundColor: Colors.grey[300],
+                color: const Color(0xFF8B6BD9),
+              ),
             ),
             const SizedBox(height: 6),
-            Text('$percent% of year completed'),
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: percent.toDouble()),
+              duration: const Duration(milliseconds: 900),
+              builder: (context, value, child) => Text('${value.toInt()}% of year completed'),
+            ),
           ],
         ),
       ),
@@ -1002,9 +1011,20 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
     final remaining = values['remaining'] ?? 0;
     final percent = values['percent'] ?? 0;
 
-    return SizedBox(
-      width: 160,
-      child: Container(
+    final indexMap = {'Year': 0, 'Month': 1, 'Week': 2, 'Day': 3};
+    final index = indexMap[label] ?? 0;
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 400 + (index * 150)),
+      curve: Curves.easeOut,
+      builder: (context, intro, child) => Opacity(
+        opacity: intro,
+        child: Transform.translate(offset: Offset(0, 14 * (1 - intro)), child: child),
+      ),
+      child: SizedBox(
+        width: 160,
+        child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -1025,18 +1045,28 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
             Text('Passed: $passed / $total'),
             Text('Remaining: $remaining'),
             const SizedBox(height: 8),
-            LinearProgressIndicator(
-              value: percent / 100,
-              minHeight: 7,
-              backgroundColor: Colors.grey[300],
-              color: const Color(0xFF8B6BD9),
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: percent / 100),
+              duration: Duration(milliseconds: 900 + (index * 120)),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) => LinearProgressIndicator(
+                value: value,
+                minHeight: 7,
+                backgroundColor: Colors.grey[300],
+                color: const Color(0xFF8B6BD9),
+              ),
             ),
             const SizedBox(height: 6),
-            Text(
-              '$percent%',
-              style: const TextStyle(fontWeight: FontWeight.w600),
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: percent.toDouble()),
+              duration: Duration(milliseconds: 850 + (index * 120)),
+              builder: (context, value, child) => Text(
+                '${value.toInt()}%',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
           ],
+        ),
         ),
       ),
     );
