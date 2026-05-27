@@ -62,9 +62,15 @@ Future<Task?> showTaskFormDialog(
   bool selectedUrgent = initialTask?.urgent ?? false;
   bool selectedImportant = initialTask?.important ?? false;
   int selectedColorValue = initialTask?.colorValue ?? _taskColorOptions['Blue']!;
+  List<String> getStatusOptions() => repeatTask ? _routineStatusOptions : _statusOptions;
+  void syncStatusForTaskType() {
+    final options = getStatusOptions();
+    if (!options.contains(selectedStatus)) selectedStatus = options.first;
+  }
 
   if (!categories.contains(selectedCategory)) categories.add(selectedCategory);
   if (selectedDelegate != null && selectedDelegate!.isNotEmpty && !delegates.contains(selectedDelegate)) delegates.add(selectedDelegate!);
+  syncStatusForTaskType();
 
   try {
     return await showDialog<Task>(
@@ -356,10 +362,3 @@ Future<bool> showQuickAddTaskDialog(
 
   return false;
 }
-  List<String> getStatusOptions() => repeatTask ? _routineStatusOptions : _statusOptions;
-  void syncStatusForTaskType() {
-    final options = getStatusOptions();
-    if (!options.contains(selectedStatus)) selectedStatus = options.first;
-  }
-
-  syncStatusForTaskType();
