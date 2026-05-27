@@ -17,6 +17,7 @@ const List<String> _statusOptions = [
   'Cancelled',
   'Overdue',
 ];
+const List<String> _routineStatusOptions = ['Completed', 'Missed'];
 
 const List<String> _repeatFrequencyOptions = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
 
@@ -177,7 +178,7 @@ Future<Task?> showTaskFormDialog(
                 DropdownButtonFormField<String>(
                   value: selectedStatus,
                   decoration: InputDecoration(labelText: 'Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
-                  items: _statusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
+                  items: getStatusOptions().map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
                   onChanged: (value) {
                     if (value != null) setDialogState(() => selectedStatus = value);
                   },
@@ -248,6 +249,7 @@ Future<Task?> showTaskFormDialog(
                         hourSlot = null;
                         selectedDelegate = null;
                       }
+                      syncStatusForTaskType();
                     });
                   },
                 ),
@@ -354,3 +356,10 @@ Future<bool> showQuickAddTaskDialog(
 
   return false;
 }
+  List<String> getStatusOptions() => repeatTask ? _routineStatusOptions : _statusOptions;
+  void syncStatusForTaskType() {
+    final options = getStatusOptions();
+    if (!options.contains(selectedStatus)) selectedStatus = options.first;
+  }
+
+  syncStatusForTaskType();

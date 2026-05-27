@@ -1245,18 +1245,6 @@ class _HabitCard extends StatelessWidget {
                   SizedBox(width: buttonSpacing),
                   Expanded(
                     child: _HabitStatusButton(
-                      label: 'Cancelled',
-                      icon: Icons.cancel,
-                      color: Colors.redAccent,
-                      selected: todayStatus == _HabitDayStatus.cancelled,
-                      fontSize: buttonFontSize,
-                      horizontalPadding: horizontalPadding,
-                      onPressed: () => _setTodayStatus(context, _HabitDayStatus.cancelled),
-                    ),
-                  ),
-                  SizedBox(width: buttonSpacing),
-                  Expanded(
-                    child: _HabitStatusButton(
                       label: 'Missed',
                       icon: Icons.remove_circle,
                       color: Colors.redAccent,
