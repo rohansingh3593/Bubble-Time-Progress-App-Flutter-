@@ -17,11 +17,27 @@ class DashboardView extends StatefulWidget {
   State<DashboardView> createState() => _DashboardViewState();
 }
 
-class _DashboardViewState extends State<DashboardView> {
+class _DashboardViewState extends State<DashboardView> with SingleTickerProviderStateMixin {
   String _selectedPriority = 'All';
   String _selectedStatus = 'All';
   String _selectedPerson = 'All';
   String _selectedCategory = 'All';
+  late final AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
 
   static const List<String> _priorityOrder = [
     'Low',
@@ -506,11 +522,23 @@ class _DashboardViewState extends State<DashboardView> {
     final total = (summary['TOTAL TASKS'] ?? 1).clamp(1, 999999);
     final progress = completed / total;
 
-    return Container(
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, _) {
+        final glow = 14 + (_pulseController.value * 18);
+        return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(colors: [Color(0xFF6A54FF), Color(0xFF2D5BFF)]),
         borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF5F63FF).withOpacity(0.45),
+            blurRadius: glow,
+            spreadRadius: 1,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -544,6 +572,8 @@ class _DashboardViewState extends State<DashboardView> {
         ],
       ),
     );
+      },
+    );
   }
 
   Widget _buildProgressOverviewStrip(Map<String, Map<String, int>> timeProgress) {
@@ -568,7 +598,14 @@ class _DashboardViewState extends State<DashboardView> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 10),
-                  Text('$percent%', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: percent.toDouble()),
+                    duration: const Duration(milliseconds: 900),
+                    builder: (context, value, child) => Text(
+                      '${value.toInt()}%',
+                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+                    ),
+                  ),
                   Text('$remaining left', style: const TextStyle(color: Color(0xFF63708A))),
                 ]),
               );
@@ -607,7 +644,13 @@ class _DashboardViewState extends State<DashboardView> {
       scrollDirection: Axis.horizontal,
       child: Row(children: focus.map((t){
         final urgent = t.priority == 'Urgent (Now)' || t.priority == 'High';
-        return Container(
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: urgent ? 1 : 0.6),
+          duration: const Duration(milliseconds: 1200),
+          curve: Curves.easeInOut,
+          builder: (context, lift, child) =>
+              Transform.translate(offset: Offset(0, -2 * lift), child: child),
+          child: Container(
           width: 220,
           margin: const EdgeInsets.only(right: 10),
           padding: const EdgeInsets.all(12),
@@ -621,6 +664,7 @@ class _DashboardViewState extends State<DashboardView> {
             const SizedBox(height: 6),
             Text(urgent ? '⚡ High Priority' : '• ${t.priority}', style: const TextStyle(color: Color(0xFFB9C6F3))),
           ]),
+        ),
         );
       }).toList()),
     ), action: 'View All');
