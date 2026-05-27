@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../models/rank_profile.dart';
@@ -23,6 +25,7 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
   String _selectedPerson = 'All';
   String _selectedCategory = 'All';
   late final AnimationController _pulseController;
+  bool _showDetails = false;
 
   @override
   void initState() {
@@ -522,11 +525,23 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
     final total = (summary['TOTAL TASKS'] ?? 1).clamp(1, 999999);
     final progress = completed / total;
 
-    return AnimatedBuilder(
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 850),
+      curve: Curves.easeOutCubic,
+      builder: (context, intro, _) => Opacity(
+        opacity: intro,
+        child: Transform.translate(
+          offset: Offset(0, 24 * (1 - intro)),
+          child: AnimatedBuilder(
       animation: _pulseController,
       builder: (context, _) {
         final glow = 14 + (_pulseController.value * 18);
-        return Container(
+        return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+        child: Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(colors: [Color(0xFF6A54FF), Color(0xFF2D5BFF)]),
@@ -566,13 +581,58 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
             ],
           ),
           const SizedBox(height: 16),
-          LinearProgressIndicator(value: progress, minHeight: 8, borderRadius: BorderRadius.circular(999), backgroundColor: Colors.white24, color: Colors.white),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: progress),
+            duration: const Duration(milliseconds: 1300),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, _) => LinearProgressIndicator(
+              value: value,
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(999),
+              backgroundColor: Colors.white24,
+              color: Colors.white,
+            ),
+          ),
           const SizedBox(height: 8),
           Text('$completed / $total completed', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => setState(() => _showDetails = !_showDetails),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.stars_rounded, color: Color(0xFFFFD86D), size: 16),
+                const SizedBox(width: 6),
+                Text(_showDetails ? 'Hide details' : 'Show details', style: const TextStyle(color: Colors.white)),
+              ],
+            ),
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 380),
+            transitionBuilder: (child, anim) => SizeTransition(sizeFactor: anim, child: FadeTransition(opacity: anim, child: child)),
+            child: _showDetails
+                ? Padding(
+                    key: const ValueKey('hero_details'),
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Row(
+                      children: [
+                        Expanded(child: _heroMetric('XP', '${profile.xp}')),
+                        Expanded(child: _heroMetric('Score', '${profile.productivityScore}%')),
+                        Expanded(child: _heroMetric('Streak', '${profile.activeStreak}')),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(key: ValueKey('hero_empty')),
+          ),
         ],
+      ),
+    ),
       ),
     );
       },
+    ),
+        ),
+      ),
     );
   }
 
@@ -590,7 +650,15 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
               final values = timeProgress[label] ?? const {'percent': 0, 'remaining': 0};
               final percent = values['percent'] ?? 0;
               final remaining = values['remaining'] ?? 0;
-              return Container(
+              return TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 1),
+                duration: Duration(milliseconds: 420 + (cards.indexOf(label) * 180)),
+                curve: Curves.easeOut,
+                builder: (context, t, child) => Opacity(
+                  opacity: t,
+                  child: Transform.translate(offset: Offset(0, 18 * (1 - t)), child: child),
+                ),
+                child: Container(
                 width: 145,
                 margin: const EdgeInsets.only(right: 10),
                 padding: const EdgeInsets.all(12),
@@ -606,8 +674,21 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
                       style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: percent / 100),
+                    duration: const Duration(milliseconds: 1100),
+                    builder: (context, ring, _) => LinearProgressIndicator(
+                      value: ring,
+                      minHeight: 5,
+                      backgroundColor: const Color(0xFFE9EDF8),
+                      color: const Color(0xFF5D6BFF),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
                   Text('$remaining left', style: const TextStyle(color: Color(0xFF63708A))),
                 ]),
+              ),
               );
             }).toList(),
           ),
@@ -734,6 +815,16 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
       SizedBox(height: 6),
       Text('😊 Mood: Focused', style: TextStyle(color: Colors.white)),
     ]), action: 'Timeline');
+  }
+
+  Widget _heroMetric(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Color(0xFFD9D9FF), fontSize: 11)),
+        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      ],
+    );
   }
 
   Widget _summaryHeader(Map<String, int> summary) {
