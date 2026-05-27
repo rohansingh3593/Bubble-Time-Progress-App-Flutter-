@@ -20,6 +20,7 @@ const List<String> _statusOptions = [
 const List<String> _routineStatusOptions = ['Completed', 'Missed'];
 
 const List<String> _repeatFrequencyOptions = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
+const List<String> _projectPhaseStatusOptions = ['Not Started', 'In Progress', 'Completed', 'Cancelled'];
 
 const Map<String, int> _taskColorOptions = {
   'Yellow': 0xFFFFC107,
@@ -62,6 +63,7 @@ Future<Task?> showTaskFormDialog(
   bool selectedUrgent = initialTask?.urgent ?? false;
   bool selectedImportant = initialTask?.important ?? false;
   int selectedColorValue = initialTask?.colorValue ?? _taskColorOptions['Blue']!;
+  final projectPhases = _ProjectPhaseDraft.parseFromDescription(initialTask?.description ?? '');
   List<String> getStatusOptions() => repeatTask ? _routineStatusOptions : _statusOptions;
   void syncStatusForTaskType() {
     final options = getStatusOptions();
@@ -206,7 +208,7 @@ Future<Task?> showTaskFormDialog(
                   ),
                 ),
                 const SizedBox(height: 12),
-                if (!(repeatTask && repeatFrequency == 'Daily')) ...[
+                if (repeatTask) ...[
                   TextField(
                     controller: estimatedController,
                     keyboardType: TextInputType.number,
@@ -218,7 +220,60 @@ Future<Task?> showTaskFormDialog(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
-                    child: const Text('Daily habits are tracked all day. No scheduled hour or estimated time is required.'),
+                    child: const Text('Non-repeating tasks use phase-based progress. Estimated time is hidden; use phases below.'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (!repeatTask) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Project Phases', style: TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 8),
+                        ...projectPhases.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final phase = entry.value;
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              TextField(
+                                controller: phase.nameController,
+                                decoration: InputDecoration(labelText: 'Phase ${index + 1} Name', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: phase.descriptionController,
+                                decoration: InputDecoration(labelText: 'Description', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                                maxLines: 2,
+                              ),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String>(
+                                value: phase.status,
+                                decoration: InputDecoration(labelText: 'Phase Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                                items: _projectPhaseStatusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
+                                onChanged: (value) {
+                                  if (value != null) setDialogState(() => phase.status = value);
+                                },
+                              ),
+                            ]),
+                          );
+                        }),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: () => setDialogState(() => projectPhases.add(_ProjectPhaseDraft.empty())),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Phase'),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -259,7 +314,7 @@ Future<Task?> showTaskFormDialog(
                     }
                   },
                 ),
-                if (!(repeatTask && repeatFrequency == 'Daily')) ...[
+                if (!repeatTask || !(repeatTask && repeatFrequency == 'Daily')) ...[
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: selectedDelegate ?? '__none__',
@@ -305,14 +360,17 @@ Future<Task?> showTaskFormDialog(
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task name is required')));
                   return;
                 }
-                if (!(repeatTask && repeatFrequency == 'Daily') && estimatedMinutes <= 0) {
+                if (repeatTask && estimatedMinutes <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Estimated time is required')));
                   return;
                 }
+                final mergedDescription = !repeatTask
+                    ? _ProjectPhaseDraft.mergeIntoDescription(descriptionController.text.trim(), projectPhases)
+                    : descriptionController.text.trim();
 
                 Navigator.of(context).pop(Task(
                   task: name,
-                  description: descriptionController.text.trim(),
+                  description: mergedDescription,
                   dueDate: dueDate,
                   priority: selectedPriority,
                   status: selectedStatus,
@@ -323,7 +381,7 @@ Future<Task?> showTaskFormDialog(
                   repeatFrequency: repeatTask ? repeatFrequency : null,
                   urgent: selectedUrgent,
                   important: selectedImportant,
-                  estimatedMinutes: repeatTask && repeatFrequency == 'Daily' ? 0 : estimatedMinutes,
+                  estimatedMinutes: repeatTask ? estimatedMinutes : 0,
                   hourSlot: repeatTask && repeatFrequency == 'Daily' ? null : hourSlot,
                   colorValue: selectedColorValue,
                 ));
@@ -361,4 +419,54 @@ Future<bool> showQuickAddTaskDialog(
   }
 
   return false;
+}
+
+class _ProjectPhaseDraft {
+  String status;
+  final TextEditingController nameController;
+  final TextEditingController descriptionController;
+
+  _ProjectPhaseDraft({
+    required this.status,
+    required this.nameController,
+    required this.descriptionController,
+  });
+
+  factory _ProjectPhaseDraft.empty() => _ProjectPhaseDraft(
+        status: 'Not Started',
+        nameController: TextEditingController(),
+        descriptionController: TextEditingController(),
+      );
+
+  static const _marker = '---PHASES---';
+
+  static List<_ProjectPhaseDraft> parseFromDescription(String description) {
+    final markerIndex = description.indexOf(_marker);
+    if (markerIndex == -1) return [_ProjectPhaseDraft.empty()];
+    final phaseChunk = description.substring(markerIndex + _marker.length).trim();
+    final lines = phaseChunk.split('\n').where((line) => line.trim().isNotEmpty);
+    final phases = <_ProjectPhaseDraft>[];
+    for (final line in lines) {
+      final parts = line.split('|');
+      if (parts.length < 3) continue;
+      phases.add(
+        _ProjectPhaseDraft(
+          status: parts[2].trim().isEmpty ? 'Not Started' : parts[2].trim(),
+          nameController: TextEditingController(text: parts[0].trim()),
+          descriptionController: TextEditingController(text: parts[1].trim()),
+        ),
+      );
+    }
+    return phases.isEmpty ? [_ProjectPhaseDraft.empty()] : phases;
+  }
+
+  static String mergeIntoDescription(String baseDescription, List<_ProjectPhaseDraft> phases) {
+    final cleanBase = baseDescription.split(_marker).first.trim();
+    final serializedPhases = phases
+        .where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty)
+        .map((phase) => '${phase.nameController.text.trim()} | ${phase.descriptionController.text.trim()} | ${phase.status}')
+        .join('\n');
+    if (serializedPhases.isEmpty) return cleanBase;
+    return '$cleanBase\n\n$_marker\n$serializedPhases'.trim();
+  }
 }
