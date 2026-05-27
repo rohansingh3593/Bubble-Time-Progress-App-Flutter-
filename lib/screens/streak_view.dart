@@ -771,6 +771,7 @@ class _RecurringTaskListView extends StatelessWidget {
   Widget build(BuildContext context) {
     final boardHabits = habits.where(_isStreakBoardHabit).toList();
     final boardDates = _buildStreakBoardDates(boardHabits, today);
+    final projectItems = _ProjectProgressItem.buildFromMap(hiveService.getAllTasksByDate());
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -794,10 +795,129 @@ class _RecurringTaskListView extends StatelessWidget {
               dates: boardDates,
               today: today,
             ),
+          const SizedBox(height: 18),
+          _ProjectProgressSection(items: projectItems),
         ],
       ),
     );
   }
+}
+
+class _ProjectProgressSection extends StatelessWidget {
+  final List<_ProjectProgressItem> items;
+
+  const _ProjectProgressSection({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Project Progress (Non-Routine)', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        const Text(
+          'Non-repeating tasks are tracked as project milestones and phases, not habit streak blocks.',
+          style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        if (items.isEmpty)
+          const _EmptyState(message: 'No non-routine project tasks found yet. Add a non-repeating task with phases to track progress.')
+        else
+          ...items.map((item) => _ProjectProgressCard(item: item)),
+      ],
+    );
+  }
+}
+
+class _ProjectProgressCard extends StatelessWidget {
+  final _ProjectProgressItem item;
+  const _ProjectProgressCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = item.totalPhases == 0 ? 0.0 : item.completedPhases / item.totalPhases;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(item.projectTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(value: progress, minHeight: 8, borderRadius: BorderRadius.circular(99)),
+          const SizedBox(height: 6),
+          Text('${item.completedPhases} / ${item.totalPhases} phases completed • ${(progress * 100).round()}% progress', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 10),
+          ...item.phases.map((phase) {
+            final icon = switch (phase.status.toLowerCase()) {
+              'completed' => '✅',
+              'in progress' => '🔄',
+              'cancelled' => '⛔',
+              _ => '⏳',
+            };
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text('$icon ${phase.title}${phase.description.isEmpty ? '' : ' — ${phase.description}'}'),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProjectProgressItem {
+  final String projectTitle;
+  final List<_ProjectPhaseItem> phases;
+  const _ProjectProgressItem({required this.projectTitle, required this.phases});
+
+  int get totalPhases => phases.length;
+  int get completedPhases => phases.where((p) => p.status.toLowerCase() == 'completed').length;
+
+  static List<_ProjectProgressItem> buildFromMap(Map<DateTime, List<Task>> allTasksByDate) {
+    final tasks = allTasksByDate.values.expand((entries) => entries).where((task) => !task.repeatTask).toList();
+    final grouped = <String, List<_ProjectPhaseItem>>{};
+    final phaseTaskPattern = RegExp(r'^(.*?)\s*[-:|]\s*phase\s*(\d+)\s*[-:|]?\s*(.*)$', caseSensitive: false);
+
+    for (final task in tasks) {
+      final title = task.task.trim();
+      final match = phaseTaskPattern.firstMatch(title);
+      final status = task.status.trim();
+      if (match != null) {
+        final baseTitle = match.group(1)!.trim();
+        final phaseNumber = match.group(2)!.trim();
+        final phaseNameSuffix = (match.group(3) ?? '').trim();
+        final phaseTitle = phaseNameSuffix.isEmpty ? 'Phase $phaseNumber' : 'Phase $phaseNumber: $phaseNameSuffix';
+        grouped.putIfAbsent(baseTitle, () => <_ProjectPhaseItem>[]).add(
+          _ProjectPhaseItem(title: phaseTitle, description: task.description.trim(), status: status, phaseOrder: int.tryParse(phaseNumber) ?? 999),
+        );
+      } else {
+        grouped.putIfAbsent(title, () => <_ProjectPhaseItem>[]).add(
+          _ProjectPhaseItem(title: 'Phase 1', description: task.description.trim(), status: status, phaseOrder: 1),
+        );
+      }
+    }
+
+    final items = grouped.entries.map((entry) {
+      final phases = [...entry.value]..sort((a, b) => a.phaseOrder.compareTo(b.phaseOrder));
+      return _ProjectProgressItem(projectTitle: entry.key, phases: phases);
+    }).toList();
+    items.sort((a, b) => a.projectTitle.toLowerCase().compareTo(b.projectTitle.toLowerCase()));
+    return items;
+  }
+}
+
+class _ProjectPhaseItem {
+  final String title;
+  final String description;
+  final String status;
+  final int phaseOrder;
+  const _ProjectPhaseItem({required this.title, required this.description, required this.status, required this.phaseOrder});
 }
 
 class _DailyStreakBoard extends StatefulWidget {
