@@ -513,7 +513,7 @@ class _DashboardViewState extends State<DashboardView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(profile.currentRank, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
+                    Text('${profile.currentRank.name} ${profile.currentRank.emoji}', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
                     Text('Level ${profile.level} • ${summary["TODAY'S TASKS"] ?? 0} tasks today', style: const TextStyle(color: Color(0xFFD9D9FF))),
                   ],
                 ),
@@ -521,7 +521,7 @@ class _DashboardViewState extends State<DashboardView> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('${profile.currentStreakDays} days', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  Text('${profile.activeStreak} days', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                   const Text('Current streak', style: TextStyle(color: Color(0xFFD9D9FF))),
                 ],
               ),
