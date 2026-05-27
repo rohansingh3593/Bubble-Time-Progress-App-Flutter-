@@ -1220,41 +1220,55 @@ class _HabitCard extends StatelessWidget {
               _StatusBadge(status: todayStatus, taskColor: taskColor),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           _HabitActivityGrid(habit: habit, today: today),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _HabitStatusButton(
-                  label: 'Completed',
-                  icon: Icons.check_circle,
-                  color: taskColor,
-                  selected: todayStatus == _HabitDayStatus.completed,
-                  onPressed: () => _setTodayStatus(context, _HabitDayStatus.completed),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _HabitStatusButton(
-                  label: 'Cancelled',
-                  icon: Icons.cancel,
-                  color: Colors.redAccent,
-                  selected: todayStatus == _HabitDayStatus.cancelled,
-                  onPressed: () => _setTodayStatus(context, _HabitDayStatus.cancelled),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _HabitStatusButton(
-                  label: 'Missed',
-                  icon: Icons.remove_circle,
-                  color: Colors.redAccent,
-                  selected: todayStatus == _HabitDayStatus.missed,
-                  onPressed: () => _setTodayStatus(context, _HabitDayStatus.missed),
-                ),
-              ),
-            ],
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 360;
+              final buttonSpacing = compact ? 6.0 : 8.0;
+              final buttonFontSize = compact ? 15.0 : 16.0;
+              final horizontalPadding = compact ? 8.0 : 10.0;
+              return Row(
+                children: [
+                  Expanded(
+                    child: _HabitStatusButton(
+                      label: 'Completed',
+                      icon: Icons.check_circle,
+                      color: taskColor,
+                      selected: todayStatus == _HabitDayStatus.completed,
+                      fontSize: buttonFontSize,
+                      horizontalPadding: horizontalPadding,
+                      onPressed: () => _setTodayStatus(context, _HabitDayStatus.completed),
+                    ),
+                  ),
+                  SizedBox(width: buttonSpacing),
+                  Expanded(
+                    child: _HabitStatusButton(
+                      label: 'Cancelled',
+                      icon: Icons.cancel,
+                      color: Colors.redAccent,
+                      selected: todayStatus == _HabitDayStatus.cancelled,
+                      fontSize: buttonFontSize,
+                      horizontalPadding: horizontalPadding,
+                      onPressed: () => _setTodayStatus(context, _HabitDayStatus.cancelled),
+                    ),
+                  ),
+                  SizedBox(width: buttonSpacing),
+                  Expanded(
+                    child: _HabitStatusButton(
+                      label: 'Missed',
+                      icon: Icons.remove_circle,
+                      color: Colors.redAccent,
+                      selected: todayStatus == _HabitDayStatus.missed,
+                      fontSize: buttonFontSize,
+                      horizontalPadding: horizontalPadding,
+                      onPressed: () => _setTodayStatus(context, _HabitDayStatus.missed),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           ],
         ),
@@ -1382,6 +1396,8 @@ class _HabitStatusButton extends StatelessWidget {
   final IconData icon;
   final Color color;
   final bool selected;
+  final double fontSize;
+  final double horizontalPadding;
   final VoidCallback onPressed;
 
   const _HabitStatusButton({
@@ -1389,6 +1405,8 @@ class _HabitStatusButton extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.selected,
+    required this.fontSize,
+    required this.horizontalPadding,
     required this.onPressed,
   });
 
@@ -1397,12 +1415,24 @@ class _HabitStatusButton extends StatelessWidget {
     return OutlinedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 16),
-      label: Text(label),
+      label: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          label,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.visible,
+          style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w700),
+        ),
+      ),
       style: OutlinedButton.styleFrom(
         foregroundColor: selected ? Colors.white : color,
         backgroundColor: selected ? color : Colors.white,
         side: BorderSide(color: color.withOpacity(0.7)),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        minimumSize: const Size.fromHeight(50),
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 12),
+        textStyle: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w700),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }
