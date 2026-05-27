@@ -42,8 +42,9 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Dashboard')),
-      body: ValueListenableBuilder(
+      backgroundColor: const Color(0xFFF4F6FB),
+      body: SafeArea(
+        child: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
         builder: (context, box, child) {
           final today = DateTime.now();
@@ -98,8 +99,14 @@ class _DashboardViewState extends State<DashboardView> {
           final categoryTasks = _filterBy(dashboardTasks, _selectedCategory, (task) => task.category);
 
           return ListView(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
             children: [
+              _buildDashboardHeader(rankProfile),
+              const SizedBox(height: 14),
+              _buildHeroCard(rankProfile, summary),
+              const SizedBox(height: 14),
+              _buildProgressOverviewStrip(timeProgress),
+              const SizedBox(height: 14),
               RankProfileCard(
                 profile: rankProfile,
                 onUsernameChanged: widget.hiveService.setUsername,
@@ -163,6 +170,7 @@ class _DashboardViewState extends State<DashboardView> {
           );
         },
       ),
+    ),
     );
   }
 
@@ -446,6 +454,119 @@ class _DashboardViewState extends State<DashboardView> {
     }
 
     return ordered;
+  }
+
+
+  Widget _buildDashboardHeader(RankProfile profile) {
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 22,
+          backgroundColor: const Color(0xFF5B4DFF),
+          child: Text(
+            profile.username.isNotEmpty ? profile.username[0].toUpperCase() : 'U',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Hello, ${profile.username}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              const Text('Focus. Plan. Achieve.', style: TextStyle(color: Color(0xFF5A6785))),
+            ],
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
+          ),
+          child: IconButton(onPressed: _openJournal, icon: const Icon(Icons.notifications_none_rounded)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeroCard(RankProfile profile, Map<String, int> summary) {
+    final completed = summary['COMPLETED'] ?? 0;
+    final total = (summary['TOTAL TASKS'] ?? 1).clamp(1, 999999);
+    final progress = completed / total;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF6A54FF), Color(0xFF2D5BFF)]),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.workspace_premium_rounded, color: Color(0xFFFFD86D), size: 32),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(profile.currentRank, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
+                    Text('Level ${profile.level} • ${summary["TODAY'S TASKS"] ?? 0} tasks today', style: const TextStyle(color: Color(0xFFD9D9FF))),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('${profile.currentStreakDays} days', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  const Text('Current streak', style: TextStyle(color: Color(0xFFD9D9FF))),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          LinearProgressIndicator(value: progress, minHeight: 8, borderRadius: BorderRadius.circular(999), backgroundColor: Colors.white24, color: Colors.white),
+          const SizedBox(height: 8),
+          Text('$completed / $total completed', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressOverviewStrip(Map<String, Map<String, int>> timeProgress) {
+    final cards = ['Day', 'Week', 'Month', 'Year'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Progress Overview', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 24)),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: cards.map((label) {
+              final values = timeProgress[label] ?? const {'percent': 0, 'remaining': 0};
+              final percent = values['percent'] ?? 0;
+              final remaining = values['remaining'] ?? 0;
+              return Container(
+                width: 145,
+                margin: const EdgeInsets.only(right: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFDDE3F2))),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 10),
+                  Text('$percent%', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+                  Text('$remaining left', style: const TextStyle(color: Color(0xFF63708A))),
+                ]),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _summaryHeader(Map<String, int> summary) {
