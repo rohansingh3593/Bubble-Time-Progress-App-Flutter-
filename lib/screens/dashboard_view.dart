@@ -42,7 +42,7 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FB),
+      backgroundColor: const Color(0xFF0B1020),
       body: SafeArea(
         child: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
@@ -106,6 +106,16 @@ class _DashboardViewState extends State<DashboardView> {
               _buildHeroCard(rankProfile, summary),
               const SizedBox(height: 14),
               _buildProgressOverviewStrip(timeProgress),
+              const SizedBox(height: 14),
+              _buildDailyFocusStrip(dashboardTasks, todayStart),
+              const SizedBox(height: 14),
+              _buildHabitRoutineSection(todayTasks),
+              const SizedBox(height: 14),
+              _buildProjectsSection(dashboardTasks),
+              const SizedBox(height: 14),
+              _buildSmartAnalyticsSection(dashboardTasks, todayStart, rankProfile),
+              const SizedBox(height: 14),
+              _buildJourneySection(),
               const SizedBox(height: 14),
               RankProfileCard(
                 profile: rankProfile,
@@ -567,6 +577,119 @@ class _DashboardViewState extends State<DashboardView> {
         ),
       ],
     );
+  }
+
+
+  Widget _darkSection(String title, Widget child, {String? action}) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF121A31),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF2A355A)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+          const Spacer(),
+          if (action != null) Text(action, style: const TextStyle(color: Color(0xFF9CB3FF))),
+        ]),
+        const SizedBox(height: 10),
+        child,
+      ]),
+    );
+  }
+
+  Widget _buildDailyFocusStrip(List<Task> tasks, DateTime today) {
+    final sorted = [...tasks]..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
+    final focus = sorted.where((t)=>!t.done && t.status!='Completed').take(6).toList();
+    return _darkSection('Daily Focus', SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: focus.map((t){
+        final urgent = t.priority == 'Urgent (Now)' || t.priority == 'High';
+        return Container(
+          width: 220,
+          margin: const EdgeInsets.only(right: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A2442),
+            borderRadius: BorderRadius.circular(14),
+            border: Border(left: BorderSide(color: urgent ? const Color(0xFFFF6A3D) : const Color(0xFF6D7CFF), width: 4)),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(t.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            Text(urgent ? '⚡ High Priority' : '• ${t.priority}', style: const TextStyle(color: Color(0xFFB9C6F3))),
+          ]),
+        );
+      }).toList()),
+    ), action: 'View All');
+  }
+
+  Widget _buildHabitRoutineSection(List<Task> todayTasks) {
+    final habits = todayTasks.where((t)=>t.repeatTask).toList();
+    return _darkSection('Habit & Routine Tracker', Column(children: [
+      if (habits.isEmpty)
+        const Padding(padding: EdgeInsets.all(8), child: Text('No recurring habits for today.', style: TextStyle(color: Color(0xFFB9C6F3))))
+      else
+        ...habits.take(4).map((task)=>Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: const Color(0xFF1A2442), borderRadius: BorderRadius.circular(12)),
+          child: Row(children:[
+            Container(width: 10,height: 10,decoration: const BoxDecoration(color: Color(0xFF6D7CFF),shape: BoxShape.circle)),
+            const SizedBox(width: 10),
+            Expanded(child: Text(task.task, style: const TextStyle(color: Colors.white))),
+            Text(task.repeatFrequency ?? 'Daily', style: const TextStyle(color: Color(0xFF9CB3FF))),
+          ]),
+        )),
+    ]));
+  }
+
+  Widget _buildProjectsSection(List<Task> tasks) {
+    final projects = tasks.where((t)=>!t.repeatTask).take(4).toList();
+    return _darkSection('Projects / Phases', Column(children: projects.map((p) {
+      final done = p.done || p.status=='Completed';
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(p.task, style: const TextStyle(color: Colors.white)),
+        subtitle: Text(p.category, style: const TextStyle(color: Color(0xFF9CB3FF))),
+        trailing: Icon(done ? Icons.check_circle : Icons.timelapse, color: done ? Colors.greenAccent : Colors.orangeAccent),
+      );
+    }).toList()), action: 'Expand');
+  }
+
+  Widget _buildSmartAnalyticsSection(List<Task> tasks, DateTime today, RankProfile profile) {
+    final completed = tasks.where((t)=>t.done || t.status=='Completed').length;
+    final bestDay = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][today.weekday-1];
+    final rate = tasks.isEmpty ? 0 : ((completed / tasks.length)*100).round();
+    return _darkSection('Smart Analytics', Wrap(spacing: 10, runSpacing: 10, children: [
+      _miniAnalytic('Best Day', bestDay),
+      _miniAnalytic('Habit Consistency', '${profile.productivityScore}%'),
+      _miniAnalytic('Completion', '$rate%'),
+      _miniAnalytic('Most Productive Time', '8 AM'),
+    ]));
+  }
+
+  Widget _miniAnalytic(String k, String v) => Container(
+    width: 150,
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(color: const Color(0xFF1A2442), borderRadius: BorderRadius.circular(12)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(k, style: const TextStyle(color: Color(0xFF9CB3FF), fontSize: 12)),
+      const SizedBox(height: 4),
+      Text(v, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+    ]),
+  );
+
+  Widget _buildJourneySection() {
+    return _darkSection('Journey & Reflection', Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+      Text('🌅 Wake up routine completed', style: TextStyle(color: Colors.white)),
+      SizedBox(height: 6),
+      Text('📘 Deep work block tracked', style: TextStyle(color: Colors.white)),
+      SizedBox(height: 6),
+      Text('😊 Mood: Focused', style: TextStyle(color: Colors.white)),
+    ]), action: 'Timeline');
   }
 
   Widget _summaryHeader(Map<String, int> summary) {
