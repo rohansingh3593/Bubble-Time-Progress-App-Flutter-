@@ -95,6 +95,56 @@ Future<Task?> showTaskFormDialog(
                   maxLines: 2,
                 ),
                 const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Repeat Task'),
+                  subtitle: Text(repeatTask ? 'ON' : 'OFF'),
+                  value: repeatTask,
+                  onChanged: (value) {
+                    setDialogState(() {
+                      repeatTask = value;
+                      if (!repeatTask) repeatFrequency = 'Daily';
+                      if (repeatTask && repeatFrequency == 'Daily') {
+                        hourSlot = null;
+                        selectedDelegate = null;
+                      }
+                      syncStatusForTaskType();
+                    });
+                  },
+                ),
+                if (repeatTask)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Repeat Frequency', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() { repeatFrequency = value; if (repeatFrequency == 'Daily') { hourSlot = null; selectedDelegate = null; } }); })),
+                        const SizedBox(height: 8),
+                        const Text('Task Color', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _taskColorOptions.entries.map((entry) {
+                            final selected = selectedColorValue == entry.value;
+                            final color = Color(entry.value);
+                            return ChoiceChip(
+                              selected: selected,
+                              label: Text(entry.key),
+                              avatar: CircleAvatar(backgroundColor: color, radius: 8),
+                              selectedColor: color.withOpacity(0.22),
+                              onSelected: (_) => setDialogState(() => selectedColorValue = entry.value),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 12),
                 if (hourSlot != null && !(repeatTask && repeatFrequency == 'Daily'))
                   Container(
                     width: double.infinity,
@@ -241,56 +291,6 @@ Future<Task?> showTaskFormDialog(
                     child: Text('Daily habits are personal all-day routines, so delegate scheduling is hidden.'),
                   ),
                 ],
-                const SizedBox(height: 10),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Repeat Task'),
-                  subtitle: Text(repeatTask ? 'ON' : 'OFF'),
-                  value: repeatTask,
-                  onChanged: (value) {
-                    setDialogState(() {
-                      repeatTask = value;
-                      if (!repeatTask) repeatFrequency = 'Daily';
-                      if (repeatTask && repeatFrequency == 'Daily') {
-                        hourSlot = null;
-                        selectedDelegate = null;
-                      }
-                      syncStatusForTaskType();
-                    });
-                  },
-                ),
-                if (repeatTask)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Repeat Frequency', style: TextStyle(fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 4),
-                        ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() { repeatFrequency = value; if (repeatFrequency == 'Daily') { hourSlot = null; selectedDelegate = null; } }); })),
-                        const SizedBox(height: 8),
-                        const Text('Task Color', style: TextStyle(fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _taskColorOptions.entries.map((entry) {
-                            final selected = selectedColorValue == entry.value;
-                            final color = Color(entry.value);
-                            return ChoiceChip(
-                              selected: selected,
-                              label: Text(entry.key),
-                              avatar: CircleAvatar(backgroundColor: color, radius: 8),
-                              selectedColor: color.withOpacity(0.22),
-                              onSelected: (_) => setDialogState(() => selectedColorValue = entry.value),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                    ),
-                  ),
               ],
             ),
           ),
