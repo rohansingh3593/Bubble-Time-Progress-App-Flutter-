@@ -115,6 +115,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               .where((task) => _isSameDay(task.dueDate, todayStart))
               .toList();
           final pendingTodayTasks = _buildPendingTodayTasks(dashboardTasks, todayStart);
+          final disabledRoutineTasks = _buildDisabledRoutineTasks(allTasks);
 
           final priorityOptions = ['All', ...priorityCounts.keys];
           final statusOptions = ['All', ...statusCounts.keys];
@@ -149,6 +150,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               _buildDailyFocusStrip(pendingTodayTasks, todayStart),
               const SizedBox(height: 14),
               _buildHabitRoutineSection(dueTodayTasks),
+              const SizedBox(height: 14),
+              _buildDisabledRoutineBoard(disabledRoutineTasks),
               const SizedBox(height: 14),
               _buildProjectsSection(nonRoutineDashboardTasks),
               const SizedBox(height: 14),
@@ -534,6 +537,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
+  String _formatShortDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
+
   String _formatDueLabel(Task task) {
     final dueDate = task.dueDate;
     final dueDay = _dateOnly(dueDate);
@@ -547,6 +552,33 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final displayHour = hour % 12 == 0 ? 12 : hour % 12;
     final displayMinute = minute.toString().padLeft(2, '0');
     return 'Due $dateLabel at $displayHour:$displayMinute $suffix';
+  }
+
+
+  List<_DisabledRoutineTask> _buildDisabledRoutineTasks(List<Task> tasks) {
+    final grouped = <String, List<Task>>{};
+    for (final task in tasks) {
+      if (!task.repeatTask || task.routineEnabled) continue;
+      grouped.putIfAbsent(_recurringSeriesKey(task), () => <Task>[]).add(task);
+    }
+
+    final disabled = grouped.values.map((records) {
+      records.sort((a, b) => b.dueDate.compareTo(a.dueDate));
+      final latest = records.first;
+      final completedCount = records.where(_isCompletedTask).length;
+      return _DisabledRoutineTask(
+        task: latest,
+        previousStreak: completedCount,
+        lastUpdated: records.map((task) => task.dueDate).reduce((a, b) => a.isAfter(b) ? a : b),
+      );
+    }).toList()
+      ..sort((a, b) => b.lastUpdated.compareTo(a.lastUpdated));
+
+    return disabled;
+  }
+
+  String _recurringSeriesKey(Task task) {
+    return '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${_normalizedRepeatFrequency(task)}';
   }
 
   List<Task> _filterBy(List<Task> tasks, String selected, String Function(Task) selector) {
@@ -871,6 +903,80 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           ]),
         )),
     ]));
+  }
+
+
+  Widget _buildDisabledRoutineBoard(List<_DisabledRoutineTask> disabledTasks) {
+    return _darkSection(
+      'Disabled Routine Tasks',
+      Column(
+        children: [
+          if (disabledTasks.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(8),
+              child: Text(
+                'No disabled routines. Disable a routine to pause active tracking without losing history.',
+                style: TextStyle(color: Color(0xFFB9C6F3)),
+              ),
+            )
+          else
+            ...disabledTasks.map((item) {
+              final task = item.task;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A2442),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFFFA726).withOpacity(0.35)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFA726).withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.pause_circle_outline, color: Color(0xFFFFB74D)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(task.task, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${task.repeatFrequency ?? 'Daily'} • ${task.category}',
+                            style: const TextStyle(color: Color(0xFFB9C6F3)),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Previous streak: ${item.previousStreak} • Last updated: ${_formatShortDate(item.lastUpdated)}',
+                            style: const TextStyle(color: Color(0xFF7F8EB9), fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () => widget.hiveService.setRecurringTaskEnabledByReference(task, true),
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Enable'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF34C759),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+      action: '${disabledTasks.length}',
+    );
   }
 
   Widget _buildProjectsSection(List<Task> tasks) {
@@ -1472,4 +1578,16 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
+}
+
+class _DisabledRoutineTask {
+  final Task task;
+  final int previousStreak;
+  final DateTime lastUpdated;
+
+  const _DisabledRoutineTask({
+    required this.task,
+    required this.previousStreak,
+    required this.lastUpdated,
+  });
 }

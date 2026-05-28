@@ -511,7 +511,35 @@ class HiveService {
       }
     }
 
+    if (enabled && changed) {
+      await _ensureCurrentRecurringOccurrenceEnabled(original);
+    }
+
     return changed;
+  }
+
+  Future<void> _ensureCurrentRecurringOccurrenceEnabled(Task original) async {
+    final occurrenceDate = _currentOccurrenceDate(original.repeatFrequency, DateTime.now());
+    final key = _formatKey(occurrenceDate);
+    final tasks = getTasksForDate(occurrenceDate);
+    final occurrence = _withNormalizedTaskName(
+      original.copyWith(
+        dueDate: occurrenceDate,
+        done: false,
+        status: 'Not Started',
+        repeatTask: true,
+        routineEnabled: true,
+      ),
+    );
+
+    final existingIndex = tasks.indexWhere((task) => _isSameRecurringTaskIdentity(task, occurrence));
+    if (existingIndex >= 0) {
+      tasks[existingIndex] = tasks[existingIndex].copyWith(routineEnabled: true);
+    } else {
+      tasks.add(occurrence);
+    }
+
+    await _box.put(key, _dedupeRecurringTasksForDate(tasks));
   }
 
   bool _matchesTaskIdentity(Task a, Task b) {
