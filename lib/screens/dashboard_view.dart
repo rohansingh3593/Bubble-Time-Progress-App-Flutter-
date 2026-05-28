@@ -96,8 +96,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             journalEntries: widget.hiveService.getAllJournalEntries(),
           );
 
-          final summary = _buildSummary(nonRoutineDashboardTasks, todayStart);
-          final scopedTaskCounts = _buildScopedTaskCounts(nonRoutineDashboardTasks, todayStart);
+          final summary = _buildSummary(dashboardTasks, todayStart);
+          final scopedTaskCounts = _buildScopedTaskCounts(dashboardTasks, todayStart);
           final yearProgress = _buildYearProgress(todayStart);
           final timeProgress = _buildTimeProgress(today);
           final priorityCounts = _countByField(nonRoutineDashboardTasks, (t) => t.priority, _priorityOrder);
@@ -114,7 +114,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final dueTodayTasks = dashboardTasks
               .where((task) => _isSameDay(task.dueDate, todayStart))
               .toList();
-          final pendingTodayTasks = _buildPendingTodayTasks(nonRoutineDashboardTasks, todayStart);
+          final pendingTodayTasks = _buildPendingTodayTasks(dashboardTasks, todayStart);
 
           final priorityOptions = ['All', ...priorityCounts.keys];
           final statusOptions = ['All', ...statusCounts.keys];
@@ -378,7 +378,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final completed = tasks.where(_isCompletedTask).length;
     final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
     final overdue = tasks
-        .where((task) => _dateOnly(task.dueDate).isBefore(todayStart) && _isPendingNonRoutineTask(task))
+        .where((task) => _dateOnly(task.dueDate).isBefore(todayStart) && _isPendingTask(task))
         .length;
 
     return {
@@ -468,7 +468,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final indexedTasks = tasks.asMap().entries.where((entry) {
       final task = entry.value;
       final dueDate = _dateOnly(task.dueDate);
-      return !dueDate.isAfter(todayStart) && _isPendingNonRoutineTask(task);
+      return !dueDate.isAfter(todayStart) && _isPendingTask(task);
     }).toList();
 
     indexedTasks.sort((a, b) {
@@ -501,8 +501,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }
   }
 
-  bool _isPendingNonRoutineTask(Task task) {
-    return _isNonRoutineTask(task) && !_isCompletedTask(task) && !_isCancelledTask(task);
+  bool _isPendingTask(Task task) {
+    return !_isCompletedTask(task) && !_isCancelledTask(task);
   }
 
   bool _isNonRoutineTask(Task task) => !task.repeatTask;
