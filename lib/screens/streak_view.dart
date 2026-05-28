@@ -239,7 +239,7 @@ class _JourneyStats {
 
     final recurringTasks = allTasksByDate.values
         .expand((tasks) => tasks)
-        .where((task) => task.repeatTask && task.dueDate.year == today.year)
+        .where((task) => task.repeatTask && task.routineEnabled && task.dueDate.year == today.year)
         .toList();
     final recurringCompleted = recurringTasks.where(_isCompletedTask).length;
     final habitConsistencyScore = recurringTasks.isEmpty ? 0.0 : recurringCompleted / recurringTasks.length;
@@ -280,7 +280,7 @@ class _JourneyStats {
 
   static bool _isAllowedRecurringTask(Task task) {
     final frequency = _normalizedRepeatFrequency(task.repeatFrequency);
-    return task.repeatTask && (frequency == 'daily' || frequency == 'weekly');
+    return task.repeatTask && task.routineEnabled && (frequency == 'daily' || frequency == 'weekly');
   }
 
   static String _normalizedRepeatFrequency(String? repeatFrequency) {
@@ -1471,6 +1471,7 @@ class _HabitCard extends StatelessWidget {
       },
       repeatTask: true,
       repeatFrequency: habit.repeatFrequency,
+      routineEnabled: habit.template.routineEnabled,
     );
 
     if (existing == null) {
@@ -1715,7 +1716,7 @@ class _HabitTracker {
 
   static bool _isHabitTask(Task task) {
     final frequency = _normalizedRepeatFrequency(task.repeatFrequency);
-    return task.repeatTask && (frequency == 'daily' || frequency == 'weekly');
+    return task.repeatTask && task.routineEnabled && (frequency == 'daily' || frequency == 'weekly');
   }
 
   static String _normalizedRepeatFrequency(String? repeatFrequency) {
@@ -2080,6 +2081,7 @@ class _TaskPerformanceDetailView extends StatelessWidget {
       status: 'Completed',
       repeatTask: true,
       repeatFrequency: habit.repeatFrequency,
+      routineEnabled: habit.template.routineEnabled,
     );
 
     if (existing == null) {

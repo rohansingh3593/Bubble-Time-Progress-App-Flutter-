@@ -32,13 +32,14 @@ class TaskAdapter extends TypeAdapter<Task> {
       estimatedMinutes: fields[12] as int? ?? 0,
       hourSlot: fields[13] as int?,
       colorValue: fields[14] as int? ?? 0xFF1E88E5,
+      routineEnabled: fields[15] as bool? ?? true,
     );
   }
 
   @override
   void write(BinaryWriter writer, Task obj) {
     writer
-      ..writeByte(15)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.task)
       ..writeByte(1)
@@ -68,7 +69,9 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..writeByte(13)
       ..write(obj.hourSlot)
       ..writeByte(14)
-      ..write(obj.colorValue);
+      ..write(obj.colorValue)
+      ..writeByte(15)
+      ..write(obj.routineEnabled);
   }
 
   @override

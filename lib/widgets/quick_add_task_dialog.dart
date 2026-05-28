@@ -39,6 +39,7 @@ Future<Task?> showTaskFormDialog(
   int? initialHourSlot,
   String title = 'Add Task',
   String actionLabel = 'Add Task',
+  Future<void> Function()? onDelete,
 }) async {
   final isEditing = initialTask != null;
   final nameController = TextEditingController(text: initialTask?.task ?? '');
@@ -350,6 +351,31 @@ Future<Task?> showTaskFormDialog(
             ),
           ),
           actions: [
+            if (isEditing && initialTask?.repeatTask == false && onDelete != null)
+              TextButton(
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete Task?'),
+                      content: const Text('Are you sure you want to delete this task? This action cannot be undone.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await onDelete();
+                    if (context.mounted) Navigator.of(context).pop();
+                  }
+                },
+                child: const Text('Delete Task', style: TextStyle(color: Colors.redAccent)),
+              ),
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
@@ -384,6 +410,7 @@ Future<Task?> showTaskFormDialog(
                   estimatedMinutes: repeatTask ? estimatedMinutes : 0,
                   hourSlot: repeatTask && repeatFrequency == 'Daily' ? null : hourSlot,
                   colorValue: selectedColorValue,
+                  routineEnabled: initialTask?.routineEnabled ?? true,
                 ));
               },
               child: Text(actionLabel),

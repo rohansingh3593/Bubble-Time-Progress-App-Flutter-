@@ -322,6 +322,19 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
+    Future<void> toggleRoutine(BuildContext dialogContext) async {
+      await widget.hiveService.setRecurringTaskEnabledByReference(task, !task.routineEnabled);
+      if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+    }
+
+    Widget toggleButton(BuildContext dialogContext) {
+      return TextButton.icon(
+        onPressed: () => toggleRoutine(dialogContext),
+        icon: Icon(task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
+        label: Text(task.routineEnabled ? 'Disable Routine' : 'Enable Routine'),
+      );
+    }
+
     if (_isOccurrenceLocked(task)) {
       final period = _occurrenceLabel(task);
       final statusLabel = task.done || _normalizedStatus(task) == 'completed' ? 'completed' : task.status.toLowerCase();
@@ -329,8 +342,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Already updated'),
-          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence.'),
+          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence. You can still enable or disable this routine without deleting its history.'),
           actions: [
+            toggleButton(context),
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
           ],
         ),
@@ -341,15 +355,20 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Update ${task.task} status'),
-        content: const Text('Recurring tasks keep their details fixed. Update only this occurrence status.'),
+        content: const Text('Recurring tasks keep their details fixed. Update this occurrence status, or disable the routine to stop active tracking while keeping history.'),
         actions: [
+          toggleButton(context),
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed')),
+            onPressed: task.routineEnabled
+                ? () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed'))
+                : null,
             child: const Text('Mark Missed'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed')),
+            onPressed: task.routineEnabled
+                ? () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed'))
+                : null,
             child: const Text('Mark Completed'),
           ),
         ],
@@ -366,6 +385,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             initialTask: task,
             title: 'Update Task',
             actionLabel: 'Save Task',
+            onDelete: () => widget.hiveService.deleteTaskByReference(task),
           );
 
     if (updated != null) {
@@ -502,7 +522,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   bool _isPendingTask(Task task) {
-    return !_isCompletedTask(task) && !_isCancelledTask(task);
+    final routineAllowed = !task.repeatTask || task.routineEnabled;
+    return routineAllowed && !_isCompletedTask(task) && !_isCancelledTask(task);
   }
 
   bool _isNonRoutineTask(Task task) => !task.repeatTask;
@@ -833,7 +854,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Widget _buildHabitRoutineSection(List<Task> todayTasks) {
-    final habits = todayTasks.where((t)=>t.repeatTask).toList();
+    final habits = todayTasks.where((t)=>t.repeatTask && t.routineEnabled).toList();
     return _darkSection('Habit & Routine Tracker', Column(children: [
       if (habits.isEmpty)
         const Padding(padding: EdgeInsets.all(8), child: Text('No recurring habits for today.', style: TextStyle(color: Color(0xFFB9C6F3))))
