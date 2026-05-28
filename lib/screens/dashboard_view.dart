@@ -753,113 +753,128 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 850),
       curve: Curves.easeOutCubic,
-      builder: (context, intro, _) => Opacity(
-        opacity: intro,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _openJournal,
-          child: Transform.translate(
-          offset: Offset(0, 24 * (1 - intro)),
-          child: AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, _) {
-        final glow = style.animated ? 14 + (_pulseController.value * 18) : 10.0;
-        return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-        child: Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: style.heroGradient),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: style.primary.withOpacity(style.dark ? 0.45 : 0.25),
-            blurRadius: glow,
-            spreadRadius: 1,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.workspace_premium_rounded, color: Color(0xFFFFD86D), size: 32),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${profile.currentRank.name} ${profile.currentRank.emoji}', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
-                    Text('Level ${profile.level} • ${summary["TODAY'S TASKS"] ?? 0} tasks today', style: const TextStyle(color: Color(0xFFD9D9FF))),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('${profile.activeStreak} days', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                  const Text('Current streak', style: TextStyle(color: Color(0xFFD9D9FF))),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: progress),
-            duration: const Duration(milliseconds: 1300),
-            curve: Curves.easeOutCubic,
-            builder: (context, value, _) => LinearProgressIndicator(
-              value: value,
-              minHeight: 8,
-              borderRadius: BorderRadius.circular(999),
-              backgroundColor: Colors.white24,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text('$completed / $total completed', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: () => setState(() => _showDetails = !_showDetails),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.stars_rounded, color: Color(0xFFFFD86D), size: 16),
-                const SizedBox(width: 6),
-                Text(_showDetails ? 'Hide details' : 'Show details', style: const TextStyle(color: Colors.white)),
-              ],
-            ),
-          ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 380),
-            transitionBuilder: (child, anim) => SizeTransition(sizeFactor: anim, child: FadeTransition(opacity: anim, child: child)),
-            child: _showDetails
-                ? Padding(
-                    key: const ValueKey('hero_details'),
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Row(
-                      children: [
-                        Expanded(child: _heroMetric('XP', '${profile.xp}')),
-                        Expanded(child: _heroMetric('Score', '${profile.productivityScore}%')),
-                        Expanded(child: _heroMetric('Streak', '${profile.activeStreak}')),
-                      ],
+      builder: (context, intro, _) {
+        return Opacity(
+          opacity: intro,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _openJournal,
+            child: Transform.translate(
+              offset: Offset(0, 24 * (1 - intro)),
+              child: AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, _) {
+                  final glow = style.animated ? 14 + (_pulseController.value * 18) : 10.0;
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+                      child: Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: style.heroGradient),
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: style.primary.withOpacity(style.dark ? 0.45 : 0.25),
+                              blurRadius: glow,
+                              spreadRadius: 1,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.workspace_premium_rounded, color: Color(0xFFFFD86D), size: 32),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${profile.currentRank.name} ${profile.currentRank.emoji}',
+                                        style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700),
+                                      ),
+                                      Text(
+                                        'Level ${profile.level} • ${summary["TODAY'S TASKS"] ?? 0} tasks today',
+                                        style: const TextStyle(color: Color(0xFFD9D9FF)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      '${profile.activeStreak} days',
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                                    ),
+                                    const Text('Current streak', style: TextStyle(color: Color(0xFFD9D9FF))),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            TweenAnimationBuilder<double>(
+                              tween: Tween(begin: 0, end: progress),
+                              duration: const Duration(milliseconds: 1300),
+                              curve: Curves.easeOutCubic,
+                              builder: (context, value, _) => LinearProgressIndicator(
+                                value: value,
+                                minHeight: 8,
+                                borderRadius: BorderRadius.circular(999),
+                                backgroundColor: Colors.white24,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text('$completed / $total completed', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 10),
+                            GestureDetector(
+                              onTap: () => setState(() => _showDetails = !_showDetails),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.stars_rounded, color: Color(0xFFFFD86D), size: 16),
+                                  const SizedBox(width: 6),
+                                  Text(_showDetails ? 'Hide details' : 'Show details', style: const TextStyle(color: Colors.white)),
+                                ],
+                              ),
+                            ),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 380),
+                              transitionBuilder: (child, anim) => SizeTransition(
+                                sizeFactor: anim,
+                                child: FadeTransition(opacity: anim, child: child),
+                              ),
+                              child: _showDetails
+                                  ? Padding(
+                                      key: const ValueKey('hero_details'),
+                                      padding: const EdgeInsets.only(top: 10),
+                                      child: Row(
+                                        children: [
+                                          Expanded(child: _heroMetric('XP', '${profile.xp}')),
+                                          Expanded(child: _heroMetric('Score', '${profile.productivityScore}%')),
+                                          Expanded(child: _heroMetric('Streak', '${profile.activeStreak}')),
+                                        ],
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(key: ValueKey('hero_empty')),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  )
-                : const SizedBox.shrink(key: ValueKey('hero_empty')),
+                  );
+                },
+              ),
+            ),
           ),
-        ],
-      ),
-    ),
-      ),
-    );
+        );
       },
-    ),
-        ),
-      ),
     );
   }
 
