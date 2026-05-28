@@ -89,21 +89,22 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final allByDate = widget.hiveService.getAllTasksByDate();
           final allTasks = allByDate.values.expand((list) => list).toList();
           final dashboardTasks = _dedupeTasksForDashboard(allTasks);
+          final nonRoutineDashboardTasks = dashboardTasks.where(_isNonRoutineTask).toList();
           final rankProfile = RankProfile.calculate(
             username: widget.hiveService.getUsername(),
             allTasksByDate: allByDate,
             journalEntries: widget.hiveService.getAllJournalEntries(),
           );
 
-          final summary = _buildSummary(dashboardTasks, todayStart);
-          final scopedTaskCounts = _buildScopedTaskCounts(dashboardTasks, todayStart);
+          final summary = _buildSummary(nonRoutineDashboardTasks, todayStart);
+          final scopedTaskCounts = _buildScopedTaskCounts(nonRoutineDashboardTasks, todayStart);
           final yearProgress = _buildYearProgress(todayStart);
           final timeProgress = _buildTimeProgress(today);
-          final priorityCounts = _countByField(dashboardTasks, (t) => t.priority, _priorityOrder);
-          final statusCounts = _countByField(dashboardTasks, (t) => t.status, _statusOrder);
-          final categoryCounts = _countByField(dashboardTasks, (t) => t.category, const []);
+          final priorityCounts = _countByField(nonRoutineDashboardTasks, (t) => t.priority, _priorityOrder);
+          final statusCounts = _countByField(nonRoutineDashboardTasks, (t) => t.status, _statusOrder);
+          final categoryCounts = _countByField(nonRoutineDashboardTasks, (t) => t.category, const []);
           final delegatedCounts = _countByField(
-            dashboardTasks,
+            nonRoutineDashboardTasks,
             (t) => (t.delegatedTo == null || t.delegatedTo!.trim().isEmpty)
                 ? 'Unassigned'
                 : t.delegatedTo!.trim(),
@@ -113,7 +114,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final dueTodayTasks = dashboardTasks
               .where((task) => _isSameDay(task.dueDate, todayStart))
               .toList();
-          final pendingTodayTasks = _buildPendingTodayTasks(dashboardTasks, todayStart);
+          final pendingTodayTasks = _buildPendingTodayTasks(nonRoutineDashboardTasks, todayStart);
 
           final priorityOptions = ['All', ...priorityCounts.keys];
           final statusOptions = ['All', ...statusCounts.keys];
@@ -125,16 +126,16 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           _selectedPerson = personOptions.contains(_selectedPerson) ? _selectedPerson : 'All';
           _selectedCategory = categoryOptions.contains(_selectedCategory) ? _selectedCategory : 'All';
 
-          final priorityTasks = _filterBy(dashboardTasks, _selectedPriority, (task) => task.priority);
-          final statusTasks = _filterBy(dashboardTasks, _selectedStatus, (task) => task.status);
+          final priorityTasks = _filterBy(nonRoutineDashboardTasks, _selectedPriority, (task) => task.priority);
+          final statusTasks = _filterBy(nonRoutineDashboardTasks, _selectedStatus, (task) => task.status);
           final personTasks = _filterBy(
-            dashboardTasks,
+            nonRoutineDashboardTasks,
             _selectedPerson,
             (task) => (task.delegatedTo == null || task.delegatedTo!.trim().isEmpty)
                 ? 'Unassigned'
                 : task.delegatedTo!.trim(),
           );
-          final categoryTasks = _filterBy(dashboardTasks, _selectedCategory, (task) => task.category);
+          final categoryTasks = _filterBy(nonRoutineDashboardTasks, _selectedCategory, (task) => task.category);
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
@@ -145,13 +146,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 14),
               _buildProgressOverviewStrip(timeProgress),
               const SizedBox(height: 14),
-              _buildDailyFocusStrip(dashboardTasks, todayStart),
+              _buildDailyFocusStrip(pendingTodayTasks, todayStart),
               const SizedBox(height: 14),
               _buildHabitRoutineSection(dueTodayTasks),
               const SizedBox(height: 14),
-              _buildProjectsSection(dashboardTasks),
+              _buildProjectsSection(nonRoutineDashboardTasks),
               const SizedBox(height: 14),
-              _buildSmartAnalyticsSection(dashboardTasks, todayStart, rankProfile),
+              _buildSmartAnalyticsSection(nonRoutineDashboardTasks, todayStart, rankProfile),
               const SizedBox(height: 14),
               _buildJourneySection(),
               const SizedBox(height: 14),
@@ -377,7 +378,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final completed = tasks.where(_isCompletedTask).length;
     final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
     final overdue = tasks
-        .where((task) => _dateOnly(task.dueDate).isBefore(todayStart) && !_isCompletedTask(task))
+        .where((task) => _dateOnly(task.dueDate).isBefore(todayStart) && _isPendingNonRoutineTask(task))
         .length;
 
     return {
@@ -467,7 +468,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final indexedTasks = tasks.asMap().entries.where((entry) {
       final task = entry.value;
       final dueDate = _dateOnly(task.dueDate);
-      return !dueDate.isAfter(todayStart) && !_isCompletedTask(task);
+      return !dueDate.isAfter(todayStart) && _isPendingNonRoutineTask(task);
     }).toList();
 
     indexedTasks.sort((a, b) {
@@ -500,9 +501,32 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }
   }
 
+  bool _isPendingNonRoutineTask(Task task) {
+    return _isNonRoutineTask(task) && !_isCompletedTask(task) && !_isCancelledTask(task);
+  }
+
+  bool _isNonRoutineTask(Task task) => !task.repeatTask;
+
   bool _isCompletedTask(Task task) => task.done || task.status.trim().toLowerCase() == 'completed';
 
+  bool _isCancelledTask(Task task) => task.status.trim().toLowerCase() == 'cancelled';
+
   DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+
+  String _formatDueLabel(Task task) {
+    final dueDate = task.dueDate;
+    final dueDay = _dateOnly(dueDate);
+    final today = _dateOnly(DateTime.now());
+    final dateLabel = _isSameDay(dueDay, today) ? 'today' : '${dueDate.month}/${dueDate.day}';
+    final hour = task.hourSlot ?? dueDate.hour;
+    final minute = task.hourSlot == null ? dueDate.minute : 0;
+    if (hour == 0 && minute == 0 && task.hourSlot == null) return 'Due $dateLabel';
+
+    final suffix = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+    final displayMinute = minute.toString().padLeft(2, '0');
+    return 'Due $dateLabel at $displayHour:$displayMinute $suffix';
+  }
 
   List<Task> _filterBy(List<Task> tasks, String selected, String Function(Task) selector) {
     if (selected == 'All') return tasks;
@@ -775,7 +799,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _buildDailyFocusStrip(List<Task> tasks, DateTime today) {
     final sorted = [...tasks]..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
-    final focus = sorted.where((t)=>!t.done && t.status!='Completed').take(6).toList();
+    final focus = sorted.take(6).toList();
     return _darkSection('Daily Focus', SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(children: focus.map((t){
@@ -799,6 +823,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             Text(t.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
             Text(urgent ? '⚡ High Priority' : '• ${t.priority}', style: const TextStyle(color: Color(0xFFB9C6F3))),
+            const SizedBox(height: 4),
+            Text(_formatDueLabel(t), style: const TextStyle(color: Color(0xFF7F8EB9), fontSize: 12)),
           ]),
         ),
         );
@@ -1234,7 +1260,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           dense: true,
           onTap: () => _editTask(task),
           title: Text(task.task),
-          subtitle: Text('${task.priority} • ${task.status}'),
+          subtitle: Text('${task.priority} • ${task.status} • ${_formatDueLabel(task)}'),
           trailing: Icon(
             group == 'Overdue' ? Icons.warning_amber_rounded : Icons.radio_button_unchecked,
             color: group == 'Overdue' ? Colors.redAccent : Colors.green,
