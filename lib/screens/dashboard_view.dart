@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../constants/dashboard_themes.dart';
 import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
@@ -79,7 +80,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1020),
+      backgroundColor: _dashboardStyle().background,
       body: SafeArea(
         child: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
@@ -142,6 +143,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
             children: [
               _buildDashboardHeader(rankProfile),
+              const SizedBox(height: 14),
+              _buildThemeSelector(),
               const SizedBox(height: 14),
               _buildHeroCard(rankProfile, summary),
               const SizedBox(height: 14),
@@ -537,6 +540,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
+  DashboardThemeStyle _dashboardStyle() => DashboardThemeStyle.of(widget.hiveService.getDashboardTheme());
+
   String _formatShortDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
 
   String _formatDueLabel(Task task) {
@@ -619,11 +624,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
   Widget _buildDashboardHeader(RankProfile profile) {
+    final style = _dashboardStyle();
     return Row(
       children: [
         CircleAvatar(
           radius: 22,
-          backgroundColor: const Color(0xFF5B4DFF),
+          backgroundColor: style.primary,
           child: Text(
             profile.username.isNotEmpty ? profile.username[0].toUpperCase() : 'U',
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20),
@@ -634,25 +640,109 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Hello, ${profile.username}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+              Text('Hello, ${profile.username}', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: style.textPrimary)),
               const SizedBox(height: 2),
-              const Text('Focus. Plan. Achieve.', style: TextStyle(color: Color(0xFF5A6785))),
+              Text('Focus. Plan. Achieve.', style: TextStyle(color: style.textMuted)),
             ],
           ),
         ),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: style.surface,
             borderRadius: BorderRadius.circular(14),
             boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
           ),
-          child: IconButton(onPressed: _openJournal, icon: const Icon(Icons.notifications_none_rounded)),
+          child: IconButton(onPressed: _openJournal, icon: Icon(Icons.notifications_none_rounded, color: style.primary)),
         ),
       ],
     );
   }
 
+
+  Widget _buildThemeSelector() {
+    final style = _dashboardStyle();
+    final selectedTheme = widget.hiveService.getDashboardTheme();
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 350),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: style.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: style.primary.withOpacity(0.24)),
+        boxShadow: [
+          BoxShadow(
+            color: style.primary.withOpacity(style.dark ? 0.16 : 0.08),
+            blurRadius: style.animated ? 18 : 8,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.palette_outlined, color: style.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Settings • Dashboard Theme',
+                  style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 17),
+                ),
+              ),
+              Text(selectedTheme.label, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: DashboardThemeType.values.map((theme) {
+                final isSelected = theme == selectedTheme;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    selected: isSelected,
+                    label: Text(theme.label),
+                    avatar: Icon(_themeIcon(theme), size: 18),
+                    selectedColor: style.primary.withOpacity(style.dark ? 0.30 : 0.18),
+                    backgroundColor: style.elevatedSurface,
+                    labelStyle: TextStyle(
+                      color: isSelected ? style.primary : style.textMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    side: BorderSide(color: isSelected ? style.primary : style.primary.withOpacity(0.16)),
+                    onSelected: (_) => widget.hiveService.setDashboardTheme(theme),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(selectedTheme.description, style: TextStyle(color: style.textMuted, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  IconData _themeIcon(DashboardThemeType theme) {
+    switch (theme) {
+      case DashboardThemeType.light:
+        return Icons.wb_sunny_outlined;
+      case DashboardThemeType.dark:
+        return Icons.nightlight_round;
+      case DashboardThemeType.gamified:
+        return Icons.workspace_premium_outlined;
+      case DashboardThemeType.calm:
+        return Icons.spa_outlined;
+      case DashboardThemeType.minimal:
+        return Icons.business_center_outlined;
+    }
+  }
+
   Widget _buildHeroCard(RankProfile profile, Map<String, int> summary) {
+    final style = _dashboardStyle();
     final completed = summary['COMPLETED'] ?? 0;
     final total = (summary['TOTAL TASKS'] ?? 1).clamp(1, 999999);
     final progress = completed / total;
@@ -668,7 +758,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           child: AnimatedBuilder(
       animation: _pulseController,
       builder: (context, _) {
-        final glow = 14 + (_pulseController.value * 18);
+        final glow = style.animated ? 14 + (_pulseController.value * 18) : 10.0;
         return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -676,11 +766,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         child: Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF6A54FF), Color(0xFF2D5BFF)]),
+        gradient: LinearGradient(colors: style.heroGradient),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF5F63FF).withOpacity(0.45),
+            color: style.primary.withOpacity(style.dark ? 0.45 : 0.25),
             blurRadius: glow,
             spreadRadius: 1,
             offset: const Offset(0, 8),
@@ -769,11 +859,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Widget _buildProgressOverviewStrip(Map<String, Map<String, int>> timeProgress) {
+    final style = _dashboardStyle();
     final cards = ['Day', 'Week', 'Month', 'Year'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Progress Overview', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 24)),
+        Text('Progress Overview', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 24, color: style.textPrimary)),
         const SizedBox(height: 10),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -794,16 +885,16 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 width: 145,
                 margin: const EdgeInsets.only(right: 10),
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFDDE3F2))),
+                decoration: BoxDecoration(color: style.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: style.primary.withOpacity(0.25))),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(label, style: TextStyle(fontWeight: FontWeight.w700, color: style.textPrimary)),
                   const SizedBox(height: 10),
                   TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0, end: percent.toDouble()),
                     duration: const Duration(milliseconds: 900),
                     builder: (context, value, child) => Text(
                       '${value.toInt()}%',
-                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: style.textPrimary),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -814,11 +905,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                       value: ring,
                       minHeight: 5,
                       backgroundColor: const Color(0xFFE9EDF8),
-                      color: const Color(0xFF5D6BFF),
+                      color: style.primary,
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text('$remaining left', style: const TextStyle(color: Color(0xFF63708A))),
+                  Text('$remaining left', style: TextStyle(color: style.textMuted)),
                 ]),
               ),
               );
@@ -831,18 +922,19 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
   Widget _darkSection(String title, Widget child, {String? action}) {
+    final style = _dashboardStyle();
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF121A31),
+        color: style.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF2A355A)),
+        border: Border.all(color: style.primary.withOpacity(0.22)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+          Text(title, style: TextStyle(color: style.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
           const Spacer(),
-          if (action != null) Text(action, style: const TextStyle(color: Color(0xFF9CB3FF))),
+          if (action != null) Text(action, style: TextStyle(color: style.primary)),
         ]),
         const SizedBox(height: 10),
         child,

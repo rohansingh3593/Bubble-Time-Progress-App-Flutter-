@@ -3,6 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/task_model.dart';
+import '../constants/dashboard_themes.dart';
 
 class HiveService {
   HiveService._privateConstructor();
@@ -15,6 +16,7 @@ class HiveService {
   static const _journalPrefix = '__journal__';
   static const _journeyPrefix = '__journey__';
   static const _schemaVersionKey = '__meta_schema_version__';
+  static const _dashboardThemeKey = '__meta_dashboard_theme__';
   static const int _currentSchemaVersion = 1;
 
   static const List<String> _defaultCategories = [
@@ -267,6 +269,17 @@ class HiveService {
 
     entries.sort((a, b) => b.date.compareTo(a.date));
     return entries;
+  }
+
+
+  DashboardThemeType getDashboardTheme() {
+    final stored = _box.get(_dashboardThemeKey);
+    final firstValue = stored == null || stored.isEmpty ? null : stored.first;
+    return dashboardThemeTypeFromStorage(firstValue is String ? firstValue : null);
+  }
+
+  Future<void> setDashboardTheme(DashboardThemeType theme) async {
+    await _box.put(_dashboardThemeKey, <String>[theme.storageKey]);
   }
 
   List<String> getDelegates() {

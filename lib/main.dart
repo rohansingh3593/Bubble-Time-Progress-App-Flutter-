@@ -9,6 +9,7 @@ import 'screens/week_view.dart';
 import 'screens/day_view.dart';
 import 'screens/streak_view.dart';
 import 'constants/colors.dart';
+import 'constants/dashboard_themes.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,36 +31,45 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Bubble Time Progress',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.primary,
-          primary: AppColors.primary,
-          secondary: AppColors.secondary,
-          surface: AppColors.surface,
-          onPrimary: Colors.white,
-          onSecondary: Colors.white,
-          onSurface: AppColors.textPrimary,
-        ),
-        scaffoldBackgroundColor: AppColors.background,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          elevation: 2,
-        ),
-        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: AppColors.primaryDark,
-          selectedItemColor: AppColors.secondary,
-          unselectedItemColor: Colors.white70,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.accent,
+    return ValueListenableBuilder(
+      valueListenable: hiveService.getBoxListenable(),
+      builder: (context, box, _) {
+        final dashboardStyle = DashboardThemeStyle.of(hiveService.getDashboardTheme());
+        return MaterialApp(
+          title: 'Bubble Time Progress',
+          theme: ThemeData(
+            brightness: dashboardStyle.dark ? Brightness.dark : Brightness.light,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: dashboardStyle.primary,
+              primary: dashboardStyle.primary,
+              secondary: dashboardStyle.secondary,
+              surface: dashboardStyle.surface,
+              onPrimary: Colors.white,
+              onSecondary: dashboardStyle.dark ? Colors.white : AppColors.textPrimary,
+              onSurface: dashboardStyle.textPrimary,
+              brightness: dashboardStyle.dark ? Brightness.dark : Brightness.light,
+            ),
+            scaffoldBackgroundColor: dashboardStyle.background,
+            appBarTheme: AppBarTheme(
+              backgroundColor: dashboardStyle.primary,
+              foregroundColor: Colors.white,
+              elevation: dashboardStyle.dark ? 0 : 2,
+            ),
+            bottomNavigationBarTheme: BottomNavigationBarThemeData(
+              backgroundColor: dashboardStyle.surface,
+              selectedItemColor: dashboardStyle.primary,
+              unselectedItemColor: dashboardStyle.textMuted,
+            ),
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: dashboardStyle.accent,
+                foregroundColor: Colors.white,
+              ),
+            ),
           ),
-        ),
-      ),
-      home: MainScreen(hiveService: hiveService),
+          home: MainScreen(hiveService: hiveService),
+        );
+      },
     );
   }
 }
@@ -99,7 +109,11 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ValueListenableBuilder(
+      valueListenable: widget.hiveService.getBoxListenable(),
+      builder: (context, box, _) {
+        final dashboardStyle = DashboardThemeStyle.of(widget.hiveService.getDashboardTheme());
+        return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
         children: _screens.asMap().entries.map((entry) {
@@ -110,6 +124,9 @@ class _MainScreenState extends State<MainScreen> {
         }).toList(),
       ),
       bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: dashboardStyle.surface,
+        selectedItemColor: dashboardStyle.primary,
+        unselectedItemColor: dashboardStyle.textMuted,
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard),
@@ -137,11 +154,11 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ],
         currentIndex: _selectedIndex,
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
         onTap: _onItemTapped,
         type: BottomNavigationBarType.fixed,
       ),
+    );
+      },
     );
   }
 }
