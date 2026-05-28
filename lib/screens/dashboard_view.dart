@@ -1478,10 +1478,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             child: Text('TASK', textAlign: TextAlign.center, style: TextStyle(color: style.textPrimary, letterSpacing: 3)),
           ),
           if (tasks.isEmpty)
-            _linedListArea(const [
+            _linedListArea([
               Center(
                 child: Padding(
-                  padding: EdgeInsets.all(8.0),
+                  padding: const EdgeInsets.all(8.0),
                   child: Text('Nothing for Today, Great Job !', style: TextStyle(color: style.textPrimary)),
                 ),
               ),
