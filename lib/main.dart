@@ -92,18 +92,24 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _screens = [
-      DashboardView(hiveService: widget.hiveService),
+      DashboardView(hiveService: widget.hiveService, onGoToDashboard: _goToDashboardTab),
       YearView(hiveService: widget.hiveService),
       MonthView(hiveService: widget.hiveService),
       WeekView(hiveService: widget.hiveService),
       DayView(hiveService: widget.hiveService),
-      StreakView(hiveService: widget.hiveService),
+      StreakView(hiveService: widget.hiveService, onGoToDashboard: _goToDashboardTab),
     ];
   }
 
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
+    });
+  }
+
+  void _goToDashboardTab() {
+    setState(() {
+      _selectedIndex = 0;
     });
   }
 

@@ -15,8 +15,9 @@ import 'journey_timeline_view.dart';
 
 class StreakView extends StatelessWidget {
   final HiveService hiveService;
+  final VoidCallback? onGoToDashboard;
 
-  const StreakView({super.key, required this.hiveService});
+  const StreakView({super.key, required this.hiveService, this.onGoToDashboard});
 
   @override
   Widget build(BuildContext context) {
@@ -66,9 +67,7 @@ class StreakView extends StatelessWidget {
                   profile: rankProfile,
                   onUsernameChanged: hiveService.setUsername,
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => JournalView(hiveService: hiveService),
-                    ),
+                    JournalView.route(hiveService: hiveService, onGoToDashboard: onGoToDashboard),
                   ),
                   onJourneyTap: () => Navigator.of(context).push(
                     MaterialPageRoute(

@@ -13,8 +13,9 @@ import 'journey_timeline_view.dart';
 
 class DashboardView extends StatefulWidget {
   final HiveService hiveService;
+  final VoidCallback? onGoToDashboard;
 
-  const DashboardView({super.key, required this.hiveService});
+  const DashboardView({super.key, required this.hiveService, this.onGoToDashboard});
 
   @override
   State<DashboardView> createState() => _DashboardViewState();
@@ -274,8 +275,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   void _openJournal() {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => JournalView(hiveService: widget.hiveService),
+      JournalView.route(
+        hiveService: widget.hiveService,
+        onGoToDashboard: widget.onGoToDashboard,
       ),
     );
   }
@@ -753,7 +755,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       curve: Curves.easeOutCubic,
       builder: (context, intro, _) => Opacity(
         opacity: intro,
-        child: Transform.translate(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _openJournal,
+          child: Transform.translate(
           offset: Offset(0, 24 * (1 - intro)),
           child: AnimatedBuilder(
       animation: _pulseController,
@@ -921,7 +926,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
 
-  Widget _darkSection(String title, Widget child, {String? action}) {
+  Widget _darkSection(String title, Widget child, {String? action, VoidCallback? onActionTap}) {
     final style = _dashboardStyle();
     return Container(
       padding: const EdgeInsets.all(14),
@@ -934,7 +939,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         Row(children: [
           Text(title, style: TextStyle(color: style.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
           const Spacer(),
-          if (action != null) Text(action, style: TextStyle(color: style.primary)),
+          if (action != null)
+            InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: onActionTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Text(action, style: TextStyle(color: style.primary, fontWeight: FontWeight.w700)),
+              ),
+            ),
         ]),
         const SizedBox(height: 10),
         child,
@@ -1108,13 +1121,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   );
 
   Widget _buildJourneySection() {
-    return _darkSection('Journey & Reflection', Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
-      Text('🌅 Wake up routine completed', style: TextStyle(color: Colors.white)),
-      SizedBox(height: 6),
-      Text('📘 Deep work block tracked', style: TextStyle(color: Colors.white)),
-      SizedBox(height: 6),
-      Text('😊 Mood: Focused', style: TextStyle(color: Colors.white)),
-    ]), action: 'Timeline');
+    final style = _dashboardStyle();
+    return _darkSection('Journey & Reflection', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('🌅 Wake up routine completed', style: TextStyle(color: style.textPrimary)),
+      const SizedBox(height: 6),
+      Text('📘 Deep work block tracked', style: TextStyle(color: style.textPrimary)),
+      const SizedBox(height: 6),
+      Text('😊 Mood: Focused', style: TextStyle(color: style.textPrimary)),
+    ]), action: 'Open Journal', onActionTap: _openJournal);
   }
 
   Widget _heroMetric(String label, String value) {
