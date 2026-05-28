@@ -1128,12 +1128,21 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Widget _summaryHeader(Map<String, int> summary) {
-    return Container(
+    final style = _dashboardStyle();
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+      builder: (context, intro, child) => Opacity(
+        opacity: intro,
+        child: Transform.scale(scale: 0.98 + (intro * 0.02), child: child),
+      ),
+      child: Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFB9B0D8),
-        border: Border.all(color: Colors.black54),
+        color: style.surface,
+        border: Border.all(color: style.primary.withOpacity(0.24)),
         borderRadius: BorderRadius.circular(18),
-        boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 6, offset: Offset(0, 3))],
+        boxShadow: [BoxShadow(color: style.primary.withOpacity(style.dark ? 0.16 : 0.08), blurRadius: style.animated ? 14 : 7, offset: const Offset(0, 3))],
       ),
       clipBehavior: Clip.antiAlias,
       child: Row(
@@ -1151,11 +1160,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   ),
                   child: Column(
                     children: [
-                      Text(entry.key, textAlign: TextAlign.center, style: const TextStyle(letterSpacing: 1.2, fontSize: 11, fontWeight: FontWeight.w600)),
+                      Text(entry.key, textAlign: TextAlign.center, style: TextStyle(color: style.textMuted, letterSpacing: 1.2, fontSize: 11, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 8),
                       Text(
                         '${entry.value}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 28),
+                        style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.bold, fontSize: 28),
                       ),
                     ],
                   ),
@@ -1164,17 +1173,24 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             )
             .toList(),
       ),
+      ),
     );
   }
 
 
   Widget _scopeTaskHeader(Map<String, int> scopedCounts) {
-    return Container(
+    final style = _dashboardStyle();
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 520),
+      curve: Curves.easeOutCubic,
+      builder: (context, intro, child) => Opacity(opacity: intro, child: Transform.translate(offset: Offset(-18 * (1 - intro), 0), child: child)),
+      child: Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFD4EDF6),
-        border: Border.all(color: Colors.black54),
+        color: style.surface,
+        border: Border.all(color: style.primary.withOpacity(0.24)),
         borderRadius: BorderRadius.circular(18),
-        boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 6, offset: Offset(0, 3))],
+        boxShadow: [BoxShadow(color: style.primary.withOpacity(style.dark ? 0.14 : 0.08), blurRadius: style.animated ? 14 : 7, offset: const Offset(0, 3))],
       ),
       clipBehavior: Clip.antiAlias,
       child: Row(
@@ -1185,11 +1201,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Column(
                     children: [
-                      Text(entry.key, textAlign: TextAlign.center, style: const TextStyle(letterSpacing: 1.1, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                      Text(entry.key, textAlign: TextAlign.center, style: TextStyle(color: style.textMuted, letterSpacing: 1.1, fontSize: 10.5, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       Text(
                         '${entry.value}',
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: style.textPrimary, fontSize: 24, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -1198,10 +1214,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             )
             .toList(),
       ),
+      ),
     );
   }
 
   Widget _yearProgressPanel(Map<String, int> progress) {
+    final style = _dashboardStyle();
     final percent = progress['progressPercent'] ?? 0;
 
     return _panel(
@@ -1214,8 +1232,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Days Passed: ${progress['daysPassed']} / ${progress['totalDays']}'),
-                Text('Remaining: ${progress['daysRemaining']}'),
+                Text('Days Passed: ${progress['daysPassed']} / ${progress['totalDays']}', style: TextStyle(color: style.textPrimary)),
+                Text('Remaining: ${progress['daysRemaining']}', style: TextStyle(color: style.textPrimary)),
               ],
             ),
             const SizedBox(height: 8),
@@ -1226,15 +1244,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               builder: (context, value, child) => LinearProgressIndicator(
                 value: value,
                 minHeight: 8,
-                backgroundColor: Colors.grey[300],
-                color: const Color(0xFF8B6BD9),
+                backgroundColor: style.elevatedSurface,
+                color: style.primary,
               ),
             ),
             const SizedBox(height: 6),
             TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: percent.toDouble()),
               duration: const Duration(milliseconds: 900),
-              builder: (context, value, child) => Text('${value.toInt()}% of year completed'),
+              builder: (context, value, child) => Text('${value.toInt()}% of year completed', style: TextStyle(color: style.textPrimary)),
             ),
           ],
         ),
@@ -1243,6 +1261,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Widget _priorityChart(Map<String, int> priorityCounts) {
+    final style = _dashboardStyle();
     final maxCount = priorityCounts.values.fold<int>(1, (max, value) => value > max ? value : max);
 
     final colors = {
@@ -1269,15 +1288,27 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Text('$value', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: value.toDouble()),
+                      duration: const Duration(milliseconds: 550),
+                      builder: (context, animatedValue, child) => Text('${animatedValue.toInt()}', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.bold)),
+                    ),
                     const SizedBox(height: 6),
-                    Container(
-                      width: 44,
-                      height: value == 0 ? 2 : height,
-                      color: (colors[entry.key] ?? Colors.grey).withOpacity(0.45),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: height),
+                      duration: Duration(milliseconds: style.animated ? 700 : 250),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, animatedHeight, child) => Container(
+                        width: 44,
+                        height: value == 0 ? 2 : animatedHeight,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [(colors[entry.key] ?? style.primary).withOpacity(0.40), style.primary.withOpacity(0.72)]),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    Text(entry.key == 'Urgent (Now)' ? '🔥 Now' : entry.key, style: const TextStyle(fontSize: 11)),
+                    Text(entry.key == 'Urgent (Now)' ? '🔥 Now' : entry.key, style: TextStyle(color: style.textMuted, fontSize: 11)),
                   ],
                 );
               }).toList(),
@@ -1306,6 +1337,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Widget _timeProgressCard(String label, Map<String, int> values) {
+    final style = _dashboardStyle();
     final passed = values['passed'] ?? 0;
     final total = values['total'] ?? 1;
     final remaining = values['remaining'] ?? 0;
@@ -1327,23 +1359,24 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: style.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFB8AFD6)),
+          border: Border.all(color: style.primary.withOpacity(0.28)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
+                color: style.textPrimary,
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
             ),
             const SizedBox(height: 6),
-            Text('Passed: $passed / $total'),
-            Text('Remaining: $remaining'),
+            Text('Passed: $passed / $total', style: TextStyle(color: style.textMuted)),
+            Text('Remaining: $remaining', style: TextStyle(color: style.textMuted)),
             const SizedBox(height: 8),
             TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: percent / 100),
@@ -1352,8 +1385,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               builder: (context, value, child) => LinearProgressIndicator(
                 value: value,
                 minHeight: 7,
-                backgroundColor: Colors.grey[300],
-                color: const Color(0xFF8B6BD9),
+                backgroundColor: style.elevatedSurface,
+                color: style.primary,
               ),
             ),
             const SizedBox(height: 6),
@@ -1362,7 +1395,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               duration: Duration(milliseconds: 850 + (index * 120)),
               builder: (context, value, child) => Text(
                 '${value.toInt()}%',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+                style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -1373,6 +1406,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Widget _statusBubbles(Map<String, int> statusCounts) {
+    final style = _dashboardStyle();
     final total = statusCounts.values.fold<int>(0, (sum, value) => sum + value);
     final firstEntry = statusCounts.entries.firstWhere(
       (element) => element.value > 0,
@@ -1394,23 +1428,33 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   (entry) => Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.circle, size: 10, color: Color(0xFFB8AFD6)),
+                      Icon(Icons.circle, size: 10, color: style.primary),
                       const SizedBox(width: 4),
-                      Text('${entry.key} (${entry.value})'),
+                      Text('${entry.key} (${entry.value})', style: TextStyle(color: style.textPrimary)),
                     ],
                   ),
                 )
                 .toList(),
           ),
           const SizedBox(height: 10),
-          Container(
-            width: 170,
-            height: 170,
-            decoration: const BoxDecoration(color: Color(0xFFB8AFD6), shape: BoxShape.circle),
-            alignment: Alignment.center,
-            child: Text(
-              total == 0 ? '0' : '${firstEntry.value}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 28),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: Duration(milliseconds: style.animated ? 700 : 250),
+            curve: Curves.easeOutBack,
+            builder: (context, value, child) => Transform.scale(scale: 0.85 + (value * 0.15), child: child),
+            child: Container(
+              width: 170,
+              height: 170,
+              decoration: BoxDecoration(color: style.primary.withOpacity(style.dark ? 0.32 : 0.18), shape: BoxShape.circle, border: Border.all(color: style.primary.withOpacity(0.45), width: 18)),
+              alignment: Alignment.center,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: (total == 0 ? 0 : firstEntry.value).toDouble()),
+                duration: const Duration(milliseconds: 650),
+                builder: (context, value, child) => Text(
+                  '${value.toInt()}',
+                  style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.bold, fontSize: 28),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -1420,6 +1464,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Widget _todayTasksSection(List<Task> tasks) {
+    final style = _dashboardStyle();
     return _panel(
       title: "TODAY'S TASKS",
       headerColor: const Color(0xFFAED9AE),
@@ -1428,16 +1473,16 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         children: [
           Container(
             width: double.infinity,
-            color: const Color(0xFFE8C1A0),
+            color: style.primary.withOpacity(style.dark ? 0.22 : 0.14),
             padding: const EdgeInsets.symmetric(vertical: 4),
-            child: const Text('TASK', textAlign: TextAlign.center, style: TextStyle(letterSpacing: 3)),
+            child: Text('TASK', textAlign: TextAlign.center, style: TextStyle(color: style.textPrimary, letterSpacing: 3)),
           ),
           if (tasks.isEmpty)
             _linedListArea(const [
               Center(
                 child: Padding(
                   padding: EdgeInsets.all(8.0),
-                  child: Text('Nothing for Today, Great Job !'),
+                  child: Text('Nothing for Today, Great Job !', style: TextStyle(color: style.textPrimary)),
                 ),
               ),
             ])
@@ -1450,6 +1495,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
   List<Widget> _buildPendingTaskRows(List<Task> tasks) {
+    final style = _dashboardStyle();
     final todayStart = _dateOnly(DateTime.now());
     final rows = <Widget>[];
     String? activeGroup;
@@ -1478,8 +1524,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         ListTile(
           dense: true,
           onTap: () => _editTask(task),
-          title: Text(task.task),
-          subtitle: Text('${task.priority} • ${task.status} • ${_formatDueLabel(task)}'),
+          title: Text(task.task, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w700)),
+          subtitle: Text('${task.priority} • ${task.status} • ${_formatDueLabel(task)}', style: TextStyle(color: style.textMuted)),
           trailing: Icon(
             group == 'Overdue' ? Icons.warning_amber_rounded : Icons.radio_button_unchecked,
             color: group == 'Overdue' ? Colors.redAccent : Colors.green,
@@ -1492,6 +1538,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Widget _categoryDonut(Map<String, int> categoryCounts) {
+    final style = _dashboardStyle();
     final topCategory = categoryCounts.entries.fold<MapEntry<String, int>>(
       const MapEntry('No Category', 0),
       (best, current) => current.value > best.value ? current : best,
@@ -1510,9 +1557,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.circle, size: 10, color: Color(0xFFB8AFD6)),
+                  Icon(Icons.circle, size: 10, color: style.primary),
                   const SizedBox(width: 6),
-                  Text('${topCategory.key} (${topCategory.value})'),
+                  Text('${topCategory.key} (${topCategory.value})', style: TextStyle(color: style.textPrimary)),
                 ],
               ),
             ),
@@ -1523,7 +1570,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             height: 210,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFFB8AFD6), width: 45),
+              border: Border.all(color: style.primary.withOpacity(style.dark ? 0.38 : 0.24), width: 45),
             ),
           ),
           const SizedBox(height: 8),
@@ -1541,6 +1588,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     required List<Task> tasks,
     String? helperText,
   }) {
+    final style = _dashboardStyle();
     return _panel(
       title: title,
       headerColor: _headerColorFor(title),
@@ -1550,19 +1598,21 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                color: const Color(0xFFE8C1A0),
-                child: Text('$label:', style: const TextStyle(letterSpacing: 1.5, fontWeight: FontWeight.bold)),
+                color: style.primary.withOpacity(style.dark ? 0.24 : 0.16),
+                child: Text('$label:', style: TextStyle(color: style.textPrimary, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
               ),
               Expanded(
                 child: Container(
-                  color: const Color(0xFFE3E3E3),
+                  color: style.elevatedSurface.withOpacity(style.dark ? 0.72 : 0.55),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: selectedValue,
                       isExpanded: true,
+                      dropdownColor: style.surface,
+                      style: TextStyle(color: style.textPrimary),
                       items: options
-                          .map((option) => DropdownMenuItem(value: option, child: Text(option)))
+                          .map((option) => DropdownMenuItem(value: option, child: Text(option, style: TextStyle(color: style.textPrimary))))
                           .toList(),
                       onChanged: (value) {
                         if (value != null) onChanged(value);
@@ -1577,20 +1627,20 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             if (helperText != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(helperText, style: const TextStyle(color: Color(0xFF4B3E68))),
+                child: Text(helperText, style: TextStyle(color: style.textMuted)),
               ),
             if (tasks.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Text('No tasks for selected filter.'),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text('No tasks for selected filter.', style: TextStyle(color: style.textPrimary)),
               )
             else
               ...tasks.map(
                 (task) => ListTile(
                   dense: true,
                   onTap: () => _editTask(task),
-                  title: Text(task.task),
-                  subtitle: Text('${task.priority} • ${task.status} • ${task.category}'),
+                  title: Text(task.task, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w700)),
+                  subtitle: Text('${task.priority} • ${task.status} • ${task.category}', style: TextStyle(color: style.textMuted)),
                 ),
               ),
           ]),
@@ -1605,56 +1655,78 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     required Widget child,
     Widget? trailing,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFECE8E6),
-        border: Border.all(color: Colors.black54),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 8, offset: Offset(0, 4))],
+    final style = _dashboardStyle();
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: style.animated ? 380 : 180),
+      curve: Curves.easeOutCubic,
+      builder: (context, intro, panelChild) => Opacity(
+        opacity: intro,
+        child: Transform.translate(offset: Offset(0, 10 * (1 - intro)), child: panelChild),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            color: headerColor,
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(letterSpacing: 2, fontWeight: FontWeight.w600),
+      child: Container(
+        decoration: BoxDecoration(
+          color: style.surface,
+          border: Border.all(color: style.primary.withOpacity(0.22)),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: style.primary.withOpacity(style.dark ? 0.14 : 0.08), blurRadius: style.animated ? 14 : 8, offset: const Offset(0, 4))],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [style.primary.withOpacity(style.dark ? 0.34 : 0.18), style.secondary.withOpacity(style.dark ? 0.24 : 0.12)]),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: style.textPrimary, letterSpacing: 2, fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
-                if (trailing != null) trailing,
-              ],
+                  if (trailing != null) trailing,
+                ],
+              ),
             ),
-          ),
-          child,
-        ],
+            child,
+          ],
+        ),
       ),
     );
   }
 
   Widget _linedListArea(List<Widget> children) {
+    final style = _dashboardStyle();
     return Container(
       width: double.infinity,
       height: 230,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFFECE8E6), Color(0xFFECE8E6)],
+          colors: [style.surface, style.elevatedSurface.withOpacity(style.dark ? 0.72 : 0.46)],
         ),
       ),
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         itemCount: children.length,
-        separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.black26),
-        itemBuilder: (context, index) => children[index],
+        separatorBuilder: (context, index) => Divider(height: 1, color: style.primary.withOpacity(0.16)),
+        itemBuilder: (context, index) => TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: Duration(milliseconds: style.animated ? 240 + (index * 35) : 120),
+          curve: Curves.easeOut,
+          builder: (context, value, child) => Opacity(
+            opacity: value,
+            child: Transform.translate(offset: Offset(12 * (1 - value), 0), child: child),
+          ),
+          child: children[index],
+        ),
       ),
     );
   }
