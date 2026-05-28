@@ -19,17 +19,20 @@ class DashboardView extends StatefulWidget {
   State<DashboardView> createState() => _DashboardViewState();
 }
 
-class _DashboardViewState extends State<DashboardView> with SingleTickerProviderStateMixin {
+class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   String _selectedPriority = 'All';
   String _selectedStatus = 'All';
   String _selectedPerson = 'All';
   String _selectedCategory = 'All';
   late final AnimationController _pulseController;
   bool _showDetails = false;
+  late DateTime _lastDashboardDate;
 
   @override
   void initState() {
     super.initState();
+    _lastDashboardDate = _dateOnly(DateTime.now());
+    WidgetsBinding.instance.addObserver(this);
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -38,8 +41,23 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pulseController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshDashboardDate();
+    }
+  }
+
+  void _refreshDashboardDate() {
+    final currentDate = _dateOnly(DateTime.now());
+    if (!_isSameDay(currentDate, _lastDashboardDate)) {
+      setState(() => _lastDashboardDate = currentDate);
+    }
   }
 
   static const List<String> _priorityOrder = [
@@ -92,9 +110,10 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
             const [],
           );
 
-          final todayTasks = dashboardTasks
+          final dueTodayTasks = dashboardTasks
               .where((task) => _isSameDay(task.dueDate, todayStart))
               .toList();
+          final pendingTodayTasks = _buildPendingTodayTasks(dashboardTasks, todayStart);
 
           final priorityOptions = ['All', ...priorityCounts.keys];
           final statusOptions = ['All', ...statusCounts.keys];
@@ -128,7 +147,7 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
               const SizedBox(height: 14),
               _buildDailyFocusStrip(dashboardTasks, todayStart),
               const SizedBox(height: 14),
-              _buildHabitRoutineSection(todayTasks),
+              _buildHabitRoutineSection(dueTodayTasks),
               const SizedBox(height: 14),
               _buildProjectsSection(dashboardTasks),
               const SizedBox(height: 14),
@@ -183,7 +202,7 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
               const SizedBox(height: 12),
               _statusBubbles(statusCounts),
               const SizedBox(height: 12),
-              _todayTasksSection(todayTasks),
+              _todayTasksSection(pendingTodayTasks),
               const SizedBox(height: 12),
               _categoryDonut(categoryCounts),
               const SizedBox(height: 12),
@@ -355,16 +374,10 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
 
   Map<String, int> _buildSummary(List<Task> tasks, DateTime todayStart) {
     final total = tasks.length;
-    final completed = tasks.where((t) => t.done || t.status == 'Completed').length;
-    final todayTasks = tasks.where((t) => _isSameDay(t.dueDate, todayStart)).length;
+    final completed = tasks.where(_isCompletedTask).length;
+    final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
     final overdue = tasks
-        .where(
-          (t) =>
-              t.dueDate.isBefore(todayStart) &&
-              !t.done &&
-              t.status != 'Completed' &&
-              t.status != 'Cancelled',
-        )
+        .where((task) => _dateOnly(task.dueDate).isBefore(todayStart) && !_isCompletedTask(task))
         .length;
 
     return {
@@ -381,7 +394,7 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
         .where((t) => t.dueDate.year == todayStart.year && t.dueDate.month == todayStart.month)
         .length;
     final yearlyTasks = tasks.where((t) => t.dueDate.year == todayStart.year).length;
-    final todayTasks = tasks.where((t) => _isSameDay(t.dueDate, todayStart)).length;
+    final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
 
     return {
       'YEAR TASKS': yearlyTasks,
@@ -448,6 +461,48 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
       'Day': asProgress(passed: passedDayHours, total: totalDayHours),
     };
   }
+
+
+  List<Task> _buildPendingTodayTasks(List<Task> tasks, DateTime todayStart) {
+    final indexedTasks = tasks.asMap().entries.where((entry) {
+      final task = entry.value;
+      final dueDate = _dateOnly(task.dueDate);
+      return !dueDate.isAfter(todayStart) && !_isCompletedTask(task);
+    }).toList();
+
+    indexedTasks.sort((a, b) {
+      final priorityCompare = _prioritySortRank(a.value.priority).compareTo(_prioritySortRank(b.value.priority));
+      if (priorityCompare != 0) return priorityCompare;
+
+      final dueCompare = a.value.dueDate.compareTo(b.value.dueDate);
+      if (dueCompare != 0) return dueCompare;
+
+      return a.key.compareTo(b.key);
+    });
+
+    return indexedTasks.map((entry) => entry.value).toList();
+  }
+
+  int _prioritySortRank(String priority) {
+    switch (priority.trim().toLowerCase()) {
+      case 'urgent (now)':
+        return 0;
+      case 'very high':
+        return 1;
+      case 'high':
+        return 2;
+      case 'medium':
+        return 3;
+      case 'low':
+        return 4;
+      default:
+        return 5;
+    }
+  }
+
+  bool _isCompletedTask(Task task) => task.done || task.status.trim().toLowerCase() == 'completed';
+
+  DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
   List<Task> _filterBy(List<Task> tasks, String selected, String Function(Task) selector) {
     if (selected == 'All') return tasks;
@@ -1142,21 +1197,53 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
               ),
             ])
           else
-            _linedListArea(
-              tasks
-                  .map(
-                    (task) => ListTile(
-                      dense: true,
-                      onTap: () => _editTask(task),
-                      title: Text(task.task),
-                      subtitle: Text('${task.priority} • ${task.status}'),
-                    ),
-                  )
-                  .toList(),
-            ),
+            _linedListArea(_buildPendingTaskRows(tasks)),
         ],
       ),
     );
+  }
+
+
+  List<Widget> _buildPendingTaskRows(List<Task> tasks) {
+    final todayStart = _dateOnly(DateTime.now());
+    final rows = <Widget>[];
+    String? activeGroup;
+
+    for (final task in tasks) {
+      final group = _dateOnly(task.dueDate).isBefore(todayStart) ? 'Overdue' : 'Today';
+      if (group != activeGroup) {
+        activeGroup = group;
+        rows.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 4),
+            child: Text(
+              group.toUpperCase(),
+              style: TextStyle(
+                color: group == 'Overdue' ? Colors.redAccent : Colors.green,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.4,
+              ),
+            ),
+          ),
+        );
+      }
+
+      rows.add(
+        ListTile(
+          dense: true,
+          onTap: () => _editTask(task),
+          title: Text(task.task),
+          subtitle: Text('${task.priority} • ${task.status}'),
+          trailing: Icon(
+            group == 'Overdue' ? Icons.warning_amber_rounded : Icons.radio_button_unchecked,
+            color: group == 'Overdue' ? Colors.redAccent : Colors.green,
+          ),
+        ),
+      );
+    }
+
+    return rows;
   }
 
   Widget _categoryDonut(Map<String, int> categoryCounts) {
