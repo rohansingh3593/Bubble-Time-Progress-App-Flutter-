@@ -136,8 +136,8 @@ class _DayViewState extends State<DayView> {
     return showDialog<Task>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Update ${task.task} status'),
-        content: const Text('Recurring tasks keep their details fixed. Update this occurrence status, or disable the routine to stop active tracking while keeping history.'),
+        title: Text('Update ${task.task} occurrence'),
+        content: const Text('Routine details are locked here. Update only the current occurrence, or pause the routine without deleting its history.'),
         actions: [
           toggleButton(context),
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
@@ -145,13 +145,13 @@ class _DayViewState extends State<DayView> {
             onPressed: task.routineEnabled
                 ? () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed'))
                 : null,
-            child: const Text('Mark Missed'),
+            child: const Text('Miss This Occurrence'),
           ),
           ElevatedButton(
             onPressed: task.routineEnabled
                 ? () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed'))
                 : null,
-            child: const Text('Mark Completed'),
+            child: const Text('Complete This Occurrence'),
           ),
         ],
       ),

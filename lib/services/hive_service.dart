@@ -364,7 +364,7 @@ class HiveService {
     final nextOccurrence = updated.copyWith(
       dueDate: nextDueDate,
       done: false,
-      status: 'Not Started',
+      status: 'Not Updated',
     );
 
     final existingIndex = nextDateTasks.indexWhere(
@@ -539,7 +539,7 @@ class HiveService {
       original.copyWith(
         dueDate: occurrenceDate,
         done: false,
-        status: 'Not Started',
+        status: 'Not Updated',
         repeatTask: true,
         routineEnabled: true,
       ),
