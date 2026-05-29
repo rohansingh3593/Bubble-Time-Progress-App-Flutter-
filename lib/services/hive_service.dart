@@ -3,6 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/task_model.dart';
+import '../constants/dashboard_themes.dart';
 
 class HiveService {
   HiveService._privateConstructor();
@@ -15,6 +16,7 @@ class HiveService {
   static const _journalPrefix = '__journal__';
   static const _journeyPrefix = '__journey__';
   static const _schemaVersionKey = '__meta_schema_version__';
+  static const _dashboardThemeKey = '__meta_dashboard_theme__';
   static const int _currentSchemaVersion = 1;
 
   static const List<String> _defaultCategories = [
@@ -269,6 +271,17 @@ class HiveService {
     return entries;
   }
 
+
+  DashboardThemeType getDashboardTheme() {
+    final stored = _box.get(_dashboardThemeKey);
+    final firstValue = stored == null || stored.isEmpty ? null : stored.first;
+    return dashboardThemeTypeFromStorage(firstValue is String ? firstValue : null);
+  }
+
+  Future<void> setDashboardTheme(DashboardThemeType theme) async {
+    await _box.put(_dashboardThemeKey, <String>[theme.storageKey]);
+  }
+
   List<String> getDelegates() {
     return (_box.get(_delegatesKey) ?? <String>[]).cast<String>().toList();
   }
@@ -338,7 +351,7 @@ class HiveService {
   Future<void> _handleRecurringIfNeeded({
     required Task updated,
   }) async {
-    if (!updated.repeatTask) return;
+    if (!updated.repeatTask || !updated.routineEnabled) return;
 
     if (!_isTerminalStatus(updated.status)) return;
 
@@ -351,7 +364,7 @@ class HiveService {
     final nextOccurrence = updated.copyWith(
       dueDate: nextDueDate,
       done: false,
-      status: 'Not Started',
+      status: 'Not Updated',
     );
 
     final existingIndex = nextDateTasks.indexWhere(
@@ -443,7 +456,7 @@ class HiveService {
     }
 
     for (final key in _box.keys) {
-      if (key is! String) continue;
+      if (key is! String || DateTime.tryParse(key) == null) continue;
 
       final rawList = _box.get(key);
       if (rawList == null) continue;
@@ -463,6 +476,85 @@ class HiveService {
     return false;
   }
 
+
+  Future<bool> deleteTaskByReference(Task original) async {
+    for (final key in _box.keys) {
+      if (key is! String || DateTime.tryParse(key) == null) continue;
+
+      final rawList = _box.get(key);
+      if (rawList == null) continue;
+      final tasks = rawList.cast<Task>().toList();
+
+      for (int i = 0; i < tasks.length; i++) {
+        final candidate = tasks[i];
+        if (identical(candidate, original) || _matchesTaskIdentity(candidate, original)) {
+          tasks.removeAt(i);
+          await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  Future<bool> setRecurringTaskEnabledByReference(Task original, bool enabled) async {
+    if (!original.repeatTask) return false;
+
+    var changed = false;
+    for (final key in _box.keys) {
+      if (key is! String || DateTime.tryParse(key) == null) continue;
+
+      final rawList = _box.get(key);
+      if (rawList == null) continue;
+      final tasks = rawList.cast<Task>().toList();
+      var listChanged = false;
+
+      for (int i = 0; i < tasks.length; i++) {
+        final candidate = tasks[i];
+        if (_isSameRecurringSeriesIdentity(candidate, original)) {
+          tasks[i] = candidate.copyWith(routineEnabled: enabled);
+          listChanged = true;
+          changed = true;
+        }
+      }
+
+      if (listChanged) {
+        await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+      }
+    }
+
+    if (enabled && changed) {
+      await _ensureCurrentRecurringOccurrenceEnabled(original);
+    }
+
+    return changed;
+  }
+
+  Future<void> _ensureCurrentRecurringOccurrenceEnabled(Task original) async {
+    final occurrenceDate = _currentOccurrenceDate(original.repeatFrequency, DateTime.now());
+    final key = _formatKey(occurrenceDate);
+    final tasks = getTasksForDate(occurrenceDate);
+    final occurrence = _withNormalizedTaskName(
+      original.copyWith(
+        dueDate: occurrenceDate,
+        done: false,
+        status: 'Not Updated',
+        repeatTask: true,
+        routineEnabled: true,
+      ),
+    );
+
+    final existingIndex = tasks.indexWhere((task) => _isSameRecurringTaskIdentity(task, occurrence));
+    if (existingIndex >= 0) {
+      tasks[existingIndex] = tasks[existingIndex].copyWith(routineEnabled: true);
+    } else {
+      tasks.add(occurrence);
+    }
+
+    await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+  }
+
   bool _matchesTaskIdentity(Task a, Task b) {
     return a.task == b.task &&
         a.dueDate.year == b.dueDate.year &&
@@ -470,6 +562,15 @@ class HiveService {
         a.dueDate.day == b.dueDate.day &&
         a.priority == b.priority &&
         a.category == b.category;
+  }
+
+
+  bool _isSameRecurringSeriesIdentity(Task a, Task b) {
+    return a.repeatTask &&
+        b.repeatTask &&
+        a.task.trim().toLowerCase() == b.task.trim().toLowerCase() &&
+        a.category.trim().toLowerCase() == b.category.trim().toLowerCase() &&
+        _normalizedRepeatFrequency(a.repeatFrequency) == _normalizedRepeatFrequency(b.repeatFrequency);
   }
 
   bool _isSameRecurringTaskIdentity(Task a, Task b) {

@@ -84,6 +84,19 @@ class _YearViewState extends State<YearView> {
   }
 
   Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
+    Future<void> toggleRoutine(BuildContext dialogContext) async {
+      await widget.hiveService.setRecurringTaskEnabledByReference(task, !task.routineEnabled);
+      if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+    }
+
+    Widget toggleButton(BuildContext dialogContext) {
+      return TextButton.icon(
+        onPressed: () => toggleRoutine(dialogContext),
+        icon: Icon(task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
+        label: Text(task.routineEnabled ? 'Disable Routine' : 'Enable Routine'),
+      );
+    }
+
     if (_isOccurrenceLocked(task)) {
       final period = _occurrenceLabel(task);
       final statusLabel = task.done || _normalizedStatus(task) == 'completed' ? 'completed' : task.status.toLowerCase();
@@ -91,8 +104,9 @@ class _YearViewState extends State<YearView> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Already updated'),
-          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence.'),
+          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence. You can still enable or disable this routine without deleting its history.'),
           actions: [
+            toggleButton(context),
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
           ],
         ),
@@ -102,17 +116,22 @@ class _YearViewState extends State<YearView> {
     return showDialog<Task>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Update ${task.task} status'),
-        content: const Text('Recurring tasks keep their details fixed. Update only this occurrence status.'),
+        title: Text('Update ${task.task} occurrence'),
+        content: const Text('Routine details are locked here. Update only the current occurrence, or pause the routine without deleting its history.'),
         actions: [
+          toggleButton(context),
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed')),
-            child: const Text('Mark Missed'),
+            onPressed: task.routineEnabled
+                ? () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed'))
+                : null,
+            child: const Text('Miss This Occurrence'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed')),
-            child: const Text('Mark Completed'),
+            onPressed: task.routineEnabled
+                ? () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed'))
+                : null,
+            child: const Text('Complete This Occurrence'),
           ),
         ],
       ),
@@ -128,6 +147,7 @@ class _YearViewState extends State<YearView> {
             initialTask: task,
             title: 'Update Task',
             actionLabel: 'Save Task',
+            onDelete: () => widget.hiveService.deleteTaskByReference(task),
           );
 
     if (updated != null) {

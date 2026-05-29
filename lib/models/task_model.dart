@@ -50,6 +50,9 @@ class Task {
   @HiveField(14)
   int colorValue;
 
+  @HiveField(15)
+  bool routineEnabled;
+
   Task({
     required this.task,
     this.done = false,
@@ -66,6 +69,7 @@ class Task {
     this.estimatedMinutes = 0,
     this.hourSlot,
     this.colorValue = 0xFF1E88E5,
+    this.routineEnabled = true,
   });
 
   Task copyWith({
@@ -84,6 +88,7 @@ class Task {
     int? estimatedMinutes,
     int? hourSlot,
     int? colorValue,
+    bool? routineEnabled,
   }) {
     return Task(
       task: task ?? this.task,
@@ -101,6 +106,7 @@ class Task {
       estimatedMinutes: estimatedMinutes ?? this.estimatedMinutes,
       hourSlot: hourSlot ?? this.hourSlot,
       colorValue: colorValue ?? this.colorValue,
+      routineEnabled: routineEnabled ?? this.routineEnabled,
     );
   }
 }

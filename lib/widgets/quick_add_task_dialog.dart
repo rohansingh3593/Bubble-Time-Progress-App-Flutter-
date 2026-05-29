@@ -17,8 +17,6 @@ const List<String> _statusOptions = [
   'Cancelled',
   'Overdue',
 ];
-const List<String> _routineStatusOptions = ['Completed', 'Missed'];
-
 const List<String> _repeatFrequencyOptions = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
 const List<String> _projectPhaseStatusOptions = ['Not Started', 'In Progress', 'Completed', 'Cancelled'];
 
@@ -39,14 +37,11 @@ Future<Task?> showTaskFormDialog(
   int? initialHourSlot,
   String title = 'Add Task',
   String actionLabel = 'Add Task',
+  Future<void> Function()? onDelete,
 }) async {
   final isEditing = initialTask != null;
   final nameController = TextEditingController(text: initialTask?.task ?? '');
   final descriptionController = TextEditingController(text: initialTask?.description ?? '');
-  final estimatedController = TextEditingController(
-    text: (initialTask?.estimatedMinutes ?? 0) > 0 ? '${initialTask!.estimatedMinutes}' : '',
-  );
-
   final hiveService = HiveService.instance;
   final categories = hiveService.getCategories().toList();
   final delegates = hiveService.getDelegates().toList();
@@ -62,12 +57,15 @@ Future<Task?> showTaskFormDialog(
   String repeatFrequency = initialTask?.repeatFrequency ?? 'Daily';
   bool selectedUrgent = initialTask?.urgent ?? false;
   bool selectedImportant = initialTask?.important ?? false;
+  bool routineEnabled = initialTask?.routineEnabled ?? true;
   int selectedColorValue = initialTask?.colorValue ?? _taskColorOptions['Blue']!;
   final projectPhases = _ProjectPhaseDraft.parseFromDescription(initialTask?.description ?? '');
-  List<String> getStatusOptions() => repeatTask ? _routineStatusOptions : _statusOptions;
   void syncStatusForTaskType() {
-    final options = getStatusOptions();
-    if (!options.contains(selectedStatus)) selectedStatus = options.first;
+    if (repeatTask) {
+      selectedStatus = 'Not Updated';
+      return;
+    }
+    if (!_statusOptions.contains(selectedStatus)) selectedStatus = 'Not Started';
   }
 
   if (!categories.contains(selectedCategory)) categories.add(selectedCategory);
@@ -125,6 +123,14 @@ Future<Task?> showTaskFormDialog(
                         const Text('Repeat Frequency', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
                         ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() { repeatFrequency = value; if (repeatFrequency == 'Daily') { hourSlot = null; selectedDelegate = null; } }); })),
+                        const SizedBox(height: 8),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Enable in Streak'),
+                          subtitle: Text(routineEnabled ? 'Routine appears in Habit/Streak tracking' : 'Routine is paused but history is kept'),
+                          value: routineEnabled,
+                          onChanged: (value) => setDialogState(() => routineEnabled = value),
+                        ),
                         const SizedBox(height: 8),
                         const Text('Task Color', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
@@ -208,14 +214,7 @@ Future<Task?> showTaskFormDialog(
                   ),
                 ),
                 const SizedBox(height: 12),
-                if (repeatTask) ...[
-                  TextField(
-                    controller: estimatedController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(labelText: 'Estimated Time (minutes) *', hintText: '30, 60, 120', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
-                  ),
-                  const SizedBox(height: 12),
-                ] else ...[
+                if (!repeatTask) ...[
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
@@ -277,24 +276,26 @@ Future<Task?> showTaskFormDialog(
                   ),
                   const SizedBox(height: 12),
                 ],
-                DropdownButtonFormField<String>(
-                  value: selectedPriority,
-                  decoration: InputDecoration(labelText: 'Priority', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
-                  items: _priorityOptions.map((priority) => DropdownMenuItem<String>(value: priority, child: Text(priority))).toList(),
-                  onChanged: (value) {
-                    if (value != null) setDialogState(() => selectedPriority = value);
-                  },
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: selectedStatus,
-                  decoration: InputDecoration(labelText: 'Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
-                  items: getStatusOptions().map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
-                  onChanged: (value) {
-                    if (value != null) setDialogState(() => selectedStatus = value);
-                  },
-                ),
-                const SizedBox(height: 12),
+                if (!repeatTask) ...[
+                  DropdownButtonFormField<String>(
+                    value: selectedPriority,
+                    decoration: InputDecoration(labelText: 'Priority', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                    items: _priorityOptions.map((priority) => DropdownMenuItem<String>(value: priority, child: Text(priority))).toList(),
+                    onChanged: (value) {
+                      if (value != null) setDialogState(() => selectedPriority = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedStatus,
+                    decoration: InputDecoration(labelText: 'Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                    items: _statusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
+                    onChanged: (value) {
+                      if (value != null) setDialogState(() => selectedStatus = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
                   decoration: InputDecoration(labelText: 'Category', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
@@ -314,7 +315,7 @@ Future<Task?> showTaskFormDialog(
                     }
                   },
                 ),
-                if (!repeatTask || !(repeatTask && repeatFrequency == 'Daily')) ...[
+                if (!repeatTask) ...[
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: selectedDelegate ?? '__none__',
@@ -343,25 +344,45 @@ Future<Task?> showTaskFormDialog(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(color: Color(0xFFF8F4FF), borderRadius: BorderRadius.all(Radius.circular(14)), border: Border.fromBorderSide(BorderSide(color: Colors.black12))),
-                    child: Text('Daily habits are personal all-day routines, so delegate scheduling is hidden.'),
+                    child: Text('Routine tasks are tracked in Habit/Streak, so delegate scheduling is hidden.'),
                   ),
                 ],
               ],
             ),
           ),
           actions: [
+            if (isEditing && initialTask?.repeatTask == false && onDelete != null)
+              TextButton(
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete Task?'),
+                      content: const Text('Are you sure you want to delete this task? This action cannot be undone.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await onDelete();
+                    if (context.mounted) Navigator.of(context).pop();
+                  }
+                },
+                child: const Text('Delete Task', style: TextStyle(color: Colors.redAccent)),
+              ),
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
               onPressed: () {
                 final name = nameController.text.trim();
-                final estimatedMinutes = int.tryParse(estimatedController.text.trim()) ?? 0;
                 if (name.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task name is required')));
-                  return;
-                }
-                if (repeatTask && estimatedMinutes <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Estimated time is required')));
                   return;
                 }
                 final mergedDescription = !repeatTask
@@ -372,18 +393,19 @@ Future<Task?> showTaskFormDialog(
                   task: name,
                   description: mergedDescription,
                   dueDate: dueDate,
-                  priority: selectedPriority,
-                  status: selectedStatus,
+                  priority: repeatTask ? 'Medium' : selectedPriority,
+                  status: repeatTask ? 'Not Updated' : selectedStatus,
                   category: selectedCategory,
-                  delegatedTo: repeatTask && repeatFrequency == 'Daily' ? null : selectedDelegate,
-                  done: selectedStatus == 'Completed',
+                  delegatedTo: repeatTask ? null : selectedDelegate,
+                  done: repeatTask ? false : selectedStatus == 'Completed',
                   repeatTask: repeatTask,
                   repeatFrequency: repeatTask ? repeatFrequency : null,
                   urgent: selectedUrgent,
                   important: selectedImportant,
-                  estimatedMinutes: repeatTask ? estimatedMinutes : 0,
+                  estimatedMinutes: 0,
                   hourSlot: repeatTask && repeatFrequency == 'Daily' ? null : hourSlot,
                   colorValue: selectedColorValue,
+                  routineEnabled: repeatTask ? routineEnabled : true,
                 ));
               },
               child: Text(actionLabel),
@@ -395,7 +417,6 @@ Future<Task?> showTaskFormDialog(
   } finally {
     nameController.dispose();
     descriptionController.dispose();
-    estimatedController.dispose();
   }
 }
 

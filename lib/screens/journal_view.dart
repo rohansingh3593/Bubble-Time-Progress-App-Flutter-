@@ -9,8 +9,30 @@ import '../widgets/rank_profile_card.dart';
 
 class JournalView extends StatefulWidget {
   final HiveService hiveService;
+  final VoidCallback? onGoToDashboard;
 
-  const JournalView({super.key, required this.hiveService});
+  const JournalView({super.key, required this.hiveService, this.onGoToDashboard});
+
+  static Route<void> route({required HiveService hiveService, VoidCallback? onGoToDashboard}) {
+    return PageRouteBuilder<void>(
+      pageBuilder: (context, animation, secondaryAnimation) => JournalView(
+        hiveService: hiveService,
+        onGoToDashboard: onGoToDashboard,
+      ),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
+            child: child,
+          ),
+        );
+      },
+      transitionDuration: const Duration(milliseconds: 360),
+      reverseTransitionDuration: const Duration(milliseconds: 280),
+    );
+  }
 
   @override
   State<JournalView> createState() => _JournalViewState();
@@ -79,6 +101,15 @@ class _JournalViewState extends State<JournalView> {
     );
   }
 
+  void _goBack() {
+    Navigator.of(context).maybePop();
+  }
+
+  void _goToDashboard() {
+    widget.onGoToDashboard?.call();
+    Navigator.of(context).maybePop();
+  }
+
   Future<void> _deleteEntry() async {
     await widget.hiveService.deleteJournalEntry(_selectedDate);
     if (!mounted) return;
@@ -96,7 +127,20 @@ class _JournalViewState extends State<JournalView> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: _goBack,
+        ),
         title: const Text('Journal & Reflection'),
+        actions: [
+          TextButton.icon(
+            onPressed: _goToDashboard,
+            icon: const Icon(Icons.home_rounded),
+            label: const Text('Dashboard'),
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+          ),
+        ],
       ),
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
