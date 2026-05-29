@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -114,6 +115,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               .where((task) => _isSameDay(task.dueDate, todayStart))
               .toList();
           final pendingTodayTasks = _buildPendingTodayTasks(dashboardTasks, todayStart);
+          final todayOccurrenceTasks = _dedupeTasksForDashboard(widget.hiveService.getTasksForDate(todayStart))
+              .where((task) => !task.repeatTask || task.routineEnabled)
+              .toList();
+          final todayProductivityStats = _buildTodayProductivityStats(todayOccurrenceTasks);
           final disabledRoutineTasks = _buildDisabledRoutineTasks(allTasks);
 
           final priorityOptions = ['All', ...insightPriorityCounts.keys];
@@ -185,6 +190,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               ),
               const SizedBox(height: 12),
               _todayTasksSection(pendingTodayTasks),
+              const SizedBox(height: 12),
+              _todaysProductivitySection(todayProductivityStats),
               const SizedBox(height: 12),
             ],
           );
@@ -394,6 +401,22 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       'MONTH TASKS': monthlyTasks,
       'TODAY TASKS': todayTasks,
     };
+  }
+
+  _TodayProductivityStats _buildTodayProductivityStats(List<Task> tasks) {
+    final activeTasks = tasks.where((task) => !_isCancelledTask(task)).toList();
+    final completed = activeTasks.where(_isCompletedTask).length;
+    final overdue = activeTasks.where((task) {
+      final status = task.status.trim().toLowerCase();
+      return !_isCompletedTask(task) && (status == 'overdue' || status == 'missed');
+    }).length;
+    final pending = activeTasks.length - completed - overdue;
+    return _TodayProductivityStats(
+      total: activeTasks.length,
+      completed: completed,
+      pending: pending < 0 ? 0 : pending,
+      overdue: overdue,
+    );
   }
 
   Map<String, int> _buildYearProgress(DateTime todayStart) {
@@ -1747,6 +1770,173 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
+  Widget _todaysProductivitySection(_TodayProductivityStats stats) {
+    final style = _dashboardStyle();
+    final badge = _productivityBadge(stats.completionRate);
+    const completedColor = Color(0xFF2ECC71);
+    const pendingColor = Color(0xFFFFA726);
+    const overdueColor = Color(0xFFFF5252);
+
+    return _panel(
+      title: "TODAY'S PRODUCTIVITY",
+      headerColor: style.primary,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: Duration(milliseconds: style.animated ? 500 : 180),
+        curve: Curves.easeOutCubic,
+        builder: (context, animationValue, child) {
+          return Opacity(
+            opacity: animationValue,
+            child: Transform.translate(
+              offset: Offset(0, 12 * (1 - animationValue)),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+                child: Column(
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 190,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                CustomPaint(
+                                  size: const Size(176, 176),
+                                  painter: _TodayProductivityPiePainter(
+                                    completed: stats.completed,
+                                    pending: stats.pending,
+                                    overdue: stats.overdue,
+                                    progress: animationValue,
+                                    completedColor: completedColor,
+                                    pendingColor: pendingColor,
+                                    overdueColor: overdueColor,
+                                    backgroundColor: style.primary.withOpacity(style.dark ? 0.14 : 0.08),
+                                  ),
+                                ),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TweenAnimationBuilder<double>(
+                                      tween: Tween(begin: 0, end: stats.completionRate.toDouble()),
+                                      duration: Duration(milliseconds: style.animated ? 500 : 180),
+                                      builder: (context, value, child) => Text(
+                                        '${value.toInt()}%',
+                                        style: TextStyle(color: style.textPrimary, fontSize: 32, fontWeight: FontWeight.w900),
+                                      ),
+                                    ),
+                                    Text('Completion', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                                decoration: BoxDecoration(
+                                  color: badge.color.withOpacity(style.dark ? 0.20 : 0.12),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(color: badge.color.withOpacity(0.40)),
+                                ),
+                                child: Text(
+                                  '${badge.label} ${badge.emoji}',
+                                  style: TextStyle(color: badge.color, fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              _todayProductivityLegend('Completed', stats.completed, completedColor),
+                              _todayProductivityLegend('Pending', stats.pending, pendingColor),
+                              if (stats.overdue > 0) _todayProductivityLegend('Overdue', stats.overdue, overdueColor),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _todayProductivityStat('Today\'s Tasks', stats.total),
+                        _todayProductivityStat('Completed', stats.completed),
+                        _todayProductivityStat('Pending', stats.pending),
+                        _todayProductivityStat('Completion Rate', stats.completionRate, suffix: '%'),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _todayProductivityLegend(String label, int value, Color color) {
+    final style = _dashboardStyle();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 11,
+            height: 11,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle, boxShadow: [BoxShadow(color: color.withOpacity(0.34), blurRadius: 8)]),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(label, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w700))),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: value.toDouble()),
+            duration: Duration(milliseconds: style.animated ? 500 : 180),
+            builder: (context, animatedValue, child) => Text('${animatedValue.toInt()}', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _todayProductivityStat(String label, int value, {String suffix = ''}) {
+    final style = _dashboardStyle();
+    return Container(
+      width: 150,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: style.elevatedSurface.withOpacity(style.dark ? 0.72 : 0.52),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: style.primary.withOpacity(0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 11, fontWeight: FontWeight.w700)),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: value.toDouble()),
+            duration: Duration(milliseconds: style.animated ? 500 : 180),
+            builder: (context, animatedValue, child) => Text(
+              '${animatedValue.toInt()}$suffix',
+              style: TextStyle(color: style.textPrimary, fontSize: 20, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _ProductivityBadge _productivityBadge(int rate) {
+    if (rate <= 25) return const _ProductivityBadge(label: 'Needs Attention', emoji: '🔴', color: Color(0xFFFF5252));
+    if (rate <= 50) return const _ProductivityBadge(label: 'Getting Started', emoji: '🟠', color: Color(0xFFFFA726));
+    if (rate <= 75) return const _ProductivityBadge(label: 'Productive', emoji: '🟢', color: Color(0xFF2ECC71));
+    return const _ProductivityBadge(label: 'Excellent', emoji: '🔥', color: Color(0xFFFF7043));
+  }
+
   Widget _todayTasksSection(List<Task> tasks) {
     final style = _dashboardStyle();
     return _panel(
@@ -2083,6 +2273,94 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+}
+
+class _TodayProductivityStats {
+  final int total;
+  final int completed;
+  final int pending;
+  final int overdue;
+
+  const _TodayProductivityStats({required this.total, required this.completed, required this.pending, required this.overdue});
+
+  int get completionRate => total == 0 ? 0 : ((completed / total) * 100).round();
+}
+
+class _ProductivityBadge {
+  final String label;
+  final String emoji;
+  final Color color;
+
+  const _ProductivityBadge({required this.label, required this.emoji, required this.color});
+}
+
+class _TodayProductivityPiePainter extends CustomPainter {
+  final int completed;
+  final int pending;
+  final int overdue;
+  final double progress;
+  final Color completedColor;
+  final Color pendingColor;
+  final Color overdueColor;
+  final Color backgroundColor;
+
+  const _TodayProductivityPiePainter({
+    required this.completed,
+    required this.pending,
+    required this.overdue,
+    required this.progress,
+    required this.completedColor,
+    required this.pendingColor,
+    required this.overdueColor,
+    required this.backgroundColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = completed + pending + overdue;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final paint = Paint()..style = PaintingStyle.fill;
+
+    paint.color = backgroundColor;
+    canvas.drawCircle(center, radius, paint);
+
+    if (total == 0) {
+      paint.color = backgroundColor;
+      canvas.drawCircle(center, radius * 0.62, paint);
+      return;
+    }
+
+    var startAngle = -math.pi / 2;
+    final animationProgress = progress.clamp(0.0, 1.0).toDouble();
+    for (final segment in [
+      MapEntry(completedColor, completed),
+      MapEntry(pendingColor, pending),
+      MapEntry(overdueColor, overdue),
+    ]) {
+      if (segment.value <= 0) continue;
+      final sweep = (segment.value / total) * math.pi * 2 * animationProgress;
+      paint.color = segment.key;
+      canvas.drawArc(rect, startAngle, sweep, true, paint);
+      startAngle += sweep;
+    }
+
+    paint.color = backgroundColor;
+    canvas.drawCircle(center, radius * 0.58, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TodayProductivityPiePainter oldDelegate) {
+    return oldDelegate.completed != completed ||
+        oldDelegate.pending != pending ||
+        oldDelegate.overdue != overdue ||
+        oldDelegate.progress != progress ||
+        oldDelegate.completedColor != completedColor ||
+        oldDelegate.pendingColor != pendingColor ||
+        oldDelegate.overdueColor != overdueColor ||
+        oldDelegate.backgroundColor != backgroundColor;
   }
 }
 
