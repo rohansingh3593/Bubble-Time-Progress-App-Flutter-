@@ -26,6 +26,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   String _selectedStatus = 'All';
   String _selectedPerson = 'All';
   String _selectedCategory = 'All';
+  String _selectedInsightType = 'Priority';
   late final AnimationController _pulseController;
   bool _showDetails = false;
   late DateTime _lastDashboardDate;
@@ -105,13 +106,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final priorityCounts = _countByField(nonRoutineDashboardTasks, (t) => t.priority, _priorityOrder);
           final statusCounts = _countByField(nonRoutineDashboardTasks, (t) => t.status, _statusOrder);
           final categoryCounts = _countByField(nonRoutineDashboardTasks, (t) => t.category, const []);
-          final delegatedCounts = _countByField(
-            nonRoutineDashboardTasks,
-            (t) => (t.delegatedTo == null || t.delegatedTo!.trim().isEmpty)
-                ? 'Unassigned'
-                : t.delegatedTo!.trim(),
-            const [],
-          );
+          final taskInsightItems = _buildTaskInsightItems(nonRoutineDashboardTasks);
+          final insightPriorityCounts = _countInsightItems(taskInsightItems, (item) => item.priority, _priorityOrder);
+          final insightStatusCounts = _countInsightItems(taskInsightItems, (item) => item.status, _statusOrder);
+          final insightCategoryCounts = _countInsightItems(taskInsightItems, (item) => item.category, const []);
+          final insightDelegatedCounts = _countInsightItems(taskInsightItems, (item) => item.delegateLabel, const []);
 
           final dueTodayTasks = dashboardTasks
               .where((task) => _isSameDay(task.dueDate, todayStart))
@@ -119,26 +118,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final pendingTodayTasks = _buildPendingTodayTasks(dashboardTasks, todayStart);
           final disabledRoutineTasks = _buildDisabledRoutineTasks(allTasks);
 
-          final priorityOptions = ['All', ...priorityCounts.keys];
-          final statusOptions = ['All', ...statusCounts.keys];
-          final personOptions = ['All', ...delegatedCounts.keys];
-          final categoryOptions = ['All', ...categoryCounts.keys];
+          final priorityOptions = ['All', ...insightPriorityCounts.keys];
+          final statusOptions = ['All', ...insightStatusCounts.keys];
+          final personOptions = ['All', ...insightDelegatedCounts.keys];
+          final categoryOptions = ['All', ...insightCategoryCounts.keys];
 
           _selectedPriority = priorityOptions.contains(_selectedPriority) ? _selectedPriority : 'All';
           _selectedStatus = statusOptions.contains(_selectedStatus) ? _selectedStatus : 'All';
           _selectedPerson = personOptions.contains(_selectedPerson) ? _selectedPerson : 'All';
           _selectedCategory = categoryOptions.contains(_selectedCategory) ? _selectedCategory : 'All';
-
-          final priorityTasks = _filterBy(nonRoutineDashboardTasks, _selectedPriority, (task) => task.priority);
-          final statusTasks = _filterBy(nonRoutineDashboardTasks, _selectedStatus, (task) => task.status);
-          final personTasks = _filterBy(
-            nonRoutineDashboardTasks,
-            _selectedPerson,
-            (task) => (task.delegatedTo == null || task.delegatedTo!.trim().isEmpty)
-                ? 'Unassigned'
-                : task.delegatedTo!.trim(),
-          );
-          final categoryTasks = _filterBy(nonRoutineDashboardTasks, _selectedCategory, (task) => task.category);
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
@@ -180,32 +168,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 12),
               _priorityChart(priorityCounts),
               const SizedBox(height: 12),
-              _filterListSection(
-                title: 'BY PRIORITY',
-                label: 'PRIORITY',
-                selectedValue: _selectedPriority,
-                options: priorityOptions,
-                onChanged: (value) => setState(() => _selectedPriority = value),
-                tasks: priorityTasks,
-              ),
-              const SizedBox(height: 12),
-              _filterListSection(
-                title: 'DELEGATED TO',
-                label: 'PERSON',
-                selectedValue: _selectedPerson,
-                options: personOptions,
-                onChanged: (value) => setState(() => _selectedPerson = value),
-                tasks: personTasks,
-                helperText: 'You have to enter your task here',
-              ),
-              const SizedBox(height: 12),
-              _filterListSection(
-                title: 'BY STATUS',
-                label: 'STATUS',
-                selectedValue: _selectedStatus,
-                options: statusOptions,
-                onChanged: (value) => setState(() => _selectedStatus = value),
-                tasks: statusTasks,
+              _taskInsightsFiltersSection(
+                items: taskInsightItems,
+                priorityOptions: priorityOptions,
+                delegateOptions: personOptions,
+                statusOptions: statusOptions,
+                categoryOptions: categoryOptions,
               ),
               const SizedBox(height: 12),
               _statusBubbles(statusCounts),
@@ -214,14 +182,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 12),
               _categoryDonut(categoryCounts),
               const SizedBox(height: 12),
-              _filterListSection(
-                title: 'BY CATEGORY',
-                label: 'CATEGORY',
-                selectedValue: _selectedCategory,
-                options: categoryOptions,
-                onChanged: (value) => setState(() => _selectedCategory = value),
-                tasks: categoryTasks,
-              ),
             ],
           );
         },
@@ -588,9 +548,99 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     return '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${_normalizedRepeatFrequency(task)}';
   }
 
-  List<Task> _filterBy(List<Task> tasks, String selected, String Function(Task) selector) {
-    if (selected == 'All') return tasks;
-    return tasks.where((task) => selector(task) == selected).toList();
+  List<_TaskInsightItem> _buildTaskInsightItems(List<Task> tasks) {
+    final grouped = <String, List<Task>>{};
+    for (final task in tasks.where(_isNonRoutineTask)) {
+      grouped.putIfAbsent(_taskInsightGroupKey(task), () => <Task>[]).add(task);
+    }
+
+    final items = grouped.entries.map((entry) {
+      final records = [...entry.value]..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+      final primary = records.first;
+      final phases = <_TaskInsightPhase>[];
+      for (final record in records) {
+        phases.addAll(_extractInsightPhases(record, records.length));
+      }
+      if (phases.isEmpty) {
+        phases.add(_TaskInsightPhase(title: primary.task.trim(), status: primary.status));
+      }
+      return _TaskInsightItem(task: primary, title: _taskInsightTitle(primary), phases: phases);
+    }).toList();
+
+    items.sort((a, b) {
+      final priorityCompare = _prioritySortRank(a.priority).compareTo(_prioritySortRank(b.priority));
+      if (priorityCompare != 0) return priorityCompare;
+      return a.task.dueDate.compareTo(b.task.dueDate);
+    });
+    return items;
+  }
+
+  String _taskInsightGroupKey(Task task) {
+    final phaseMatch = RegExp(r'^(.*?)\s*[-:|]\s*phase\s*\d+', caseSensitive: false).firstMatch(task.task.trim());
+    final title = phaseMatch?.group(1)?.trim() ?? task.task.trim();
+    return '${title.toLowerCase()}|${task.category.trim().toLowerCase()}|${task.delegatedTo?.trim().toLowerCase() ?? ''}';
+  }
+
+  String _taskInsightTitle(Task task) {
+    final phaseMatch = RegExp(r'^(.*?)\s*[-:|]\s*phase\s*\d+', caseSensitive: false).firstMatch(task.task.trim());
+    final title = phaseMatch?.group(1)?.trim() ?? task.task.trim();
+    return title.isEmpty ? 'Untitled Task' : title;
+  }
+
+  List<_TaskInsightPhase> _extractInsightPhases(Task task, int groupSize) {
+    const marker = '---PHASES---';
+    final markerIndex = task.description.indexOf(marker);
+    if (markerIndex != -1) {
+      final phaseChunk = task.description.substring(markerIndex + marker.length).trim();
+      final lines = phaseChunk.split('\n').where((line) => line.trim().isNotEmpty).toList();
+      return [
+        for (var index = 0; index < lines.length; index++)
+          if (lines[index].split('|').length >= 3)
+            _TaskInsightPhase(
+              title: lines[index].split('|')[0].trim().isEmpty ? 'Phase ${index + 1}' : lines[index].split('|')[0].trim(),
+              status: lines[index].split('|')[2].trim().isEmpty ? 'Not Started' : lines[index].split('|')[2].trim(),
+            ),
+      ];
+    }
+
+    final phaseMatch = RegExp(r'^(.*?)\s*[-:|]\s*phase\s*(\d+)\s*[-:|]?\s*(.*)$', caseSensitive: false).firstMatch(task.task.trim());
+    if (phaseMatch != null) {
+      final phaseNumber = phaseMatch.group(2)?.trim() ?? '1';
+      final suffix = phaseMatch.group(3)?.trim() ?? '';
+      return [_TaskInsightPhase(title: suffix.isEmpty ? 'Phase $phaseNumber' : 'Phase $phaseNumber: $suffix', status: task.status)];
+    }
+
+    if (groupSize == 1) {
+      return [_TaskInsightPhase(title: 'Main Task', status: task.status)];
+    }
+
+    return [_TaskInsightPhase(title: task.task.trim(), status: task.status)];
+  }
+
+  Map<String, int> _countInsightItems(
+    List<_TaskInsightItem> items,
+    String Function(_TaskInsightItem) selector,
+    List<String> preferredOrder,
+  ) {
+    final counts = <String, int>{};
+    for (final item in items) {
+      final key = selector(item).trim().isEmpty ? 'Unassigned' : selector(item).trim();
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+
+    if (preferredOrder.isEmpty) {
+      final sortedKeys = counts.keys.toList()..sort();
+      return {for (final key in sortedKeys) key: counts[key] ?? 0};
+    }
+
+    final ordered = <String, int>{};
+    for (final key in preferredOrder) {
+      ordered[key] = counts[key] ?? 0;
+    }
+    for (final entry in counts.entries) {
+      if (!ordered.containsKey(entry.key)) ordered[entry.key] = entry.value;
+    }
+    return ordered;
   }
 
   Map<String, int> _countByField(
@@ -1608,73 +1658,181 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Widget _filterListSection({
-    required String title,
-    required String label,
-    required String selectedValue,
-    required List<String> options,
-    required ValueChanged<String> onChanged,
-    required List<Task> tasks,
-    String? helperText,
+  Widget _taskInsightsFiltersSection({
+    required List<_TaskInsightItem> items,
+    required List<String> priorityOptions,
+    required List<String> delegateOptions,
+    required List<String> statusOptions,
+    required List<String> categoryOptions,
   }) {
     final style = _dashboardStyle();
+    const filters = ['Priority', 'Delegate', 'Status', 'Category'];
+    final activeFilter = filters.contains(_selectedInsightType) ? _selectedInsightType : 'Priority';
+    List<String> options;
+    String selectedValue;
+    String Function(_TaskInsightItem) itemValue;
+    if (activeFilter == 'Delegate') {
+      options = delegateOptions;
+      selectedValue = _selectedPerson;
+      itemValue = (item) => item.delegateLabel;
+    } else if (activeFilter == 'Status') {
+      options = statusOptions;
+      selectedValue = _selectedStatus;
+      itemValue = (item) => item.status;
+    } else if (activeFilter == 'Category') {
+      options = categoryOptions;
+      selectedValue = _selectedCategory;
+      itemValue = (item) => item.category;
+    } else {
+      options = priorityOptions;
+      selectedValue = _selectedPriority;
+      itemValue = (item) => item.priority;
+    }
+    final safeSelectedValue = options.contains(selectedValue) ? selectedValue : 'All';
+    final filteredItems = safeSelectedValue == 'All' ? items : items.where((item) => itemValue(item) == safeSelectedValue).toList();
+
     return _panel(
-      title: title,
-      headerColor: _headerColorFor(title),
+      title: 'TASK INSIGHTS & FILTERS',
+      headerColor: style.primary,
       child: Column(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                color: style.primary.withOpacity(style.dark ? 0.24 : 0.16),
-                child: Text('$label:', style: TextStyle(color: style.textPrimary, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
-              ),
-              Expanded(
-                child: Container(
-                  color: style.elevatedSurface.withOpacity(style.dark ? 0.72 : 0.55),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: selectedValue,
-                      isExpanded: true,
-                      dropdownColor: style.surface,
-                      style: TextStyle(color: style.textPrimary),
-                      items: options
-                          .map((option) => DropdownMenuItem(value: option, child: Text(option, style: TextStyle(color: style.textPrimary))))
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) onChanged(value);
-                      },
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            color: style.elevatedSurface.withOpacity(style.dark ? 0.66 : 0.42),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: filters.map((filter) {
+                  final isSelected = activeFilter == filter;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(filter),
+                      selected: isSelected,
+                      selectedColor: style.primary.withOpacity(style.dark ? 0.34 : 0.20),
+                      backgroundColor: style.surface,
+                      side: BorderSide(color: isSelected ? style.primary : style.primary.withOpacity(0.18)),
+                      labelStyle: TextStyle(
+                        color: isSelected ? style.primary : style.textMuted,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      onSelected: (_) => setState(() => _selectedInsightType = filter),
                     ),
-                  ),
-                ),
+                  );
+                }).toList(),
               ),
-            ],
+            ),
           ),
-          _linedListArea([
-            if (helperText != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(helperText, style: TextStyle(color: style.textMuted)),
-              ),
-            if (tasks.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text('No tasks for selected filter.', style: TextStyle(color: style.textPrimary)),
-              )
-            else
-              ...tasks.map(
-                (task) => ListTile(
-                  dense: true,
-                  onTap: () => _editTask(task),
-                  title: Text(task.task, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w700)),
-                  subtitle: Text('${task.priority} • ${task.status} • ${task.category}', style: TextStyle(color: style.textMuted)),
+          AnimatedSwitcher(
+            duration: Duration(milliseconds: style.animated ? 320 : 160),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              final slide = Tween<Offset>(begin: const Offset(0.05, 0), end: Offset.zero).animate(animation);
+              return FadeTransition(opacity: animation, child: SlideTransition(position: slide, child: child));
+            },
+            child: Column(
+              key: ValueKey('$activeFilter-$safeSelectedValue-${filteredItems.length}'),
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      color: style.primary.withOpacity(style.dark ? 0.24 : 0.16),
+                      child: Text('$activeFilter:', style: TextStyle(color: style.textPrimary, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
+                    ),
+                    Expanded(
+                      child: AnimatedContainer(
+                        duration: Duration(milliseconds: style.animated ? 280 : 120),
+                        color: style.elevatedSurface.withOpacity(style.dark ? 0.72 : 0.55),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: safeSelectedValue,
+                            isExpanded: true,
+                            dropdownColor: style.surface,
+                            style: TextStyle(color: style.textPrimary),
+                            items: options
+                                .map((option) => DropdownMenuItem(value: option, child: Text(option, style: TextStyle(color: style.textPrimary))))
+                                .toList(),
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() {
+                                if (activeFilter == 'Delegate') {
+                                  _selectedPerson = value;
+                                } else if (activeFilter == 'Status') {
+                                  _selectedStatus = value;
+                                } else if (activeFilter == 'Category') {
+                                  _selectedCategory = value;
+                                } else {
+                                  _selectedPriority = value;
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-          ]),
+                _linedListArea([
+                  if (filteredItems.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text('No non-routine tasks for selected filter.', style: TextStyle(color: style.textPrimary)),
+                    )
+                  else
+                    ...filteredItems.map(_taskInsightTile),
+                ]),
+              ],
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _taskInsightTile(_TaskInsightItem item) {
+    final style = _dashboardStyle();
+    final taskColor = Color(item.task.colorValue);
+    final progress = item.phaseProgress;
+    return ListTile(
+      dense: true,
+      onTap: () => _editTask(item.task),
+      leading: Container(
+        width: 4,
+        height: 44,
+        decoration: BoxDecoration(
+          color: taskColor,
+          borderRadius: BorderRadius.circular(99),
+          boxShadow: [BoxShadow(color: taskColor.withOpacity(0.35), blurRadius: 10)],
+        ),
+      ),
+      title: Text(item.title, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Text('${item.priority} • ${item.status} • ${item.category} • ${item.delegateLabel}', style: TextStyle(color: style.textMuted)),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 5,
+              backgroundColor: style.primary.withOpacity(0.12),
+              color: taskColor,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Progress: ${item.completedPhases}/${item.totalPhases} phases completed',
+            style: TextStyle(color: style.textMuted, fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+      trailing: Icon(Icons.chevron_right, color: style.primary),
     );
   }
 
@@ -1760,17 +1918,32 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Color _headerColorFor(String title) {
-    if (title == 'BY PRIORITY') return const Color(0xFFE8C1A0);
-    if (title == 'DELEGATED TO') return const Color(0xFFE5A9B8);
-    if (title == 'BY STATUS') return const Color(0xFFE8C1A0);
-    if (title == 'BY CATEGORY') return const Color(0xFFA5CAD1);
-    return const Color(0xFFE8C1A0);
-  }
-
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
+}
+
+class _TaskInsightItem {
+  final Task task;
+  final String title;
+  final List<_TaskInsightPhase> phases;
+
+  const _TaskInsightItem({required this.task, required this.title, required this.phases});
+
+  String get priority => task.priority.trim().isEmpty ? 'Medium' : task.priority.trim();
+  String get status => task.status.trim().isEmpty ? 'Not Started' : task.status.trim();
+  String get category => task.category.trim().isEmpty ? 'Uncategorized' : task.category.trim();
+  String get delegateLabel => task.delegatedTo == null || task.delegatedTo!.trim().isEmpty ? 'Unassigned' : task.delegatedTo!.trim();
+  int get totalPhases => phases.isEmpty ? 1 : phases.length;
+  int get completedPhases => phases.where((phase) => phase.status.trim().toLowerCase() == 'completed').length;
+  double get phaseProgress => totalPhases == 0 ? 0 : completedPhases / totalPhases;
+}
+
+class _TaskInsightPhase {
+  final String title;
+  final String status;
+
+  const _TaskInsightPhase({required this.title, required this.status});
 }
 
 class _DisabledRoutineTask {
