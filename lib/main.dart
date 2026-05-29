@@ -136,7 +136,8 @@ class _MainScreenState extends State<MainScreen> {
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
+            label: 'Home',
+            tooltip: 'Dashboard',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today),
