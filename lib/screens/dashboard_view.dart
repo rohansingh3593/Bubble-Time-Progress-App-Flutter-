@@ -27,6 +27,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   String _selectedPerson = 'All';
   String _selectedCategory = 'All';
   String _selectedInsightType = 'Priority';
+  String _selectedAnalyticsType = 'Status';
   late final AnimationController _pulseController;
   bool _showDetails = false;
   late DateTime _lastDashboardDate;
@@ -103,9 +104,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final scopedTaskCounts = _buildScopedTaskCounts(dashboardTasks, todayStart);
           final yearProgress = _buildYearProgress(todayStart);
           final timeProgress = _buildTimeProgress(today);
-          final priorityCounts = _countByField(nonRoutineDashboardTasks, (t) => t.priority, _priorityOrder);
-          final statusCounts = _countByField(nonRoutineDashboardTasks, (t) => t.status, _statusOrder);
-          final categoryCounts = _countByField(nonRoutineDashboardTasks, (t) => t.category, const []);
           final taskInsightItems = _buildTaskInsightItems(nonRoutineDashboardTasks);
           final insightPriorityCounts = _countInsightItems(taskInsightItems, (item) => item.priority, _priorityOrder);
           final insightStatusCounts = _countInsightItems(taskInsightItems, (item) => item.status, _statusOrder);
@@ -128,6 +126,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           _selectedPerson = personOptions.contains(_selectedPerson) ? _selectedPerson : 'All';
           _selectedCategory = categoryOptions.contains(_selectedCategory) ? _selectedCategory : 'All';
 
+          final analyticsTasks = _filterAnalyticsTasks(nonRoutineDashboardTasks);
+          final priorityCounts = _countByField(analyticsTasks, (t) => t.priority, _priorityOrder);
+          final statusCounts = _countByField(analyticsTasks, (t) => t.status, _statusOrder);
+          final categoryCounts = _countByField(analyticsTasks, (t) => t.category, const []);
+          final delegatedAnalyticsCounts = _countByField(analyticsTasks, _delegateLabelForTask, const []);
+
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
             children: [
@@ -147,8 +151,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 14),
               _buildProjectsSection(nonRoutineDashboardTasks),
               const SizedBox(height: 14),
-              _buildSmartAnalyticsSection(nonRoutineDashboardTasks, todayStart, rankProfile),
-              const SizedBox(height: 14),
               _buildJourneySection(),
               const SizedBox(height: 14),
               RankProfileCard(
@@ -166,7 +168,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 12),
               _timeProgressSection(timeProgress),
               const SizedBox(height: 12),
-              _priorityChart(priorityCounts),
+              _productivityAnalyticsCenter(
+                tasks: analyticsTasks,
+                statusCounts: statusCounts,
+                categoryCounts: categoryCounts,
+                priorityCounts: priorityCounts,
+                delegateCounts: delegatedAnalyticsCounts,
+              ),
               const SizedBox(height: 12),
               _taskInsightsFiltersSection(
                 items: taskInsightItems,
@@ -176,11 +184,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 categoryOptions: categoryOptions,
               ),
               const SizedBox(height: 12),
-              _statusBubbles(statusCounts),
-              const SizedBox(height: 12),
               _todayTasksSection(pendingTodayTasks),
-              const SizedBox(height: 12),
-              _categoryDonut(categoryCounts),
               const SizedBox(height: 12),
             ],
           );
@@ -495,6 +499,19 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   bool _isNonRoutineTask(Task task) => !task.repeatTask;
+
+  String _delegateLabelForTask(Task task) => task.delegatedTo == null || task.delegatedTo!.trim().isEmpty ? 'Unassigned' : task.delegatedTo!.trim();
+
+  List<Task> _filterAnalyticsTasks(List<Task> tasks) {
+    return tasks.where((task) {
+      if (!_isNonRoutineTask(task)) return false;
+      if (_selectedPriority != 'All' && task.priority != _selectedPriority) return false;
+      if (_selectedStatus != 'All' && task.status != _selectedStatus) return false;
+      if (_selectedCategory != 'All' && task.category != _selectedCategory) return false;
+      if (_selectedPerson != 'All' && _delegateLabelForTask(task) != _selectedPerson) return false;
+      return true;
+    }).toList();
+  }
 
   bool _isCompletedTask(Task task) => task.done || task.status.trim().toLowerCase() == 'completed';
 
@@ -1162,29 +1179,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }).toList()), action: 'Expand');
   }
 
-  Widget _buildSmartAnalyticsSection(List<Task> tasks, DateTime today, RankProfile profile) {
-    final completed = tasks.where((t)=>t.done || t.status=='Completed').length;
-    final bestDay = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][today.weekday-1];
-    final rate = tasks.isEmpty ? 0 : ((completed / tasks.length)*100).round();
-    return _darkSection('Smart Analytics', Wrap(spacing: 10, runSpacing: 10, children: [
-      _miniAnalytic('Best Day', bestDay),
-      _miniAnalytic('Habit Consistency', '${profile.productivityScore}%'),
-      _miniAnalytic('Completion', '$rate%'),
-      _miniAnalytic('Most Productive Time', '8 AM'),
-    ]));
-  }
-
-  Widget _miniAnalytic(String k, String v) => Container(
-    width: 150,
-    padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(color: const Color(0xFF1A2442), borderRadius: BorderRadius.circular(12)),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(k, style: const TextStyle(color: Color(0xFF9CB3FF), fontSize: 12)),
-      const SizedBox(height: 4),
-      Text(v, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-    ]),
-  );
-
   Widget _buildJourneySection() {
     final style = _dashboardStyle();
     return _darkSection('Journey & Reflection', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1339,62 +1333,331 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Widget _priorityChart(Map<String, int> priorityCounts) {
+  Widget _productivityAnalyticsCenter({
+    required List<Task> tasks,
+    required Map<String, int> statusCounts,
+    required Map<String, int> categoryCounts,
+    required Map<String, int> priorityCounts,
+    required Map<String, int> delegateCounts,
+  }) {
     final style = _dashboardStyle();
-    final maxCount = priorityCounts.values.fold<int>(1, (max, value) => value > max ? value : max);
+    const tabs = ['Status', 'Category', 'Priority', 'Delegate'];
+    final activeTab = tabs.contains(_selectedAnalyticsType) ? _selectedAnalyticsType : 'Status';
+    final today = _dateOnly(DateTime.now());
+    final completed = tasks.where(_isCompletedTask).length;
+    final overdue = tasks.where((task) => _dateOnly(task.dueDate).isBefore(today) && _isPendingTask(task)).length;
+    final pending = tasks.where(_isPendingTask).length;
 
-    final colors = {
-      'Low': const Color(0xFF53C989),
-      'Medium': const Color(0xFFE3C86D),
-      'High': const Color(0xFFF57D4A),
-      'Very High': const Color(0xFFE35B7C),
-      'Urgent (Now)': const Color(0xFFAF7AF9),
-    };
+    Map<String, int> activeCounts;
+    if (activeTab == 'Category') {
+      activeCounts = categoryCounts;
+    } else if (activeTab == 'Priority') {
+      activeCounts = priorityCounts;
+    } else if (activeTab == 'Delegate') {
+      activeCounts = delegateCounts;
+    } else {
+      activeCounts = statusCounts;
+    }
 
     return _panel(
-      title: 'TASKS ON EACH PRIORITY',
-      headerColor: const Color(0xFFE8C1A0),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 180,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: priorityCounts.entries.map((entry) {
-                final value = entry.value;
-                final height = (value / maxCount) * 120;
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0, end: value.toDouble()),
-                      duration: const Duration(milliseconds: 550),
-                      builder: (context, animatedValue, child) => Text('${animatedValue.toInt()}', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.bold)),
-                    ),
-                    const SizedBox(height: 6),
-                    TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0, end: height),
-                      duration: Duration(milliseconds: style.animated ? 700 : 250),
-                      curve: Curves.easeOutCubic,
-                      builder: (context, animatedHeight, child) => Container(
-                        width: 44,
-                        height: value == 0 ? 2 : animatedHeight,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [(colors[entry.key] ?? style.primary).withOpacity(0.40), style.primary.withOpacity(0.72)]),
-                          borderRadius: BorderRadius.circular(8),
+      title: 'PRODUCTIVITY ANALYTICS',
+      headerColor: style.primary,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: Duration(milliseconds: style.animated ? 420 : 180),
+        curve: Curves.easeOutCubic,
+        builder: (context, intro, child) => Opacity(
+          opacity: intro,
+          child: Transform.translate(offset: Offset(0, 14 * (1 - intro)), child: child),
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _analyticsSummaryPill('Total Tasks', tasks.length, Icons.analytics_outlined),
+                  _analyticsSummaryPill('Completed', completed, Icons.check_circle_outline),
+                  _analyticsSummaryPill('Pending', pending, Icons.timelapse_outlined),
+                  _analyticsSummaryPill('Overdue', overdue, Icons.warning_amber_rounded),
+                ],
+              ),
+            ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: tabs.map((tab) {
+                    final selected = activeTab == tab;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        selected: selected,
+                        label: Text(tab),
+                        selectedColor: style.primary.withOpacity(style.dark ? 0.34 : 0.18),
+                        backgroundColor: style.elevatedSurface,
+                        side: BorderSide(color: selected ? style.primary : style.primary.withOpacity(0.18)),
+                        labelStyle: TextStyle(
+                          color: selected ? style.primary : style.textMuted,
+                          fontWeight: FontWeight.w800,
                         ),
+                        onSelected: (_) => setState(() => _selectedAnalyticsType = tab),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(entry.key == 'Urgent (Now)' ? '🔥 Now' : entry.key, style: TextStyle(color: style.textMuted, fontSize: 11)),
-                  ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+            AnimatedSwitcher(
+              duration: Duration(milliseconds: style.animated ? 330 : 160),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                final scale = Tween<double>(begin: 0.94, end: 1).animate(animation);
+                final slide = Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero).animate(animation);
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: scale,
+                    child: SlideTransition(position: slide, child: child),
+                  ),
                 );
-              }).toList(),
+              },
+              child: Padding(
+                key: ValueKey(activeTab),
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                child: activeTab == 'Priority'
+                    ? _analyticsBarChart(activeCounts)
+                    : activeTab == 'Delegate'
+                        ? _delegateAnalyticsChart(activeCounts)
+                        : _analyticsDonutChart(activeTab, activeCounts),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _analyticsSummaryPill(String label, int value, IconData icon) {
+    final style = _dashboardStyle();
+    return Container(
+      width: 150,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: style.elevatedSurface.withOpacity(style.dark ? 0.72 : 0.56),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: style.primary.withOpacity(0.16)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: style.primary, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 11, fontWeight: FontWeight.w700)),
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: value.toDouble()),
+                  duration: Duration(milliseconds: style.animated ? 650 : 180),
+                  builder: (context, animatedValue, child) => Text(
+                    '${animatedValue.toInt()}',
+                    style: TextStyle(color: style.textPrimary, fontSize: 20, fontWeight: FontWeight.w900),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _analyticsDonutChart(String label, Map<String, int> counts) {
+    final style = _dashboardStyle();
+    final entries = counts.entries.where((entry) => entry.value > 0).toList();
+    final total = entries.fold<int>(0, (sum, entry) => sum + entry.value);
+    final topValue = entries.isEmpty ? 0 : entries.map((entry) => entry.value).reduce((a, b) => a > b ? a : b);
+    final ringValue = total == 0 ? 0.0 : (topValue / total).clamp(0.0, 1.0).toDouble();
+
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: ringValue),
+          duration: Duration(milliseconds: style.animated ? 850 : 220),
+          curve: Curves.easeOutCubic,
+          builder: (context, value, child) => SizedBox(
+            width: 178,
+            height: 178,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 178,
+                  height: 178,
+                  child: CircularProgressIndicator(
+                    value: value,
+                    strokeWidth: 24,
+                    color: style.primary,
+                    backgroundColor: style.primary.withOpacity(style.dark ? 0.16 : 0.10),
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Total Tasks', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: total.toDouble()),
+                      duration: Duration(milliseconds: style.animated ? 720 : 180),
+                      builder: (context, animatedValue, child) => Text(
+                        '${animatedValue.toInt()}',
+                        style: TextStyle(color: style.textPrimary, fontSize: 32, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    Text(label, style: TextStyle(color: style.primary, fontSize: 12, fontWeight: FontWeight.w800)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _analyticsLegend(entries, total),
+      ],
+    );
+  }
+
+  Widget _delegateAnalyticsChart(Map<String, int> counts) {
+    final style = _dashboardStyle();
+    final entries = counts.entries.where((entry) => entry.value > 0).toList();
+    final maxCount = entries.fold<int>(1, (max, entry) => entry.value > max ? entry.value : max);
+    if (entries.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Text('No delegate analytics yet.', style: TextStyle(color: style.textPrimary)),
+      );
+    }
+
+    return Column(
+      children: entries.map((entry) {
+        final progress = entry.value / maxCount;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Row(
+            children: [
+              SizedBox(width: 92, child: Text(entry.key, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800))),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: progress),
+                    duration: Duration(milliseconds: style.animated ? 700 : 180),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, value, child) => LinearProgressIndicator(
+                      value: value,
+                      minHeight: 10,
+                      backgroundColor: style.primary.withOpacity(0.12),
+                      color: style.primary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: entry.value.toDouble()),
+                duration: Duration(milliseconds: style.animated ? 620 : 180),
+                builder: (context, value, child) => Text('${value.toInt()}', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _analyticsBarChart(Map<String, int> counts) {
+    final style = _dashboardStyle();
+    final maxCount = counts.values.fold<int>(1, (max, value) => value > max ? value : max);
+    return SizedBox(
+      height: 200,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: counts.entries.map((entry) {
+          final value = entry.value;
+          final height = (value / maxCount) * 128;
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: value.toDouble()),
+                    duration: Duration(milliseconds: style.animated ? 650 : 180),
+                    builder: (context, animatedValue, child) => Text('${animatedValue.toInt()}', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
+                  ),
+                  const SizedBox(height: 6),
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: height),
+                    duration: Duration(milliseconds: style.animated ? 760 : 220),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, animatedHeight, child) => Container(
+                      height: value == 0 ? 3 : animatedHeight,
+                      width: 36,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [style.primary.withOpacity(0.45), style.secondary]),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [BoxShadow(color: style.primary.withOpacity(style.dark ? 0.26 : 0.12), blurRadius: 12)],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(entry.key == 'Urgent (Now)' ? 'Now' : entry.key, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 11, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _analyticsLegend(List<MapEntry<String, int>> entries, int total) {
+    final style = _dashboardStyle();
+    if (entries.isEmpty) {
+      return Text('No analytics data for current filters.', style: TextStyle(color: style.textPrimary));
+    }
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 8,
+      alignment: WrapAlignment.center,
+      children: entries.map((entry) {
+        final percent = total == 0 ? 0 : ((entry.value / total) * 100).round();
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: style.elevatedSurface.withOpacity(style.dark ? 0.72 : 0.54),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: style.primary.withOpacity(0.14)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.circle, size: 10, color: style.primary),
+              const SizedBox(width: 6),
+              Text('${entry.key} ${entry.value} • $percent%', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w700, fontSize: 12)),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -1484,64 +1747,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Widget _statusBubbles(Map<String, int> statusCounts) {
-    final style = _dashboardStyle();
-    final total = statusCounts.values.fold<int>(0, (sum, value) => sum + value);
-    final firstEntry = statusCounts.entries.firstWhere(
-      (element) => element.value > 0,
-      orElse: () => const MapEntry('In Progress', 0),
-    );
-
-    return _panel(
-      title: 'TASKS ON EACH STATUS',
-      headerColor: const Color(0xFFB8AFD6),
-      child: Column(
-        children: [
-          const SizedBox(height: 10),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 12,
-            children: statusCounts.entries
-                .where((entry) => entry.value > 0)
-                .map(
-                  (entry) => Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.circle, size: 10, color: style.primary),
-                      const SizedBox(width: 4),
-                      Text('${entry.key} (${entry.value})', style: TextStyle(color: style.textPrimary)),
-                    ],
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 10),
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: 1),
-            duration: Duration(milliseconds: style.animated ? 700 : 250),
-            curve: Curves.easeOutBack,
-            builder: (context, value, child) => Transform.scale(scale: 0.85 + (value * 0.15), child: child),
-            child: Container(
-              width: 170,
-              height: 170,
-              decoration: BoxDecoration(color: style.primary.withOpacity(style.dark ? 0.32 : 0.18), shape: BoxShape.circle, border: Border.all(color: style.primary.withOpacity(0.45), width: 18)),
-              alignment: Alignment.center,
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: (total == 0 ? 0 : firstEntry.value).toDouble()),
-                duration: const Duration(milliseconds: 650),
-                builder: (context, value, child) => Text(
-                  '${value.toInt()}',
-                  style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.bold, fontSize: 28),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-
   Widget _todayTasksSection(List<Task> tasks) {
     final style = _dashboardStyle();
     return _panel(
@@ -1614,48 +1819,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }
 
     return rows;
-  }
-
-  Widget _categoryDonut(Map<String, int> categoryCounts) {
-    final style = _dashboardStyle();
-    final topCategory = categoryCounts.entries.fold<MapEntry<String, int>>(
-      const MapEntry('No Category', 0),
-      (best, current) => current.value > best.value ? current : best,
-    );
-
-    return _panel(
-      title: 'TASKS ON EACH CATEGORY / PROJECT',
-      headerColor: const Color(0xFFE5A9B8),
-      child: Column(
-        children: [
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.circle, size: 10, color: style.primary),
-                  const SizedBox(width: 6),
-                  Text('${topCategory.key} (${topCategory.value})', style: TextStyle(color: style.textPrimary)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            width: 210,
-            height: 210,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: style.primary.withOpacity(style.dark ? 0.38 : 0.24), width: 45),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
   }
 
   Widget _taskInsightsFiltersSection({
