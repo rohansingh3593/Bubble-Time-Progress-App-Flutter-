@@ -112,9 +112,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final insightCategoryCounts = _countInsightItems(taskInsightItems, (item) => item.category, const []);
           final insightDelegatedCounts = _countInsightItems(taskInsightItems, (item) => item.delegateLabel, const []);
 
-          final dueTodayTasks = dashboardTasks
-              .where((task) => _isSameDay(task.dueDate, todayStart))
-              .toList();
+          final activeRoutineTasks = _buildEnabledRoutineOccurrences(allTasks, todayStart);
           final pendingTodayTasks = _buildPendingTodayTasks(dashboardTasks, todayStart);
           final todayOccurrenceTasks = _dedupeTasksForDashboard(widget.hiveService.getTasksForDate(todayStart))
               .where((task) => !task.repeatTask || task.routineEnabled)
@@ -151,7 +149,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 14),
               _buildDailyFocusStrip(pendingTodayTasks, todayStart),
               const SizedBox(height: 14),
-              _buildHabitRoutineSection(dueTodayTasks),
+              _buildHabitRoutineSection(activeRoutineTasks),
               const SizedBox(height: 14),
               _buildDisabledRoutineBoard(disabledRoutineTasks),
               const SizedBox(height: 14),
@@ -425,6 +423,73 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       'Week': asProgress(passed: passedWeekDays, total: totalWeekDays),
       'Day': asProgress(passed: passedDayHours, total: totalDayHours),
     };
+  }
+
+  List<Task> _buildEnabledRoutineOccurrences(List<Task> tasks, DateTime todayStart) {
+    final grouped = <String, List<Task>>{};
+
+    for (final task in tasks) {
+      if (!task.repeatTask) continue;
+      final frequency = _normalizedRepeatFrequency(task);
+      if (frequency != 'daily' && frequency != 'weekly') continue;
+      grouped.putIfAbsent(_recurringSeriesKey(task), () => <Task>[]).add(task);
+    }
+
+    final routines = <Task>[];
+    for (final records in grouped.values) {
+      records.sort((a, b) => b.dueDate.compareTo(a.dueDate));
+      final template = records.first;
+      if (!template.routineEnabled) continue;
+
+      final occurrenceDate = _currentRoutineOccurrenceDate(template, todayStart);
+      Task? currentOccurrence;
+      for (final record in records) {
+        if (_isSameDay(record.dueDate, occurrenceDate)) {
+          currentOccurrence = record;
+          break;
+        }
+      }
+
+      routines.add(
+        currentOccurrence ??
+            template.copyWith(
+              dueDate: occurrenceDate,
+              done: false,
+              status: 'Not Updated',
+              repeatTask: true,
+              routineEnabled: true,
+            ),
+      );
+    }
+
+    routines.sort((a, b) {
+      final frequencyCompare = _routineFrequencySortRank(a).compareTo(_routineFrequencySortRank(b));
+      if (frequencyCompare != 0) return frequencyCompare;
+      return a.task.toLowerCase().compareTo(b.task.toLowerCase());
+    });
+
+    return routines;
+  }
+
+  DateTime _currentRoutineOccurrenceDate(Task task, DateTime todayStart) {
+    switch (_normalizedRepeatFrequency(task)) {
+      case 'weekly':
+        return todayStart.subtract(Duration(days: todayStart.weekday - 1));
+      case 'daily':
+      default:
+        return todayStart;
+    }
+  }
+
+  int _routineFrequencySortRank(Task task) {
+    switch (_normalizedRepeatFrequency(task)) {
+      case 'daily':
+        return 0;
+      case 'weekly':
+        return 1;
+      default:
+        return 2;
+    }
   }
 
   List<Task> _buildPendingTodayTasks(List<Task> tasks, DateTime todayStart) {
@@ -1043,23 +1108,29 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     ), action: 'View All');
   }
 
-  Widget _buildHabitRoutineSection(List<Task> todayTasks) {
-    final habits = todayTasks.where((t)=>t.repeatTask && t.routineEnabled).toList();
+  Widget _buildHabitRoutineSection(List<Task> routines) {
     return _darkSection('Habit & Routine Tracker', Column(children: [
-      if (habits.isEmpty)
-        const Padding(padding: EdgeInsets.all(8), child: Text('No recurring habits for today.', style: TextStyle(color: Color(0xFFB9C6F3))))
+      if (routines.isEmpty)
+        const Padding(padding: EdgeInsets.all(8), child: Text('No enabled daily or weekly routines yet.', style: TextStyle(color: Color(0xFFB9C6F3))))
       else
-        ...habits.take(4).map((task)=>Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: const Color(0xFF1A2442), borderRadius: BorderRadius.circular(12)),
-          child: Row(children:[
-            Container(width: 10,height: 10,decoration: const BoxDecoration(color: Color(0xFF6D7CFF),shape: BoxShape.circle)),
-            const SizedBox(width: 10),
-            Expanded(child: Text(task.task, style: const TextStyle(color: Colors.white))),
-            Text(task.repeatFrequency ?? 'Daily', style: const TextStyle(color: Color(0xFF9CB3FF))),
-          ]),
-        )),
+        ...routines.map((task) {
+          final taskColor = Color(task.colorValue);
+          return InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _editTask(task),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: const Color(0xFF1A2442), borderRadius: BorderRadius.circular(12)),
+              child: Row(children:[
+                Container(width: 10,height: 10,decoration: BoxDecoration(color: taskColor,shape: BoxShape.circle)),
+                const SizedBox(width: 10),
+                Expanded(child: Text(task.task, style: const TextStyle(color: Colors.white))),
+                Text(task.repeatFrequency ?? 'Daily', style: const TextStyle(color: Color(0xFF9CB3FF))),
+              ]),
+            ),
+          );
+        }),
     ]));
   }
 
