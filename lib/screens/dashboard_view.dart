@@ -8,6 +8,7 @@ import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
+import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/rank_profile_card.dart';
 import 'journal_view.dart';
 import 'journey_timeline_view.dart';
@@ -208,7 +209,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final recurringByIdentity = <String, Task>{};
 
     for (final task in tasks) {
-      if (!_isRecurringTask(task)) {
+      if (!isRoutineTask(task)) {
         oneTimeTasks.add(task);
         continue;
       }
@@ -275,209 +276,51 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }
   }
 
-  bool _isRecurringTask(Task task) => task.repeatTask && _normalizedRepeatFrequency(task).isNotEmpty;
-
-
-  String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
-
-  bool _isOccurrenceLocked(Task task) {
-    final status = _normalizedStatus(task);
-    return task.done || status == 'completed' || status == 'cancelled' || status == 'missed' || status == 'overdue';
-  }
-
-  String _occurrenceLabel(Task task) {
-    switch (_normalizedRepeatFrequency(task)) {
-      case 'daily':
-        return 'today';
-      case 'weekly':
-        return 'this week';
-      case 'monthly':
-        return 'this month';
-      case 'yearly':
-        return 'this year';
-      default:
-        return 'this period';
-    }
-  }
-
-  Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
-    Future<void> toggleRoutine(BuildContext dialogContext) async {
-      await widget.hiveService.setRecurringTaskEnabledByReference(task, !task.routineEnabled);
-      if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-    }
-
-    Widget toggleButton(BuildContext dialogContext) {
-      return TextButton.icon(
-        onPressed: () => toggleRoutine(dialogContext),
-        icon: Icon(task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
-        label: Text(task.routineEnabled ? 'Disable Routine' : 'Enable Routine'),
-      );
-    }
-
-    if (_isOccurrenceLocked(task)) {
-      final period = _occurrenceLabel(task);
-      final statusLabel = task.done || _normalizedStatus(task) == 'completed' ? 'completed' : task.status.toLowerCase();
-      return showDialog<Task>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Already updated'),
-          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence. You can still enable or disable this routine without deleting its history.'),
-          actions: [
-            toggleButton(context),
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-          ],
-        ),
-      );
-    }
-
-    return showDialog<Task>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Update ${task.task} occurrence'),
-        content: const Text('Routine details are locked here. Update only the current occurrence, or pause the routine without deleting its history.'),
-        actions: [
-          toggleButton(context),
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
-          TextButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed'))
-                : null,
-            child: const Text('Miss This Occurrence'),
-          ),
-          ElevatedButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed'))
-                : null,
-            child: const Text('Complete This Occurrence'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _editTask(Task task) async {
-    final updated = _isRecurringTask(task)
-        ? await _showRecurringStatusUpdateDialog(task)
-        : await showTaskFormDialog(
+    if (isRoutineTask(task)) {
+      final action = await showRoutineOccurrenceDialog(context: context, task: task);
+      if (action == null || action == RoutineOccurrenceAction.close) return;
+
+      switch (action) {
+        case RoutineOccurrenceAction.disableRoutine:
+          await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
+          return;
+        case RoutineOccurrenceAction.editDetails:
+          final edited = await showTaskFormDialog(
             context,
             date: task.dueDate,
             initialTask: task,
-            title: 'Update Task',
-            actionLabel: 'Save Task',
-            onDelete: () => widget.hiveService.deleteTaskByReference(task),
+            title: 'Edit Routine Details',
+            actionLabel: 'Save Routine',
           );
+          if (edited != null) {
+            await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+          }
+          return;
+        case RoutineOccurrenceAction.missOccurrence:
+          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: false, status: 'Missed'));
+          return;
+        case RoutineOccurrenceAction.completeOccurrence:
+          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed'));
+          return;
+        case RoutineOccurrenceAction.close:
+          return;
+      }
+    }
+
+    final updated = await showTaskFormDialog(
+      context,
+      date: task.dueDate,
+      initialTask: task,
+      title: 'Update Task',
+      actionLabel: 'Save Task',
+      onDelete: () => widget.hiveService.deleteTaskByReference(task),
+    );
 
     if (updated != null) {
       await widget.hiveService.updateTaskByReference(task, updated);
     }
   }
-
-  Map<String, int> _buildSummary(List<Task> tasks, DateTime todayStart) {
-    final total = tasks.length;
-    final completed = tasks.where(_isCompletedTask).length;
-    final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
-    final overdue = tasks
-        .where((task) => _dateOnly(task.dueDate).isBefore(todayStart) && _isPendingTask(task))
-        .length;
-
-    return {
-      'TOTAL TASKS': total,
-      "TODAY'S TASKS": todayTasks,
-      'OVERDUE TASK': overdue,
-      'COMPLETED': completed,
-    };
-  }
-
-
-  Map<String, int> _buildScopedTaskCounts(List<Task> tasks, DateTime todayStart) {
-    final monthlyTasks = tasks
-        .where((t) => t.dueDate.year == todayStart.year && t.dueDate.month == todayStart.month)
-        .length;
-    final yearlyTasks = tasks.where((t) => t.dueDate.year == todayStart.year).length;
-    final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
-
-    return {
-      'YEAR TASKS': yearlyTasks,
-      'MONTH TASKS': monthlyTasks,
-      'TODAY TASKS': todayTasks,
-    };
-  }
-
-  _TodayProductivityStats _buildTodayProductivityStats(List<Task> tasks) {
-    final activeTasks = tasks.where((task) => !_isCancelledTask(task)).toList();
-    final completed = activeTasks.where(_isCompletedTask).length;
-    final overdue = activeTasks.where((task) {
-      final status = task.status.trim().toLowerCase();
-      return !_isCompletedTask(task) && (status == 'overdue' || status == 'missed');
-    }).length;
-    final pending = activeTasks.length - completed - overdue;
-    return _TodayProductivityStats(
-      total: activeTasks.length,
-      completed: completed,
-      pending: pending < 0 ? 0 : pending,
-      overdue: overdue,
-    );
-  }
-
-  Map<String, int> _buildYearProgress(DateTime todayStart) {
-    final yearStart = DateTime(todayStart.year, 1, 1);
-    final nextYear = DateTime(todayStart.year + 1, 1, 1);
-    final totalDaysInYear = nextYear.difference(yearStart).inDays;
-    final daysPassed = todayStart.difference(yearStart).inDays + 1;
-    final remaining = totalDaysInYear - daysPassed;
-
-    return {
-      'totalDays': totalDaysInYear,
-      'daysPassed': daysPassed,
-      'daysRemaining': remaining,
-      'progressPercent': ((daysPassed / totalDaysInYear) * 100).round(),
-    };
-  }
-
-  Map<String, Map<String, int>> _buildTimeProgress(DateTime now) {
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final yearStart = DateTime(now.year, 1, 1);
-    final nextYear = DateTime(now.year + 1, 1, 1);
-    final totalYearDays = nextYear.difference(yearStart).inDays;
-    final passedYearDays = todayStart.difference(yearStart).inDays + 1;
-
-    final monthStart = DateTime(now.year, now.month, 1);
-    final nextMonth = now.month == 12
-        ? DateTime(now.year + 1, 1, 1)
-        : DateTime(now.year, now.month + 1, 1);
-    final totalMonthDays = nextMonth.difference(monthStart).inDays;
-    final passedMonthDays = now.day;
-
-    final weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
-    final nextWeek = weekStart.add(const Duration(days: 7));
-    final totalWeekDays = nextWeek.difference(weekStart).inDays;
-    final passedWeekDays = now.weekday;
-
-    const totalDayHours = 24;
-    final passedDayHours = now.hour + 1;
-
-    Map<String, int> asProgress({
-      required int passed,
-      required int total,
-    }) {
-      final remaining = total - passed;
-      final progressPercent = ((passed / total) * 100).round();
-      return {
-        'passed': passed,
-        'total': total,
-        'remaining': remaining,
-        'percent': progressPercent,
-      };
-    }
-
-    return {
-      'Year': asProgress(passed: passedYearDays, total: totalYearDays),
-      'Month': asProgress(passed: passedMonthDays, total: totalMonthDays),
-      'Week': asProgress(passed: passedWeekDays, total: totalWeekDays),
-      'Day': asProgress(passed: passedDayHours, total: totalDayHours),
-    };
-  }
-
 
   List<Task> _buildPendingTodayTasks(List<Task> tasks, DateTime todayStart) {
     final indexedTasks = tasks.asMap().entries.where((entry) {

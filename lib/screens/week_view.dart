@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
+import '../widgets/routine_occurrence_dialog.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
 import '../models/task_model.dart';
@@ -61,110 +62,46 @@ class _WeekViewState extends State<WeekView> {
 
 
 
-  String _normalizedRepeatFrequency(Task task) {
-    final normalized = task.repeatFrequency?.trim().toLowerCase();
-    switch (normalized) {
-      case 'daily':
-      case 'weekly':
-      case 'monthly':
-      case 'yearly':
-        return normalized!;
-      default:
-        return '';
-    }
-  }
-
-  bool _isRecurringTask(Task task) => task.repeatTask && _normalizedRepeatFrequency(task).isNotEmpty;
-
-
-  String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
-
-  bool _isOccurrenceLocked(Task task) {
-    final status = _normalizedStatus(task);
-    return task.done || status == 'completed' || status == 'cancelled' || status == 'missed' || status == 'overdue';
-  }
-
-  String _occurrenceLabel(Task task) {
-    switch (_normalizedRepeatFrequency(task)) {
-      case 'daily':
-        return 'today';
-      case 'weekly':
-        return 'this week';
-      case 'monthly':
-        return 'this month';
-      case 'yearly':
-        return 'this year';
-      default:
-        return 'this period';
-    }
-  }
-
-  Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
-    Future<void> toggleRoutine(BuildContext dialogContext) async {
-      await widget.hiveService.setRecurringTaskEnabledByReference(task, !task.routineEnabled);
-      if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-    }
-
-    Widget toggleButton(BuildContext dialogContext) {
-      return TextButton.icon(
-        onPressed: () => toggleRoutine(dialogContext),
-        icon: Icon(task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
-        label: Text(task.routineEnabled ? 'Disable Routine' : 'Enable Routine'),
-      );
-    }
-
-    if (_isOccurrenceLocked(task)) {
-      final period = _occurrenceLabel(task);
-      final statusLabel = task.done || _normalizedStatus(task) == 'completed' ? 'completed' : task.status.toLowerCase();
-      return showDialog<Task>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Already updated'),
-          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence. You can still enable or disable this routine without deleting its history.'),
-          actions: [
-            toggleButton(context),
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-          ],
-        ),
-      );
-    }
-
-    return showDialog<Task>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Update ${task.task} occurrence'),
-        content: const Text('Routine details are locked here. Update only the current occurrence, or pause the routine without deleting its history.'),
-        actions: [
-          toggleButton(context),
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
-          TextButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed'))
-                : null,
-            child: const Text('Miss This Occurrence'),
-          ),
-          ElevatedButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed'))
-                : null,
-            child: const Text('Complete This Occurrence'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _editTask(Task task) async {
-    final updated = _isRecurringTask(task)
-        ? await _showRecurringStatusUpdateDialog(task)
-        : await showTaskFormDialog(
+    if (isRoutineTask(task)) {
+      final action = await showRoutineOccurrenceDialog(context: context, task: task);
+      if (action == null || action == RoutineOccurrenceAction.close) return;
+
+      switch (action) {
+        case RoutineOccurrenceAction.disableRoutine:
+          await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
+          return;
+        case RoutineOccurrenceAction.editDetails:
+          final edited = await showTaskFormDialog(
             context,
             date: task.dueDate,
             initialTask: task,
-            title: 'Update Task',
-            actionLabel: 'Save Task',
-            onDelete: () => widget.hiveService.deleteTaskByReference(task),
+            title: 'Edit Routine Details',
+            actionLabel: 'Save Routine',
           );
+          if (edited != null) {
+            await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+          }
+          return;
+        case RoutineOccurrenceAction.missOccurrence:
+          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: false, status: 'Missed'));
+          return;
+        case RoutineOccurrenceAction.completeOccurrence:
+          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed'));
+          return;
+        case RoutineOccurrenceAction.close:
+          return;
+      }
+    }
+
+    final updated = await showTaskFormDialog(
+      context,
+      date: task.dueDate,
+      initialTask: task,
+      title: 'Update Task',
+      actionLabel: 'Save Task',
+      onDelete: () => widget.hiveService.deleteTaskByReference(task),
+    );
 
     if (updated != null) {
       await widget.hiveService.updateTaskByReference(task, updated);

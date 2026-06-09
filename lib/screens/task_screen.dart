@@ -3,6 +3,7 @@ import '../constants/colors.dart';
 import '../services/hive_service.dart';
 import '../models/task_model.dart';
 import '../widgets/quick_add_task_dialog.dart';
+import '../widgets/routine_occurrence_dialog.dart';
 
 class TaskScreen extends StatefulWidget {
   final DateTime date;
@@ -28,122 +29,56 @@ class _TaskScreenState extends State<TaskScreen> {
 
   /// Edits task with full form and saves updates.
 
-  String _normalizedRepeatFrequency(Task task) {
-    final normalized = task.repeatFrequency?.trim().toLowerCase();
-    switch (normalized) {
-      case 'daily':
-      case 'weekly':
-      case 'monthly':
-      case 'yearly':
-        return normalized!;
-      default:
-        return '';
-    }
-  }
-
-  bool _isRecurringTask(Task task) => task.repeatTask && _normalizedRepeatFrequency(task).isNotEmpty;
-
-
-  String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
-
-  bool _isOccurrenceLocked(Task task) {
-    final status = _normalizedStatus(task);
-    return task.done || status == 'completed' || status == 'cancelled' || status == 'missed' || status == 'overdue';
-  }
-
-  String _occurrenceLabel(Task task) {
-    switch (_normalizedRepeatFrequency(task)) {
-      case 'daily':
-        return 'today';
-      case 'weekly':
-        return 'this week';
-      case 'monthly':
-        return 'this month';
-      case 'yearly':
-        return 'this year';
-      default:
-        return 'this period';
-    }
-  }
-
-  Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
-    Future<void> toggleRoutine(BuildContext dialogContext) async {
-      await widget.hiveService.setRecurringTaskEnabledByReference(task, !task.routineEnabled);
-      if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-    }
-
-    Widget toggleButton(BuildContext dialogContext) {
-      return TextButton.icon(
-        onPressed: () => toggleRoutine(dialogContext),
-        icon: Icon(task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
-        label: Text(task.routineEnabled ? 'Disable Routine' : 'Enable Routine'),
-      );
-    }
-
-    if (_isOccurrenceLocked(task)) {
-      final period = _occurrenceLabel(task);
-      final statusLabel = task.done || _normalizedStatus(task) == 'completed' ? 'completed' : task.status.toLowerCase();
-      return showDialog<Task>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Already updated'),
-          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence. You can still enable or disable this routine without deleting its history.'),
-          actions: [
-            toggleButton(context),
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-          ],
-        ),
-      );
-    }
-
-    return showDialog<Task>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Update ${task.task} occurrence'),
-        content: const Text('Routine details are locked here. Update only the current occurrence, or pause the routine without deleting its history.'),
-        actions: [
-          toggleButton(context),
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
-          TextButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed'))
-                : null,
-            child: const Text('Miss This Occurrence'),
-          ),
-          ElevatedButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed'))
-                : null,
-            child: const Text('Complete This Occurrence'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _editTask(int index) async {
     final tasks = widget.hiveService.getTasksForDate(widget.date);
     if (index < 0 || index >= tasks.length) return;
     final currentTask = tasks[index];
 
-    final updated = _isRecurringTask(currentTask)
-        ? await _showRecurringStatusUpdateDialog(currentTask)
-        : await showTaskFormDialog(
+    if (isRoutineTask(currentTask)) {
+      final action = await showRoutineOccurrenceDialog(context: context, task: currentTask);
+      if (action == null || action == RoutineOccurrenceAction.close) return;
+
+      switch (action) {
+        case RoutineOccurrenceAction.disableRoutine:
+          await widget.hiveService.setRecurringTaskEnabledByReference(currentTask, false);
+          return;
+        case RoutineOccurrenceAction.editDetails:
+          final edited = await showTaskFormDialog(
             context,
-            date: widget.date,
+            date: currentTask.dueDate,
             initialTask: currentTask,
-            title: 'Update Task',
-            actionLabel: 'Save Task',
-            onDelete: () => widget.hiveService.deleteTask(widget.date, index),
+            title: 'Edit Routine Details',
+            actionLabel: 'Save Routine',
           );
+          if (edited != null) {
+            await widget.hiveService.updateRecurringTaskSeriesByReference(currentTask, edited.copyWith(repeatTask: true));
+          }
+          return;
+        case RoutineOccurrenceAction.missOccurrence:
+          await widget.hiveService.updateTask(widget.date, index, currentTask.copyWith(done: false, status: 'Missed'));
+          return;
+        case RoutineOccurrenceAction.completeOccurrence:
+          await widget.hiveService.updateTask(widget.date, index, currentTask.copyWith(done: true, status: 'Completed'));
+          return;
+        case RoutineOccurrenceAction.close:
+          return;
+      }
+    }
+
+    final updated = await showTaskFormDialog(
+      context,
+      date: widget.date,
+      initialTask: currentTask,
+      title: 'Update Task',
+      actionLabel: 'Save Task',
+      onDelete: () => widget.hiveService.deleteTask(widget.date, index),
+    );
 
     if (updated != null) {
       await widget.hiveService.updateTask(widget.date, index, updated);
     }
   }
 
-  /// Deletes a task with confirmation.
-  /// No setState needed - reactive ValueListenableBuilder will trigger rebuild.
   Future<void> _deleteTask(int index) async {
     final tasks = widget.hiveService.getTasksForDate(widget.date);
     if (index < 0 || index >= tasks.length || tasks[index].repeatTask) return;

@@ -498,6 +498,47 @@ class HiveService {
     return false;
   }
 
+  Future<bool> updateRecurringTaskSeriesByReference(Task original, Task updated) async {
+    if (!original.repeatTask || !updated.repeatTask) return false;
+
+    final normalizedUpdated = _withNormalizedTaskName(updated.copyWith(repeatTask: true));
+    var changed = false;
+
+    for (final key in _box.keys) {
+      if (key is! String || DateTime.tryParse(key) == null) continue;
+
+      final rawList = _box.get(key);
+      if (rawList == null) continue;
+      final tasks = rawList.cast<Task>().toList();
+      var listChanged = false;
+
+      for (int i = 0; i < tasks.length; i++) {
+        final candidate = tasks[i];
+        if (_isSameRecurringSeriesIdentity(candidate, original)) {
+          tasks[i] = normalizedUpdated.copyWith(
+            dueDate: candidate.dueDate,
+            done: candidate.done,
+            status: candidate.status,
+            hourSlot: candidate.hourSlot,
+            routineEnabled: candidate.routineEnabled,
+          );
+          listChanged = true;
+          changed = true;
+        }
+      }
+
+      if (listChanged) {
+        await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+      }
+    }
+
+    if (changed && normalizedUpdated.routineEnabled) {
+      await _ensureCurrentRecurringOccurrenceEnabled(normalizedUpdated);
+    }
+
+    return changed;
+  }
+
   Future<bool> setRecurringTaskEnabledByReference(Task original, bool enabled) async {
     if (!original.repeatTask) return false;
 
