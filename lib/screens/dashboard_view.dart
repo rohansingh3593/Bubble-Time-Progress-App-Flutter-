@@ -102,8 +102,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             journalEntries: widget.hiveService.getAllJournalEntries(),
           );
 
-          final summary = _buildSummary(dashboardTasks, todayStart);
-          final scopedTaskCounts = _buildScopedTaskCounts(dashboardTasks, todayStart);
           final yearProgress = _buildYearProgress(todayStart);
           final timeProgress = _buildTimeProgress(today);
           final taskInsightItems = _buildTaskInsightItems(nonRoutineDashboardTasks);
@@ -113,11 +111,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final insightDelegatedCounts = _countInsightItems(taskInsightItems, (item) => item.delegateLabel, const []);
 
           final activeRoutineTasks = _buildEnabledRoutineOccurrences(allTasks, todayStart);
-          final pendingTodayTasks = _buildPendingTodayTasks(dashboardTasks, todayStart);
-          final todayOccurrenceTasks = _dedupeTasksForDashboard(widget.hiveService.getTasksForDate(todayStart))
-              .where((task) => !task.repeatTask || task.routineEnabled)
+          final todayTaskRows = _buildTodayTaskRows(allTasks, todayStart);
+          final pendingTodayTasks = todayTaskRows
+              .where((row) => row.group != _TodayTaskGroup.completed)
+              .map((row) => row.task)
               .toList();
-          final todayProductivityStats = _buildTodayProductivityStats(todayOccurrenceTasks);
+          final todayProductivityStats = _buildTodayProductivityStats(todayTaskRows);
+          final summary = _buildSummary(dashboardTasks, todayTaskRows);
+          final scopedTaskCounts = _buildScopedTaskCounts(dashboardTasks, todayStart, todayTaskRows);
           final disabledRoutineTasks = _buildDisabledRoutineTasks(allTasks);
 
           final priorityOptions = ['All', ...insightPriorityCounts.keys];
@@ -188,7 +189,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 categoryOptions: categoryOptions,
               ),
               const SizedBox(height: 12),
-              _todayTasksSection(pendingTodayTasks),
+              _todayTasksSection(todayTaskRows),
               const SizedBox(height: 12),
               _todaysProductivitySection(todayProductivityStats),
               const SizedBox(height: 12),
@@ -320,13 +321,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }
   }
 
-  Map<String, int> _buildSummary(List<Task> tasks, DateTime todayStart) {
+  Map<String, int> _buildSummary(List<Task> tasks, List<_DashboardTodayTask> todayRows) {
     final total = tasks.length;
     final completed = tasks.where(_isCompletedTask).length;
-    final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
-    final overdue = tasks
-        .where((task) => _dateOnly(task.dueDate).isBefore(todayStart) && _isPendingTask(task))
-        .length;
+    final todayTasks = todayRows.length;
+    final overdue = todayRows.where((row) => row.group == _TodayTaskGroup.overdue).length;
 
     return {
       'TOTAL TASKS': total,
@@ -336,12 +335,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     };
   }
 
-  Map<String, int> _buildScopedTaskCounts(List<Task> tasks, DateTime todayStart) {
+  Map<String, int> _buildScopedTaskCounts(List<Task> tasks, DateTime todayStart, List<_DashboardTodayTask> todayRows) {
     final monthlyTasks = tasks
         .where((t) => t.dueDate.year == todayStart.year && t.dueDate.month == todayStart.month)
         .length;
     final yearlyTasks = tasks.where((t) => t.dueDate.year == todayStart.year).length;
-    final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
+    final todayTasks = todayRows.length;
 
     return {
       'YEAR TASKS': yearlyTasks,
@@ -350,18 +349,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     };
   }
 
-  _TodayProductivityStats _buildTodayProductivityStats(List<Task> tasks) {
-    final activeTasks = tasks.where((task) => !_isCancelledTask(task)).toList();
-    final completed = activeTasks.where(_isCompletedTask).length;
-    final overdue = activeTasks.where((task) {
-      final status = task.status.trim().toLowerCase();
-      return !_isCompletedTask(task) && (status == 'overdue' || status == 'missed');
-    }).length;
-    final pending = activeTasks.length - completed - overdue;
+  _TodayProductivityStats _buildTodayProductivityStats(List<_DashboardTodayTask> rows) {
+    final completed = rows.where((row) => row.group == _TodayTaskGroup.completed).length;
+    final overdue = rows.where((row) => row.group == _TodayTaskGroup.overdue).length;
+    final pending = rows.where((row) => row.group == _TodayTaskGroup.pending).length;
     return _TodayProductivityStats(
-      total: activeTasks.length,
+      total: rows.length,
       completed: completed,
-      pending: pending < 0 ? 0 : pending,
+      pending: pending,
       overdue: overdue,
     );
   }
@@ -423,6 +418,130 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       'Week': asProgress(passed: passedWeekDays, total: totalWeekDays),
       'Day': asProgress(passed: passedDayHours, total: totalDayHours),
     };
+  }
+
+  List<_DashboardTodayTask> _buildTodayTaskRows(List<Task> tasks, DateTime todayStart) {
+    final rows = <_DashboardTodayTask>[];
+
+    for (final task in tasks.where((task) => !task.repeatTask)) {
+      if (_isCancelledTask(task)) continue;
+      final dueDate = _dateOnly(task.dueDate);
+      if (dueDate.isBefore(todayStart) && !_isCompletedTask(task)) {
+        rows.add(_DashboardTodayTask(task: task, group: _TodayTaskGroup.overdue, displayStatus: 'Overdue'));
+      } else if (_isSameDay(dueDate, todayStart)) {
+        if (_isCompletedTask(task)) {
+          rows.add(_DashboardTodayTask(task: task, group: _TodayTaskGroup.completed, displayStatus: 'Completed'));
+        } else {
+          rows.add(_DashboardTodayTask(task: task, group: _TodayTaskGroup.pending, displayStatus: _pendingDisplayStatus(task)));
+        }
+      }
+    }
+
+    rows.addAll(_buildTodayRoutineRows(tasks, todayStart));
+    rows.sort((a, b) {
+      final groupCompare = a.group.sortRank.compareTo(b.group.sortRank);
+      if (groupCompare != 0) return groupCompare;
+      final dueCompare = a.task.dueDate.compareTo(b.task.dueDate);
+      if (dueCompare != 0) return dueCompare;
+      return a.task.task.toLowerCase().compareTo(b.task.task.toLowerCase());
+    });
+    return rows;
+  }
+
+  List<_DashboardTodayTask> _buildTodayRoutineRows(List<Task> tasks, DateTime todayStart) {
+    final grouped = <String, List<Task>>{};
+
+    for (final task in tasks) {
+      if (!task.repeatTask) continue;
+      final frequency = _normalizedRepeatFrequency(task);
+      if (frequency != 'daily' && frequency != 'weekly') continue;
+      grouped.putIfAbsent(_recurringSeriesKey(task), () => <Task>[]).add(task);
+    }
+
+    final rows = <_DashboardTodayTask>[];
+    for (final records in grouped.values) {
+      records.sort((a, b) => b.dueDate.compareTo(a.dueDate));
+      final template = records.first;
+      if (!template.routineEnabled) continue;
+
+      final occurrenceDate = _currentRoutineOccurrenceDate(template, todayStart);
+      final currentOccurrence = _recordForDate(records, occurrenceDate);
+
+      final hasOverduePreviousOccurrence = _hasOverduePreviousRoutineOccurrence(records, template, occurrenceDate);
+      if (currentOccurrence != null) {
+        rows.add(_todayRoutineRowForCurrentOccurrence(currentOccurrence, hasOverduePreviousOccurrence: hasOverduePreviousOccurrence));
+        continue;
+      }
+
+      final occurrenceTask = template.copyWith(
+        dueDate: occurrenceDate,
+        done: false,
+        status: 'Not Updated',
+        repeatTask: true,
+        routineEnabled: true,
+      );
+      rows.add(_DashboardTodayTask(
+        task: occurrenceTask,
+        group: hasOverduePreviousOccurrence ? _TodayTaskGroup.overdue : _TodayTaskGroup.pending,
+        displayStatus: hasOverduePreviousOccurrence ? 'Overdue' : 'Pending',
+      ));
+    }
+
+    return rows;
+  }
+
+  Task? _recordForDate(List<Task> records, DateTime date) {
+    for (final record in records) {
+      if (_isSameDay(record.dueDate, date)) return record;
+    }
+    return null;
+  }
+
+  _DashboardTodayTask _todayRoutineRowForCurrentOccurrence(Task task, {required bool hasOverduePreviousOccurrence}) {
+    final status = task.status.trim().toLowerCase();
+    if (task.done || status == 'completed') {
+      return _DashboardTodayTask(task: task, group: _TodayTaskGroup.completed, displayStatus: 'Completed');
+    }
+    if (status == 'missed') {
+      return _DashboardTodayTask(task: task, group: _TodayTaskGroup.overdue, displayStatus: 'Missed');
+    }
+    if (status == 'overdue' || hasOverduePreviousOccurrence) {
+      return _DashboardTodayTask(task: task, group: _TodayTaskGroup.overdue, displayStatus: 'Overdue');
+    }
+    return _DashboardTodayTask(task: task, group: _TodayTaskGroup.pending, displayStatus: 'Pending');
+  }
+
+  bool _hasOverduePreviousRoutineOccurrence(List<Task> records, Task template, DateTime occurrenceDate) {
+    final previousDate = _previousRoutineOccurrenceDate(template, occurrenceDate);
+    if (previousDate == null) return false;
+
+    final firstTrackedDate = records
+        .map((record) => _dateOnly(record.dueDate))
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    if (firstTrackedDate.isAfter(previousDate)) return false;
+
+    final previousOccurrence = _recordForDate(records, previousDate);
+    if (previousOccurrence == null) return true;
+
+    final status = previousOccurrence.status.trim().toLowerCase();
+    return !previousOccurrence.done && status != 'completed' && status != 'cancelled';
+  }
+
+  DateTime? _previousRoutineOccurrenceDate(Task task, DateTime occurrenceDate) {
+    switch (_normalizedRepeatFrequency(task)) {
+      case 'daily':
+        return occurrenceDate.subtract(const Duration(days: 1));
+      case 'weekly':
+        return occurrenceDate.subtract(const Duration(days: 7));
+      default:
+        return null;
+    }
+  }
+
+  String _pendingDisplayStatus(Task task) {
+    final status = task.status.trim();
+    if (status.isEmpty || status.toLowerCase() == 'not updated') return 'Pending';
+    return status;
   }
 
   List<Task> _buildEnabledRoutineOccurrences(List<Task> tasks, DateTime todayStart) {
@@ -490,26 +609,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       default:
         return 2;
     }
-  }
-
-  List<Task> _buildPendingTodayTasks(List<Task> tasks, DateTime todayStart) {
-    final indexedTasks = tasks.asMap().entries.where((entry) {
-      final task = entry.value;
-      final dueDate = _dateOnly(task.dueDate);
-      return !dueDate.isAfter(todayStart) && _isPendingTask(task);
-    }).toList();
-
-    indexedTasks.sort((a, b) {
-      final priorityCompare = _prioritySortRank(a.value.priority).compareTo(_prioritySortRank(b.value.priority));
-      if (priorityCompare != 0) return priorityCompare;
-
-      final dueCompare = a.value.dueDate.compareTo(b.value.dueDate);
-      if (dueCompare != 0) return dueCompare;
-
-      return a.key.compareTo(b.key);
-    });
-
-    return indexedTasks.map((entry) => entry.value).toList();
   }
 
   int _prioritySortRank(String priority) {
@@ -1886,6 +1985,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                         _todayProductivityStat('Today\'s Tasks', stats.total),
                         _todayProductivityStat('Completed', stats.completed),
                         _todayProductivityStat('Pending', stats.pending),
+                        _todayProductivityStat('Overdue', stats.overdue),
                         _todayProductivityStat('Completion Rate', stats.completionRate, suffix: '%'),
                       ],
                     ),
@@ -1956,7 +2056,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     return const _ProductivityBadge(label: 'Excellent', emoji: '🔥', color: Color(0xFFFF7043));
   }
 
-  Widget _todayTasksSection(List<Task> tasks) {
+  Widget _todayTasksSection(List<_DashboardTodayTask> tasks) {
     final style = _dashboardStyle();
     return _panel(
       title: "TODAY'S TASKS",
@@ -1987,23 +2087,22 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
 
-  List<Widget> _buildPendingTaskRows(List<Task> tasks) {
+  List<Widget> _buildPendingTaskRows(List<_DashboardTodayTask> tasks) {
     final style = _dashboardStyle();
-    final todayStart = _dateOnly(DateTime.now());
     final rows = <Widget>[];
-    String? activeGroup;
+    _TodayTaskGroup? activeGroup;
 
-    for (final task in tasks) {
-      final group = _dateOnly(task.dueDate).isBefore(todayStart) ? 'Overdue' : 'Today';
-      if (group != activeGroup) {
-        activeGroup = group;
+    for (final row in tasks) {
+      final task = row.task;
+      if (row.group != activeGroup) {
+        activeGroup = row.group;
         rows.add(
           Padding(
             padding: const EdgeInsets.only(top: 8, bottom: 4),
             child: Text(
-              group.toUpperCase(),
+              row.group.label,
               style: TextStyle(
-                color: group == 'Overdue' ? Colors.redAccent : Colors.green,
+                color: row.group.color,
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.4,
@@ -2018,10 +2117,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           dense: true,
           onTap: () => _editTask(task),
           title: Text(task.task, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w700)),
-          subtitle: Text('${task.priority} • ${task.status} • ${_formatDueLabel(task)}', style: TextStyle(color: style.textMuted)),
+          subtitle: Text('${task.priority} • ${row.displayStatus} • ${_formatDueLabel(task)}', style: TextStyle(color: style.textMuted)),
           trailing: Icon(
-            group == 'Overdue' ? Icons.warning_amber_rounded : Icons.radio_button_unchecked,
-            color: group == 'Overdue' ? Colors.redAccent : Colors.green,
+            row.group.icon,
+            color: row.group.color,
           ),
         ),
       );
@@ -2293,6 +2392,64 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
+}
+
+enum _TodayTaskGroup {
+  overdue,
+  pending,
+  completed;
+
+  int get sortRank {
+    switch (this) {
+      case _TodayTaskGroup.overdue:
+        return 0;
+      case _TodayTaskGroup.pending:
+        return 1;
+      case _TodayTaskGroup.completed:
+        return 2;
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case _TodayTaskGroup.overdue:
+        return 'OVERDUE';
+      case _TodayTaskGroup.pending:
+        return 'PENDING';
+      case _TodayTaskGroup.completed:
+        return 'COMPLETED TODAY';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case _TodayTaskGroup.overdue:
+        return Colors.redAccent;
+      case _TodayTaskGroup.pending:
+        return Colors.orangeAccent;
+      case _TodayTaskGroup.completed:
+        return Colors.green;
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case _TodayTaskGroup.overdue:
+        return Icons.warning_amber_rounded;
+      case _TodayTaskGroup.pending:
+        return Icons.radio_button_unchecked;
+      case _TodayTaskGroup.completed:
+        return Icons.check_circle_outline;
+    }
+  }
+}
+
+class _DashboardTodayTask {
+  final Task task;
+  final _TodayTaskGroup group;
+  final String displayStatus;
+
+  const _DashboardTodayTask({required this.task, required this.group, required this.displayStatus});
 }
 
 class _TodayProductivityStats {
