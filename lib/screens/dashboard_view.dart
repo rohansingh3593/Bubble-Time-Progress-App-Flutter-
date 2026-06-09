@@ -9,7 +9,6 @@ import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
-import '../widgets/rank_profile_card.dart';
 import 'journal_view.dart';
 import 'journey_timeline_view.dart';
 
@@ -146,9 +145,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 14),
               _buildHeroCard(rankProfile, summary),
               const SizedBox(height: 14),
-              _buildJourneySection(),
-              const SizedBox(height: 14),
-              _todaysProductivitySection(todayProductivityStats),
+              _summaryHeader(summary),
               const SizedBox(height: 14),
               _buildProgressOverviewStrip(timeProgress),
               const SizedBox(height: 12),
@@ -157,6 +154,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               _yearProgressPanel(yearProgress),
               const SizedBox(height: 12),
               _timeProgressSection(timeProgress),
+              const SizedBox(height: 14),
+              _buildHabitRoutineSection(activeRoutineTasks),
+              const SizedBox(height: 14),
+              _buildDisabledRoutineBoard(disabledRoutineTasks),
+              const SizedBox(height: 14),
+              _todaysProductivitySection(todayProductivityStats),
+              const SizedBox(height: 14),
+              _todayTasksSection(todayTaskRows),
               const SizedBox(height: 12),
               _productivityAnalyticsCenter(
                 tasks: analyticsTasks,
@@ -173,25 +178,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 statusOptions: statusOptions,
                 categoryOptions: categoryOptions,
               ),
-              const SizedBox(height: 12),
-              _todayTasksSection(todayTaskRows),
               const SizedBox(height: 14),
               _buildDailyFocusStrip(pendingTodayTasks, todayStart),
               const SizedBox(height: 14),
-              _buildHabitRoutineSection(activeRoutineTasks),
-              const SizedBox(height: 14),
-              _buildDisabledRoutineBoard(disabledRoutineTasks),
-              const SizedBox(height: 14),
               _buildProjectsSection(nonRoutineDashboardTasks),
-              const SizedBox(height: 14),
-              RankProfileCard(
-                profile: rankProfile,
-                onUsernameChanged: widget.hiveService.setUsername,
-                onTap: _openJournal,
-                onJourneyTap: _openJourneyTimeline,
-              ),
-              const SizedBox(height: 12),
-              _summaryHeader(summary),
               const SizedBox(height: 12),
             ],
           );
@@ -454,7 +444,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     for (final task in tasks) {
       if (!task.repeatTask) continue;
       final frequency = _normalizedRepeatFrequency(task);
-      if (frequency != 'daily' && frequency != 'weekly') continue;
+      if (!['daily', 'weekly', 'monthly', 'yearly'].contains(frequency)) continue;
       grouped.putIfAbsent(_recurringSeriesKey(task), () => <Task>[]).add(task);
     }
 
@@ -550,7 +540,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     for (final task in tasks) {
       if (!task.repeatTask) continue;
       final frequency = _normalizedRepeatFrequency(task);
-      if (frequency != 'daily' && frequency != 'weekly') continue;
+      if (!['daily', 'weekly', 'monthly', 'yearly'].contains(frequency)) continue;
       grouped.putIfAbsent(_recurringSeriesKey(task), () => <Task>[]).add(task);
     }
 
@@ -594,6 +584,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     switch (_normalizedRepeatFrequency(task)) {
       case 'weekly':
         return todayStart.subtract(Duration(days: todayStart.weekday - 1));
+      case 'monthly':
+        return DateTime(todayStart.year, todayStart.month, 1);
+      case 'yearly':
+        return DateTime(todayStart.year, 1, 1);
       case 'daily':
       default:
         return todayStart;
@@ -606,9 +600,30 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         return 0;
       case 'weekly':
         return 1;
-      default:
+      case 'monthly':
         return 2;
+      case 'yearly':
+        return 3;
+      default:
+        return 4;
     }
+  }
+
+  int _routineCurrentStreak(Task task) {
+    final allTasks = widget.hiveService.getAllTasksByDate().values.expand((list) => list).where((candidate) {
+      return candidate.repeatTask &&
+          candidate.task.trim().toLowerCase() == task.task.trim().toLowerCase() &&
+          _normalizedRepeatFrequency(candidate) == _normalizedRepeatFrequency(task);
+    }).toList()
+      ..sort((a, b) => b.dueDate.compareTo(a.dueDate));
+
+    var streak = 0;
+    for (final record in allTasks) {
+      final completed = record.done || record.status.trim().toLowerCase() == 'completed';
+      if (!completed) break;
+      streak++;
+    }
+    return streak;
   }
 
   int _prioritySortRank(String priority) {
@@ -1035,6 +1050,17 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             const SizedBox(height: 8),
                             Text('$completed / $total completed', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Colors.white70),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                              ),
+                              onPressed: _openJourneyTimeline,
+                              icon: const Icon(Icons.menu_book_rounded, size: 16),
+                              label: const Text('Open Journey Timeline'),
+                            ),
+                            const SizedBox(height: 10),
                             GestureDetector(
                               onTap: () => setState(() => _showDetails = !_showDetails),
                               child: Row(
@@ -1181,7 +1207,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _buildDailyFocusStrip(List<Task> tasks, DateTime today) {
     final sorted = [...tasks]..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
-    final focus = sorted.take(6).toList();
+    final focus = sorted.take(3).toList();
     return _darkSection('Daily Focus', SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(children: focus.map((t){
@@ -1227,7 +1253,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   Widget _buildHabitRoutineSection(List<Task> routines) {
     return _darkSection('Habit & Routine Tracker', Column(children: [
       if (routines.isEmpty)
-        const Padding(padding: EdgeInsets.all(8), child: Text('No enabled daily or weekly routines yet.', style: TextStyle(color: Color(0xFFB9C6F3))))
+        const Padding(padding: EdgeInsets.all(8), child: Text('No enabled routines yet.', style: TextStyle(color: Color(0xFFB9C6F3))))
       else
         ...routines.map((task) {
           final taskColor = Color(task.colorValue);
@@ -1242,7 +1268,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 Container(width: 10,height: 10,decoration: BoxDecoration(color: taskColor,shape: BoxShape.circle)),
                 const SizedBox(width: 10),
                 Expanded(child: Text(task.task, style: const TextStyle(color: Colors.white))),
-                Text(task.repeatFrequency ?? 'Daily', style: const TextStyle(color: Color(0xFF9CB3FF))),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(task.repeatFrequency ?? 'Daily', style: const TextStyle(color: Color(0xFF9CB3FF))),
+                    Text('${_routineCurrentStreak(task)} streak', style: const TextStyle(color: Color(0xFFB9C6F3), fontSize: 11)),
+                  ],
+                ),
               ]),
             ),
           );
@@ -1335,54 +1367,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         trailing: Icon(done ? Icons.check_circle : Icons.timelapse, color: done ? Colors.greenAccent : Colors.orangeAccent),
       );
     }).toList()), action: 'Expand');
-  }
-
-  Widget _buildJourneySection() {
-    final style = _dashboardStyle();
-    final entries = [
-      '🌅 Wake up routine completed',
-      '📘 Deep work block tracked',
-      '😊 Mood: Focused',
-    ];
-
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 650),
-      curve: Curves.easeOutCubic,
-      builder: (context, intro, child) => Opacity(
-        opacity: intro,
-        child: Transform.translate(
-          offset: Offset(0, 12 * (1 - intro)),
-          child: child,
-        ),
-      ),
-      child: _darkSection(
-        'Journey & Reflection',
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: entries.asMap().entries.map((entry) {
-            final index = entry.key;
-            final label = entry.value;
-            return TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: 1),
-              duration: Duration(milliseconds: 420 + (index * 140)),
-              curve: Curves.easeOutCubic,
-              builder: (context, value, child) => Opacity(
-                opacity: value,
-                child: Transform.translate(offset: Offset(10 * (1 - value), 0), child: child),
-              ),
-              child: Padding(
-                padding: EdgeInsets.only(bottom: index == entries.length - 1 ? 0 : 6),
-                child: Text(label, style: TextStyle(color: style.textPrimary)),
-              ),
-            );
-          }).toList(),
-        ),
-        action: 'Open Journal',
-        onActionTap: _openJournal,
-        pulseAction: true,
-      ),
-    );
   }
 
   Widget _heroMetric(String label, String value) {
