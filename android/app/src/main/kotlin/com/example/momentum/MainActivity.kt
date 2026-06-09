@@ -1,4 +1,4 @@
-package com.example.bubble_time_progress_app
+package com.example.momentum
 
 import io.flutter.embedding.android.FlutterActivity
 

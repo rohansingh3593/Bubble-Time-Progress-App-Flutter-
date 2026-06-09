@@ -7,8 +7,8 @@ $ErrorActionPreference = 'Continue'
 Write-Host '--- Flutter Windows local data cleanup ---' -ForegroundColor Cyan
 
 # Known app identifiers from windows runner files.
-$appExeName = 'bubble_time_progress_app'
-$appProductNames = @('bubble_time_progress_app', 'Bubble-Time-Progress-App-Flutter-')
+$appExeName = 'momentum'
+$appProductNames = @('momentum', 'Bubble-Time-Progress-App-Flutter-')
 
 # Stop likely running app processes (safe if not running)
 $processNames = @($appExeName, 'Runner') + $appProductNames

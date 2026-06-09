@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.bubble_time_progress_app"
+    namespace = "com.example.momentum"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.bubble_time_progress_app"
+        applicationId = "com.example.momentum"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
