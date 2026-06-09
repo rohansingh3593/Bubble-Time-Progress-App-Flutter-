@@ -87,3 +87,9 @@ int taskRecordedMinutesForDay(Task task) {
 bool _isCompletedTask(Task task) {
   return task.done || task.status.trim().toLowerCase() == 'completed';
 }
+
+
+int _parseDuration(String? rawValue) {
+  final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
+  return normalizeTaskDuration(parsed);
+}
