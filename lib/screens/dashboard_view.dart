@@ -1185,23 +1185,33 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           curve: Curves.easeInOut,
           builder: (context, lift, child) =>
               Transform.translate(offset: Offset(0, -2 * lift), child: child),
-          child: Container(
-          width: 220,
-          margin: const EdgeInsets.only(right: 10),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A2442),
-            borderRadius: BorderRadius.circular(14),
-            border: Border(left: BorderSide(color: urgent ? const Color(0xFFFF6A3D) : const Color(0xFF6D7CFF), width: 4)),
+          child: Tooltip(
+            message: 'Tap to update task',
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _editTask(t),
+                child: Container(
+                  width: 220,
+                  margin: const EdgeInsets.only(right: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A2442),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border(left: BorderSide(color: urgent ? const Color(0xFFFF6A3D) : const Color(0xFF6D7CFF), width: 4)),
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(t.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text(urgent ? '⚡ High Priority' : '• ${t.priority}', style: const TextStyle(color: Color(0xFFB9C6F3))),
+                    const SizedBox(height: 4),
+                    Text(_formatDueLabel(t), style: const TextStyle(color: Color(0xFF7F8EB9), fontSize: 12)),
+                  ]),
+                ),
+              ),
+            ),
           ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(t.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            Text(urgent ? '⚡ High Priority' : '• ${t.priority}', style: const TextStyle(color: Color(0xFFB9C6F3))),
-            const SizedBox(height: 4),
-            Text(_formatDueLabel(t), style: const TextStyle(color: Color(0xFF7F8EB9), fontSize: 12)),
-          ]),
-        ),
         );
       }).toList()),
     ), action: 'View All');
