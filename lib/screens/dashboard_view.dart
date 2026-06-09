@@ -146,26 +146,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 14),
               _buildHeroCard(rankProfile, summary),
               const SizedBox(height: 14),
-              _buildProgressOverviewStrip(timeProgress),
-              const SizedBox(height: 14),
-              _buildDailyFocusStrip(pendingTodayTasks, todayStart),
-              const SizedBox(height: 14),
-              _buildHabitRoutineSection(activeRoutineTasks),
-              const SizedBox(height: 14),
-              _buildDisabledRoutineBoard(disabledRoutineTasks),
-              const SizedBox(height: 14),
-              _buildProjectsSection(nonRoutineDashboardTasks),
-              const SizedBox(height: 14),
               _buildJourneySection(),
               const SizedBox(height: 14),
-              RankProfileCard(
-                profile: rankProfile,
-                onUsernameChanged: widget.hiveService.setUsername,
-                onTap: _openJournal,
-                onJourneyTap: _openJourneyTimeline,
-              ),
-              const SizedBox(height: 12),
-              _summaryHeader(summary),
+              _todaysProductivitySection(todayProductivityStats),
+              const SizedBox(height: 14),
+              _buildProgressOverviewStrip(timeProgress),
               const SizedBox(height: 12),
               _scopeTaskHeader(scopedTaskCounts),
               const SizedBox(height: 12),
@@ -190,8 +175,23 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               ),
               const SizedBox(height: 12),
               _todayTasksSection(todayTaskRows),
+              const SizedBox(height: 14),
+              _buildDailyFocusStrip(pendingTodayTasks, todayStart),
+              const SizedBox(height: 14),
+              _buildHabitRoutineSection(activeRoutineTasks),
+              const SizedBox(height: 14),
+              _buildDisabledRoutineBoard(disabledRoutineTasks),
+              const SizedBox(height: 14),
+              _buildProjectsSection(nonRoutineDashboardTasks),
+              const SizedBox(height: 14),
+              RankProfileCard(
+                profile: rankProfile,
+                onUsernameChanged: widget.hiveService.setUsername,
+                onTap: _openJournal,
+                onJourneyTap: _openJourneyTimeline,
+              ),
               const SizedBox(height: 12),
-              _todaysProductivitySection(todayProductivityStats),
+              _summaryHeader(summary),
               const SizedBox(height: 12),
             ],
           );
@@ -962,7 +962,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             behavior: HitTestBehavior.opaque,
             onTap: _openJournal,
             child: Transform.translate(
-              offset: Offset(0, 24 * (1 - intro)),
+              offset: Offset(0, -28 * (1 - intro)),
               child: AnimatedBuilder(
                 animation: _pulseController,
                 builder: (context, _) {
@@ -1143,7 +1143,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
 
-  Widget _darkSection(String title, Widget child, {String? action, VoidCallback? onActionTap}) {
+  Widget _darkSection(String title, Widget child, {String? action, VoidCallback? onActionTap, bool pulseAction = false}) {
     final style = _dashboardStyle();
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1157,12 +1157,19 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           Text(title, style: TextStyle(color: style.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
           const Spacer(),
           if (action != null)
-            InkWell(
-              borderRadius: BorderRadius.circular(999),
-              onTap: onActionTap,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Text(action, style: TextStyle(color: style.primary, fontWeight: FontWeight.w700)),
+            AnimatedBuilder(
+              animation: _pulseController,
+              builder: (context, child) {
+                final scale = pulseAction && style.animated ? 1 + (_pulseController.value * 0.04) : 1.0;
+                return Transform.scale(scale: scale, child: child);
+              },
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: onActionTap,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(action, style: TextStyle(color: style.primary, fontWeight: FontWeight.w700)),
+                ),
               ),
             ),
         ]),
@@ -1332,13 +1339,50 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _buildJourneySection() {
     final style = _dashboardStyle();
-    return _darkSection('Journey & Reflection', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('🌅 Wake up routine completed', style: TextStyle(color: style.textPrimary)),
-      const SizedBox(height: 6),
-      Text('📘 Deep work block tracked', style: TextStyle(color: style.textPrimary)),
-      const SizedBox(height: 6),
-      Text('😊 Mood: Focused', style: TextStyle(color: style.textPrimary)),
-    ]), action: 'Open Journal', onActionTap: _openJournal);
+    final entries = [
+      '🌅 Wake up routine completed',
+      '📘 Deep work block tracked',
+      '😊 Mood: Focused',
+    ];
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 650),
+      curve: Curves.easeOutCubic,
+      builder: (context, intro, child) => Opacity(
+        opacity: intro,
+        child: Transform.translate(
+          offset: Offset(0, 12 * (1 - intro)),
+          child: child,
+        ),
+      ),
+      child: _darkSection(
+        'Journey & Reflection',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: entries.asMap().entries.map((entry) {
+            final index = entry.key;
+            final label = entry.value;
+            return TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: Duration(milliseconds: 420 + (index * 140)),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) => Opacity(
+                opacity: value,
+                child: Transform.translate(offset: Offset(10 * (1 - value), 0), child: child),
+              ),
+              child: Padding(
+                padding: EdgeInsets.only(bottom: index == entries.length - 1 ? 0 : 6),
+                child: Text(label, style: TextStyle(color: style.textPrimary)),
+              ),
+            );
+          }).toList(),
+        ),
+        action: 'Open Journal',
+        onActionTap: _openJournal,
+        pulseAction: true,
+      ),
+    );
   }
 
   Widget _heroMetric(String label, String value) {
