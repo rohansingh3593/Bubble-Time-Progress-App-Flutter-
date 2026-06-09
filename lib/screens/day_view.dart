@@ -5,6 +5,7 @@ import '../widgets/routine_occurrence_dialog.dart';
 import '../services/hive_service.dart';
 import '../models/task_model.dart';
 import '../constants/colors.dart';
+import '../utils/task_time_utils.dart';
 
 class DayView extends StatefulWidget {
   final HiveService hiveService;
@@ -124,21 +125,24 @@ class _DayViewState extends State<DayView> {
   }
 
   Map<String, double> _calculateMatrix(List<Task> tasks) {
-    final totalMinutes = tasks.fold<int>(0, (sum, task) => sum + task.estimatedMinutes);
+    final visibleTasks = tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
+    final totalMinutes = visibleTasks.fold<int>(0, (sum, task) => sum + taskRecordedMinutesForDay(task));
     if (totalMinutes == 0) {
       return {'uu': 0, 'ui': 0, 'nu': 0, 'ni': 0, 'totalHours': 0};
     }
 
     int uu = 0, ui = 0, nu = 0, ni = 0;
-    for (final task in tasks) {
+    for (final task in visibleTasks) {
+      final minutes = taskRecordedMinutesForDay(task);
+      if (minutes == 0) continue;
       if (task.urgent && task.important) {
-        ui += task.estimatedMinutes;
+        ui += minutes;
       } else if (task.urgent && !task.important) {
-        uu += task.estimatedMinutes;
+        uu += minutes;
       } else if (!task.urgent && task.important) {
-        ni += task.estimatedMinutes;
+        ni += minutes;
       } else {
-        nu += task.estimatedMinutes;
+        nu += minutes;
       }
     }
 
@@ -329,7 +333,7 @@ class _DayViewState extends State<DayView> {
                           dense: true,
                           onTap: () => _editTask(task),
                           title: Text(task.task),
-                          subtitle: Text('${task.priority} • ${task.status} • ${task.estimatedMinutes} min'),
+                          subtitle: Text('${task.priority} • ${task.status} • ${taskPlannedMinutes(task)} min'),
                         );
                       },
                     ),

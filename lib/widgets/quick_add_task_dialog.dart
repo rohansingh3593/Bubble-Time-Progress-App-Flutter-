@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
+import '../utils/task_time_utils.dart';
 
 const List<String> _priorityOptions = [
   'Low',
@@ -59,6 +60,7 @@ Future<Task?> showTaskFormDialog(
   bool selectedImportant = initialTask?.important ?? false;
   bool routineEnabled = initialTask?.routineEnabled ?? true;
   int selectedColorValue = initialTask?.colorValue ?? _taskColorOptions['Blue']!;
+  int selectedRoutineMinutes = normalizeTaskDuration(initialTask?.estimatedMinutes);
   final projectPhases = _ProjectPhaseDraft.parseFromDescription(initialTask?.description ?? '');
   void syncStatusForTaskType() {
     if (repeatTask) {
@@ -148,6 +150,15 @@ Future<Task?> showTaskFormDialog(
                               onSelected: (_) => setDialogState(() => selectedColorValue = entry.value),
                             );
                           }).toList(),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int>(
+                          value: selectedRoutineMinutes,
+                          decoration: InputDecoration(labelText: 'Routine Time', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                          items: taskDurationOptions.map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
+                          onChanged: (value) {
+                            if (value != null) setDialogState(() => selectedRoutineMinutes = value);
+                          },
                         ),
                       ],
                     ),
@@ -258,6 +269,15 @@ Future<Task?> showTaskFormDialog(
                                 items: _projectPhaseStatusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
                                 onChanged: (value) {
                                   if (value != null) setDialogState(() => phase.status = value);
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<int>(
+                                value: phase.durationMinutes,
+                                decoration: InputDecoration(labelText: 'Phase Time', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                                items: taskDurationOptions.map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
+                                onChanged: (value) {
+                                  if (value != null) setDialogState(() => phase.durationMinutes = value);
                                 },
                               ),
                             ]),
@@ -414,7 +434,7 @@ Future<Task?> showTaskFormDialog(
                   repeatFrequency: repeatTask ? repeatFrequency : null,
                   urgent: selectedUrgent,
                   important: selectedImportant,
-                  estimatedMinutes: 0,
+                  estimatedMinutes: repeatTask ? selectedRoutineMinutes : _ProjectPhaseDraft.totalMinutes(projectPhases),
                   hourSlot: repeatTask && repeatFrequency == 'Daily' ? null : hourSlot,
                   colorValue: selectedColorValue,
                   routineEnabled: repeatTask ? routineEnabled : true,
@@ -460,11 +480,13 @@ Future<bool> showQuickAddTaskDialog(
 
 class _ProjectPhaseDraft {
   String status;
+  int durationMinutes;
   final TextEditingController nameController;
   final TextEditingController descriptionController;
 
   _ProjectPhaseDraft({
     required this.status,
+    required this.durationMinutes,
     required this.nameController,
     required this.descriptionController,
   });
@@ -476,16 +498,15 @@ class _ProjectPhaseDraft {
 
   factory _ProjectPhaseDraft.empty() => _ProjectPhaseDraft(
         status: 'Not Started',
+        durationMinutes: defaultTaskDurationMinutes,
         nameController: TextEditingController(),
         descriptionController: TextEditingController(),
       );
 
-  static const _marker = '---PHASES---';
-
   static List<_ProjectPhaseDraft> parseFromDescription(String description) {
-    final markerIndex = description.indexOf(_marker);
+    final markerIndex = description.indexOf(taskPhaseMarker);
     if (markerIndex == -1) return [_ProjectPhaseDraft.empty()];
-    final phaseChunk = description.substring(markerIndex + _marker.length).trim();
+    final phaseChunk = description.substring(markerIndex + taskPhaseMarker.length).trim();
     final lines = phaseChunk.split('\n').where((line) => line.trim().isNotEmpty);
     final phases = <_ProjectPhaseDraft>[];
     for (final line in lines) {
@@ -494,6 +515,7 @@ class _ProjectPhaseDraft {
       phases.add(
         _ProjectPhaseDraft(
           status: parts[2].trim().isEmpty ? 'Not Started' : parts[2].trim(),
+          durationMinutes: _parseDuration(parts.length > 3 ? parts[3] : null),
           nameController: TextEditingController(text: parts[0].trim()),
           descriptionController: TextEditingController(text: parts[1].trim()),
         ),
@@ -503,12 +525,29 @@ class _ProjectPhaseDraft {
   }
 
   static String mergeIntoDescription(String baseDescription, List<_ProjectPhaseDraft> phases) {
-    final cleanBase = baseDescription.split(_marker).first.trim();
+    final cleanBase = baseDescription.split(taskPhaseMarker).first.trim();
     final serializedPhases = phases
         .where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty)
-        .map((phase) => '${phase.nameController.text.trim()} | ${phase.descriptionController.text.trim()} | ${phase.status}')
+        .map((phase) => serializeTaskPhase(
+              name: phase.nameController.text,
+              description: phase.descriptionController.text,
+              status: phase.status,
+              minutes: phase.durationMinutes,
+            ))
         .join('\n');
     if (serializedPhases.isEmpty) return cleanBase;
-    return '$cleanBase\n\n$_marker\n$serializedPhases'.trim();
+    return '$cleanBase\n\n$taskPhaseMarker\n$serializedPhases'.trim();
   }
+
+  static int totalMinutes(List<_ProjectPhaseDraft> phases) {
+    final activePhases = phases.where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty).toList();
+    final source = activePhases.isEmpty ? phases : activePhases;
+    return source.fold<int>(0, (sum, phase) => sum + normalizeTaskDuration(phase.durationMinutes));
+  }
+
+  static int _parseDuration(String? rawValue) {
+    final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
+    return normalizeTaskDuration(parsed);
+  }
+
 }
