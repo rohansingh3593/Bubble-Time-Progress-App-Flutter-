@@ -304,11 +304,17 @@ Future<Task?> showTaskFormDialog(
                     if (value == null) return;
                     if (value == '__add_category__') {
                       final controller = TextEditingController();
-                      final added = await showDialog<String>(context: context, builder: (context) => AlertDialog(title: const Text('Add Category'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Category name')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save'))]));
-                      if (added != null && added.isNotEmpty) {
-                        await hiveService.addCategory(added);
-                        if (!categories.contains(added)) categories.add(added);
-                        setDialogState(() => selectedCategory = added);
+                      try {
+                        final added = await showDialog<String>(context: context, builder: (context) => AlertDialog(title: const Text('Add Category'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Category name')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save'))]));
+                        if (!context.mounted) return;
+                        if (added != null && added.isNotEmpty) {
+                          await hiveService.addCategory(added);
+                          if (!context.mounted) return;
+                          if (!categories.contains(added)) categories.add(added);
+                          setDialogState(() => selectedCategory = added);
+                        }
+                      } finally {
+                        controller.dispose();
                       }
                     } else {
                       setDialogState(() => selectedCategory = value);
@@ -327,11 +333,17 @@ Future<Task?> showTaskFormDialog(
                         setDialogState(() => selectedDelegate = null);
                       } else if (value == '__add_delegate__') {
                         final controller = TextEditingController();
-                        final added = await showDialog<String>(context: context, builder: (context) => AlertDialog(title: const Text('Add Delegate'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Person name')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save'))]));
-                        if (added != null && added.isNotEmpty) {
-                          await hiveService.addDelegate(added);
-                          if (!delegates.contains(added)) delegates.add(added);
-                          setDialogState(() => selectedDelegate = added);
+                        try {
+                          final added = await showDialog<String>(context: context, builder: (context) => AlertDialog(title: const Text('Add Delegate'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Person name')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save'))]));
+                          if (!context.mounted) return;
+                          if (added != null && added.isNotEmpty) {
+                            await hiveService.addDelegate(added);
+                            if (!context.mounted) return;
+                            if (!delegates.contains(added)) delegates.add(added);
+                            setDialogState(() => selectedDelegate = added);
+                          }
+                        } finally {
+                          controller.dispose();
                         }
                       } else {
                         setDialogState(() => selectedDelegate = value);
@@ -415,8 +427,12 @@ Future<Task?> showTaskFormDialog(
       ),
     );
   } finally {
+    await Future<void>.delayed(const Duration(milliseconds: 350));
     nameController.dispose();
     descriptionController.dispose();
+    for (final phase in projectPhases) {
+      phase.dispose();
+    }
   }
 }
 
@@ -452,6 +468,11 @@ class _ProjectPhaseDraft {
     required this.nameController,
     required this.descriptionController,
   });
+
+  void dispose() {
+    nameController.dispose();
+    descriptionController.dispose();
+  }
 
   factory _ProjectPhaseDraft.empty() => _ProjectPhaseDraft(
         status: 'Not Started',
