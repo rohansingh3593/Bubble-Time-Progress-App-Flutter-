@@ -322,6 +322,111 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }
   }
 
+  Map<String, int> _buildSummary(List<Task> tasks, DateTime todayStart) {
+    final total = tasks.length;
+    final completed = tasks.where(_isCompletedTask).length;
+    final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
+    final overdue = tasks
+        .where((task) => _dateOnly(task.dueDate).isBefore(todayStart) && _isPendingTask(task))
+        .length;
+
+    return {
+      'TOTAL TASKS': total,
+      "TODAY'S TASKS": todayTasks,
+      'OVERDUE TASK': overdue,
+      'COMPLETED': completed,
+    };
+  }
+
+  Map<String, int> _buildScopedTaskCounts(List<Task> tasks, DateTime todayStart) {
+    final monthlyTasks = tasks
+        .where((t) => t.dueDate.year == todayStart.year && t.dueDate.month == todayStart.month)
+        .length;
+    final yearlyTasks = tasks.where((t) => t.dueDate.year == todayStart.year).length;
+    final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
+
+    return {
+      'YEAR TASKS': yearlyTasks,
+      'MONTH TASKS': monthlyTasks,
+      'TODAY TASKS': todayTasks,
+    };
+  }
+
+  _TodayProductivityStats _buildTodayProductivityStats(List<Task> tasks) {
+    final activeTasks = tasks.where((task) => !_isCancelledTask(task)).toList();
+    final completed = activeTasks.where(_isCompletedTask).length;
+    final overdue = activeTasks.where((task) {
+      final status = task.status.trim().toLowerCase();
+      return !_isCompletedTask(task) && (status == 'overdue' || status == 'missed');
+    }).length;
+    final pending = activeTasks.length - completed - overdue;
+    return _TodayProductivityStats(
+      total: activeTasks.length,
+      completed: completed,
+      pending: pending < 0 ? 0 : pending,
+      overdue: overdue,
+    );
+  }
+
+  Map<String, int> _buildYearProgress(DateTime todayStart) {
+    final yearStart = DateTime(todayStart.year, 1, 1);
+    final nextYear = DateTime(todayStart.year + 1, 1, 1);
+    final totalDaysInYear = nextYear.difference(yearStart).inDays;
+    final daysPassed = todayStart.difference(yearStart).inDays + 1;
+    final remaining = totalDaysInYear - daysPassed;
+
+    return {
+      'totalDays': totalDaysInYear,
+      'daysPassed': daysPassed,
+      'daysRemaining': remaining,
+      'progressPercent': ((daysPassed / totalDaysInYear) * 100).round(),
+    };
+  }
+
+  Map<String, Map<String, int>> _buildTimeProgress(DateTime now) {
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final yearStart = DateTime(now.year, 1, 1);
+    final nextYear = DateTime(now.year + 1, 1, 1);
+    final totalYearDays = nextYear.difference(yearStart).inDays;
+    final passedYearDays = todayStart.difference(yearStart).inDays + 1;
+
+    final monthStart = DateTime(now.year, now.month, 1);
+    final nextMonth = now.month == 12
+        ? DateTime(now.year + 1, 1, 1)
+        : DateTime(now.year, now.month + 1, 1);
+    final totalMonthDays = nextMonth.difference(monthStart).inDays;
+    final passedMonthDays = now.day;
+
+    final weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
+    final nextWeek = weekStart.add(const Duration(days: 7));
+    final totalWeekDays = nextWeek.difference(weekStart).inDays;
+    final passedWeekDays = now.weekday;
+
+    const totalDayHours = 24;
+    final passedDayHours = now.hour + 1;
+
+    Map<String, int> asProgress({
+      required int passed,
+      required int total,
+    }) {
+      final remaining = total - passed;
+      final progressPercent = ((passed / total) * 100).round();
+      return {
+        'passed': passed,
+        'total': total,
+        'remaining': remaining,
+        'percent': progressPercent,
+      };
+    }
+
+    return {
+      'Year': asProgress(passed: passedYearDays, total: totalYearDays),
+      'Month': asProgress(passed: passedMonthDays, total: totalMonthDays),
+      'Week': asProgress(passed: passedWeekDays, total: totalWeekDays),
+      'Day': asProgress(passed: passedDayHours, total: totalDayHours),
+    };
+  }
+
   List<Task> _buildPendingTodayTasks(List<Task> tasks, DateTime todayStart) {
     final indexedTasks = tasks.asMap().entries.where((entry) {
       final task = entry.value;
