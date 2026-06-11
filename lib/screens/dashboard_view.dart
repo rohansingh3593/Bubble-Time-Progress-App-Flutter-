@@ -937,7 +937,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   child: _themeSelectorChip(
                     selected: isSelected,
                     label: theme.label,
-                    leading: Icon(_themeIcon(theme), size: 17, color: isSelected ? style.primary : style.textMuted),
+                    leading: Icon(_themeIcon(theme), size: 17, color: _selectorTextColor(isSelected, style)),
                     style: style,
                     onTap: () => widget.hiveService.setDashboardTheme(theme),
                   ),
@@ -980,6 +980,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     required DashboardThemeStyle style,
     required VoidCallback onTap,
   }) {
+    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
+    final foreground = _readableOn(chipColor);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -990,22 +992,23 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           constraints: const BoxConstraints(minHeight: 40),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
-            color: selected ? style.primary.withOpacity(style.dark ? 0.30 : 0.18) : style.elevatedSurface,
+            color: chipColor,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: selected ? style.primary : style.primary.withOpacity(0.16), width: selected ? 1.4 : 1),
+            border: Border.all(color: selected ? foreground.withOpacity(0.72) : style.primary.withOpacity(0.22), width: selected ? 1.4 : 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              leading,
+              IconTheme(data: IconThemeData(color: foreground), child: leading),
               const SizedBox(width: 7),
               Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: selected ? style.primary : style.textMuted,
-                  fontWeight: FontWeight.w800,
+                  color: foreground,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: style.type == DashboardThemeType.minimal ? 0.4 : 0,
                 ),
               ),
             ],
@@ -1013,6 +1016,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         ),
       ),
     );
+  }
+
+  Color _selectorTextColor(bool selected, DashboardThemeStyle style) {
+    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
+    return _readableOn(chipColor);
+  }
+
+  Color _readableOn(Color color) {
+    return color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF17211D);
   }
 
   Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {

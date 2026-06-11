@@ -29,6 +29,44 @@ class MyApp extends StatelessWidget {
 
   const MyApp({super.key, required this.hiveService});
 
+  TextTheme _textThemeFor(DashboardThemeStyle style) {
+    final base = ThemeData(brightness: style.dark ? Brightness.dark : Brightness.light).textTheme;
+    final isGamified = style.type == DashboardThemeType.gamified;
+    final isMinimal = style.type == DashboardThemeType.minimal;
+    final isCalm = style.type == DashboardThemeType.calm;
+    return base.apply(
+      bodyColor: style.textPrimary,
+      displayColor: style.textPrimary,
+      fontFamily: isMinimal ? 'monospace' : null,
+    ).copyWith(
+      headlineSmall: base.headlineSmall?.copyWith(
+        color: style.textPrimary,
+        fontWeight: isGamified ? FontWeight.w900 : FontWeight.w800,
+        letterSpacing: isGamified ? 0.8 : isMinimal ? 1.2 : 0,
+      ),
+      titleLarge: base.titleLarge?.copyWith(
+        color: style.textPrimary,
+        fontWeight: FontWeight.w900,
+        letterSpacing: isCalm ? 0.4 : isMinimal ? 1.0 : 0,
+      ),
+      titleMedium: base.titleMedium?.copyWith(
+        color: style.textPrimary,
+        fontWeight: isGamified ? FontWeight.w900 : FontWeight.w700,
+        letterSpacing: isMinimal ? 0.8 : 0,
+      ),
+      bodyMedium: base.bodyMedium?.copyWith(
+        color: style.textPrimary,
+        fontWeight: isGamified ? FontWeight.w600 : FontWeight.normal,
+      ),
+      bodySmall: base.bodySmall?.copyWith(color: style.textMuted),
+      labelLarge: base.labelLarge?.copyWith(
+        color: style.textPrimary,
+        fontWeight: FontWeight.w800,
+        letterSpacing: isMinimal ? 0.7 : 0,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
@@ -50,6 +88,8 @@ class MyApp extends StatelessWidget {
               brightness: dashboardStyle.dark ? Brightness.dark : Brightness.light,
             ),
             scaffoldBackgroundColor: dashboardStyle.background,
+            textTheme: _textThemeFor(dashboardStyle),
+            primaryTextTheme: _textThemeFor(dashboardStyle).apply(bodyColor: Colors.white, displayColor: Colors.white),
             appBarTheme: AppBarTheme(
               backgroundColor: dashboardStyle.primary,
               foregroundColor: Colors.white,
