@@ -312,6 +312,8 @@ class _YearViewState extends State<YearView> {
               return ListView(
                 padding: const EdgeInsets.all(16.0),
                 children: [
+                  _yearlyTasksPanel(yearlyTasks),
+                  const SizedBox(height: 16),
                   ProductivityPeriodSummaryCard(stats: yearlyStats),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -338,8 +340,6 @@ class _YearViewState extends State<YearView> {
                       },
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _yearlyTasksPanel(yearlyTasks),
                 ],
               );
             },

@@ -296,6 +296,8 @@ class _MonthViewState extends State<MonthView> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              _monthlyTasksPanel(monthlyTasks),
+              const SizedBox(height: 16),
               ProductivityPeriodSummaryCard(stats: monthlyStats),
               const SizedBox(height: 16),
               Row(
@@ -338,8 +340,6 @@ class _MonthViewState extends State<MonthView> {
                   );
                 },
               ),
-              const SizedBox(height: 16),
-              _monthlyTasksPanel(monthlyTasks),
             ],
           );
         },
