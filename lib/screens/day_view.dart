@@ -306,17 +306,21 @@ class _DayViewState extends State<DayView> {
       final points = matrix['${key}Points'] ?? 0;
       return Container(
         alignment: Alignment.center,
-        padding: const EdgeInsets.all(6),
+        padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(border: Border.all(color: Colors.black54), color: color.withOpacity(0.08)),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(label, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-            const SizedBox(height: 4),
-            Text(_formatHours(hours), style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text('${percentage.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12)),
-            Text('${points.round()} pts', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-          ],
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(label, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+              const SizedBox(height: 3),
+              Text(_formatHours(hours), style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('${percentage.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12)),
+              Text('${points.round()} pts', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+            ],
+          ),
         ),
       );
     }
@@ -351,7 +355,7 @@ class _DayViewState extends State<DayView> {
           const Text('Daily Productivity Matrix (by completed time, % and points)'),
           const SizedBox(height: 6),
           SizedBox(
-            height: 190,
+            height: 240,
             child: Row(
               children: [
                 const RotatedBox(quarterTurns: 3, child: Text('Urgent')),
