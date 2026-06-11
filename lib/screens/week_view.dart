@@ -564,12 +564,16 @@ class _WeekViewState extends State<WeekView> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          BubbleWidget(
-                            color: _getBubbleColor(date, summary, todayStart),
-                            isHighlighted: isToday,
-                            onTap: () => _openQuickAddForDate(date),
+                          SizedBox(
+                            width: 68,
+                            height: 68,
+                            child: BubbleWidget(
+                              color: _getBubbleColor(date, summary, todayStart),
+                              isHighlighted: isToday,
+                              onTap: () => _openQuickAddForDate(date),
+                            ),
                           ),
-                          const SizedBox(height: 8.0),
+                          const SizedBox(height: 6.0),
                           Text(
                             _getDayLabels()[index],
                             style: const TextStyle(fontSize: 12.0),
