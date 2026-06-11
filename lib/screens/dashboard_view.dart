@@ -934,18 +934,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 final isSelected = theme == selectedTheme;
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
+                  child: _themeSelectorChip(
                     selected: isSelected,
-                    label: Text(theme.label),
-                    avatar: Icon(_themeIcon(theme), size: 18),
-                    selectedColor: style.primary.withOpacity(style.dark ? 0.30 : 0.18),
-                    backgroundColor: style.elevatedSurface,
-                    labelStyle: TextStyle(
-                      color: isSelected ? style.primary : style.textMuted,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    side: BorderSide(color: isSelected ? style.primary : style.primary.withOpacity(0.16)),
-                    onSelected: (_) => widget.hiveService.setDashboardTheme(theme),
+                    label: theme.label,
+                    leading: Icon(_themeIcon(theme), size: 17, color: isSelected ? style.primary : style.textMuted),
+                    style: style,
+                    onTap: () => widget.hiveService.setDashboardTheme(theme),
                   ),
                 );
               }).toList(),
@@ -961,18 +955,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 final isSelected = palette == selectedPalette;
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
+                  child: _themeSelectorChip(
                     selected: isSelected,
-                    label: Text(palette.label),
-                    avatar: _paletteDots(palette, compact: true),
-                    selectedColor: style.primary.withOpacity(style.dark ? 0.30 : 0.18),
-                    backgroundColor: style.elevatedSurface,
-                    labelStyle: TextStyle(
-                      color: isSelected ? style.primary : style.textMuted,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    side: BorderSide(color: isSelected ? style.primary : style.primary.withOpacity(0.16)),
-                    onSelected: (_) => widget.hiveService.setDashboardPalette(palette),
+                    label: palette.label,
+                    leading: _paletteDots(palette, compact: true),
+                    style: style,
+                    onTap: () => widget.hiveService.setDashboardPalette(palette),
                   ),
                 );
               }).toList(),
@@ -981,6 +969,48 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           const SizedBox(height: 8),
           Text('${selectedTheme.description} • ${selectedPalette.label} palette is applied app-wide.', style: TextStyle(color: style.textMuted, fontSize: 12)),
         ],
+      ),
+    );
+  }
+
+  Widget _themeSelectorChip({
+    required bool selected,
+    required String label,
+    required Widget leading,
+    required DashboardThemeStyle style,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          constraints: const BoxConstraints(minHeight: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected ? style.primary.withOpacity(style.dark ? 0.30 : 0.18) : style.elevatedSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: selected ? style.primary : style.primary.withOpacity(0.16), width: selected ? 1.4 : 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              leading,
+              const SizedBox(width: 7),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? style.primary : style.textMuted,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
