@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'journal_entry.dart';
+import 'productivity_snapshot.dart';
 import 'task_model.dart';
 
 class RankProfile {
@@ -57,6 +58,7 @@ class RankProfile {
     required String username,
     required Map<DateTime, List<Task>> allTasksByDate,
     List<JournalEntry> journalEntries = const <JournalEntry>[],
+    LifetimeProductivityStats? lifetimeStats,
     DateTime? now,
   }) {
     final todayValue = now ?? DateTime.now();
@@ -107,8 +109,9 @@ class RankProfile {
     final streakScore = activeStreak * 14 + longestStreak * 6;
     final taskScore = completedTasks * 10 + importantCompleted * 8 + recurringCompleted * 6;
     final journalScore = journalCount * 8 + reflectiveDays * 4;
-    final productivityScore = (completionRate * 100).round();
-    final xp = taskScore + consistencyScore + streakScore + journalScore + productivityScore;
+    final productivityScore = lifetimeStats == null ? (completionRate * 100).round() : lifetimeStats.averageDailyScore.round();
+    final lifetimeXp = lifetimeStats?.xp ?? 0;
+    final xp = taskScore + consistencyScore + streakScore + journalScore + productivityScore + lifetimeXp;
     final level = math.max(1, (xp ~/ 120) + 1);
     final currentRank = RankTier.forLevel(level);
     final nextRank = RankTier.nextAfter(currentRank);

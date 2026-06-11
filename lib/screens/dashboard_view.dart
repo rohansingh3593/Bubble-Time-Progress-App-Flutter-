@@ -11,6 +11,7 @@ import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import 'journal_view.dart';
 import 'journey_timeline_view.dart';
+import 'productivity_timeline_view.dart';
 
 class DashboardView extends StatefulWidget {
   final HiveService hiveService;
@@ -95,10 +96,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final allTasks = allByDate.values.expand((list) => list).toList();
           final dashboardTasks = _dedupeTasksForDashboard(allTasks);
           final nonRoutineDashboardTasks = dashboardTasks.where(_isNonRoutineTask).toList();
+          final lifetimeStats = widget.hiveService.getLifetimeProductivityStats();
           final rankProfile = RankProfile.calculate(
             username: widget.hiveService.getUsername(),
             allTasksByDate: allByDate,
             journalEntries: widget.hiveService.getAllJournalEntries(),
+            lifetimeStats: lifetimeStats,
           );
 
           final yearProgress = _buildYearProgress(todayStart);
@@ -247,6 +250,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => JourneyTimelineView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+  void _openProductivityTimeline() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProductivityTimelineView(hiveService: widget.hiveService),
       ),
     );
   }
@@ -1050,15 +1061,31 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             const SizedBox(height: 8),
                             Text('$completed / $total completed', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 10),
-                            OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                side: const BorderSide(color: Colors.white70),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                              ),
-                              onPressed: _openJourneyTimeline,
-                              icon: const Icon(Icons.menu_book_rounded, size: 16),
-                              label: const Text('Open Journey Timeline'),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: const BorderSide(color: Colors.white70),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                  ),
+                                  onPressed: _openJourneyTimeline,
+                                  icon: const Icon(Icons.menu_book_rounded, size: 16),
+                                  label: const Text('Open Journey Timeline'),
+                                ),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: const BorderSide(color: Colors.white70),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                  ),
+                                  onPressed: _openProductivityTimeline,
+                                  icon: const Icon(Icons.show_chart_rounded, size: 16),
+                                  label: const Text('Open Productivity Timeline'),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 10),
                             GestureDetector(

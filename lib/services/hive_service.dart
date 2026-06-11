@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
+import '../models/productivity_snapshot.dart';
 import '../models/task_model.dart';
 import '../constants/dashboard_themes.dart';
+import '../utils/task_time_utils.dart';
 
 class HiveService {
   HiveService._privateConstructor();
@@ -15,6 +17,7 @@ class HiveService {
   static const _usernameKey = '__meta_username__';
   static const _journalPrefix = '__journal__';
   static const _journeyPrefix = '__journey__';
+  static const _productivityPrefix = '__productivity_snapshot__';
   static const _schemaVersionKey = '__meta_schema_version__';
   static const _dashboardThemeKey = '__meta_dashboard_theme__';
   static const int _currentSchemaVersion = 1;
@@ -37,6 +40,7 @@ class HiveService {
     await _runMigrationsIfNeeded();
     await _normalizeTaskNamesOnStartup();
     await _dedupeRecurringTasksOnStartup();
+    await refreshProductivitySnapshotsFromTasks();
   }
 
 
@@ -303,12 +307,14 @@ class HiveService {
     final normalizedTask = _withNormalizedTaskName(task);
     tasks.add(normalizedTask);
     await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+    await recalculateProductivitySnapshotForDate(date);
   }
 
   Future<void> updateTask(DateTime date, int index, Task task) async {
     final normalizedTask = _withNormalizedTaskName(task);
     if (normalizedTask.repeatTask) {
       await _updateRecurringTaskForCurrentOccurrence(normalizedTask);
+      await recalculateProductivitySnapshotForDate(DateTime.now());
       return;
     }
 
@@ -318,6 +324,7 @@ class HiveService {
 
     tasks[index] = normalizedTask;
     await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+    await recalculateProductivitySnapshotForDate(date);
 
     await _handleRecurringIfNeeded(updated: normalizedTask);
   }
@@ -328,6 +335,7 @@ class HiveService {
     if (index < 0 || index >= tasks.length) return;
     tasks.removeAt(index);
     await _box.put(key, tasks);
+    await recalculateProductivitySnapshotForDate(date);
   }
 
   Future<void> toggleTaskStatus(DateTime date, int index) async {
@@ -344,6 +352,7 @@ class HiveService {
 
     tasks[index] = updatedTask;
     await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+    await recalculateProductivitySnapshotForDate(date);
 
     await _handleRecurringIfNeeded(updated: updatedTask);
   }
@@ -445,6 +454,7 @@ class HiveService {
     }
 
     await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+    await recalculateProductivitySnapshotForDate(occurrenceDate);
     await _handleRecurringIfNeeded(updated: normalizedUpdated);
     return true;
   }
@@ -467,6 +477,8 @@ class HiveService {
         if (identical(candidate, original) || _matchesTaskIdentity(candidate, original)) {
           tasks[i] = normalizedUpdated;
           await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+          final changedDate = DateTime.parse(key);
+          await recalculateProductivitySnapshotForDate(changedDate);
           await _handleRecurringIfNeeded(updated: normalizedUpdated);
           return true;
         }
@@ -490,6 +502,8 @@ class HiveService {
         if (identical(candidate, original) || _matchesTaskIdentity(candidate, original)) {
           tasks.removeAt(i);
           await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+          final changedDate = DateTime.parse(key);
+          await recalculateProductivitySnapshotForDate(changedDate);
           return true;
         }
       }
@@ -503,6 +517,7 @@ class HiveService {
 
     final normalizedUpdated = _withNormalizedTaskName(updated.copyWith(repeatTask: true));
     var changed = false;
+    final changedDates = <DateTime>[];
 
     for (final key in _box.keys) {
       if (key is! String || DateTime.tryParse(key) == null) continue;
@@ -529,7 +544,12 @@ class HiveService {
 
       if (listChanged) {
         await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+        changedDates.add(DateTime.parse(key));
       }
+    }
+
+    for (final changedDate in changedDates) {
+      await recalculateProductivitySnapshotForDate(changedDate);
     }
 
     if (changed && normalizedUpdated.routineEnabled) {
@@ -543,6 +563,7 @@ class HiveService {
     if (!original.repeatTask) return false;
 
     var changed = false;
+    final changedDates = <DateTime>[];
     for (final key in _box.keys) {
       if (key is! String || DateTime.tryParse(key) == null) continue;
 
@@ -562,7 +583,12 @@ class HiveService {
 
       if (listChanged) {
         await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+        changedDates.add(DateTime.parse(key));
       }
+    }
+
+    for (final changedDate in changedDates) {
+      await recalculateProductivitySnapshotForDate(changedDate);
     }
 
     if (enabled && changed) {
@@ -594,6 +620,7 @@ class HiveService {
     }
 
     await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+    await recalculateProductivitySnapshotForDate(occurrenceDate);
   }
 
   bool _matchesTaskIdentity(Task a, Task b) {
@@ -621,6 +648,113 @@ class HiveService {
         a.category.trim().toLowerCase() == b.category.trim().toLowerCase() &&
         _normalizedRepeatFrequency(a.repeatFrequency) == _normalizedRepeatFrequency(b.repeatFrequency) &&
         _isSameDate(a.dueDate, b.dueDate);
+  }
+
+
+  String _productivityKey(DateTime date) {
+    return '$_productivityPrefix${_formatKey(date)}';
+  }
+
+  ProductivitySnapshot getProductivitySnapshotForDate(DateTime date) {
+    final raw = _box.get(_productivityKey(date));
+    if (raw == null) return calculateProductivitySnapshotForDate(date);
+    return ProductivitySnapshot.fromStorageList(raw.cast<dynamic>());
+  }
+
+  List<ProductivitySnapshot> getProductivitySnapshots() {
+    final snapshots = <ProductivitySnapshot>[];
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(_productivityPrefix)) continue;
+      final raw = _box.get(key);
+      if (raw == null) continue;
+      snapshots.add(ProductivitySnapshot.fromStorageList(raw.cast<dynamic>()));
+    }
+    snapshots.sort((a, b) => a.date.compareTo(b.date));
+    return snapshots;
+  }
+
+  LifetimeProductivityStats getLifetimeProductivityStats() {
+    return LifetimeProductivityStats.fromSnapshots(getProductivitySnapshots());
+  }
+
+  Future<void> refreshProductivitySnapshotsFromTasks() async {
+    for (final date in getAllTasksByDate().keys) {
+      await recalculateProductivitySnapshotForDate(date);
+    }
+  }
+
+  Future<ProductivitySnapshot> recalculateProductivitySnapshotForDate(DateTime date) async {
+    final snapshot = calculateProductivitySnapshotForDate(date);
+    await _box.put(_productivityKey(date), snapshot.toStorageList());
+    return snapshot;
+  }
+
+  ProductivitySnapshot calculateProductivitySnapshotForDate(DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    final tasks = getTasksForDate(day);
+    var bothMinutes = 0;
+    var importantMinutes = 0;
+    var urgentMinutes = 0;
+    var neitherMinutes = 0;
+    var completedTasks = 0;
+    var routineCompletions = 0;
+    var projectPhasesCompleted = 0;
+    final completedTaskNames = <String>[];
+
+    for (final task in tasks) {
+      final recordedMinutes = taskRecordedMinutesForDay(task);
+      if (recordedMinutes <= 0) continue;
+
+      if (task.urgent && task.important) {
+        bothMinutes += recordedMinutes;
+      } else if (task.important) {
+        importantMinutes += recordedMinutes;
+      } else if (task.urgent) {
+        urgentMinutes += recordedMinutes;
+      } else {
+        neitherMinutes += recordedMinutes;
+      }
+
+      if (_isCompletedTask(task)) {
+        completedTasks++;
+        completedTaskNames.add(task.task);
+        if (task.repeatTask) routineCompletions++;
+      }
+
+      final phases = parseTaskPhases(task.description);
+      projectPhasesCompleted += phases.where((phase) => phase.isCompleted).length;
+      if (!_isCompletedTask(task) && phases.any((phase) => phase.isCompleted)) {
+        completedTaskNames.add('${task.task} (${phases.where((phase) => phase.isCompleted).length} phases)');
+      }
+    }
+
+    final bothHours = bothMinutes / 60.0;
+    final importantHours = importantMinutes / 60.0;
+    final urgentHours = urgentMinutes / 60.0;
+    final neitherHours = neitherMinutes / 60.0;
+    final totalHours = bothHours + importantHours + urgentHours + neitherHours;
+    final totalPoints = (bothHours * 100 + importantHours * 80 + urgentHours * 50 + neitherHours * 10).round();
+    final score = (totalPoints / ProductivitySnapshot.maximumPoints * 100).clamp(0.0, 100.0).toDouble();
+
+    return ProductivitySnapshot(
+      date: day,
+      bothHours: bothHours,
+      importantHours: importantHours,
+      urgentHours: urgentHours,
+      neitherHours: neitherHours,
+      totalHours: totalHours,
+      totalPoints: totalPoints,
+      productivityScore: score,
+      rating: ProductivitySnapshot.ratingForScore(score),
+      completedTasks: completedTasks,
+      routineCompletions: routineCompletions,
+      projectPhasesCompleted: projectPhasesCompleted,
+      completedTaskNames: completedTaskNames,
+    );
+  }
+
+  bool _isCompletedTask(Task task) {
+    return task.done || task.status.trim().toLowerCase() == 'completed';
   }
 
   Map<String, int> getTaskSummaryForDate(DateTime date) {
