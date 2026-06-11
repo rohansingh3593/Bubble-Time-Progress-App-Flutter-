@@ -20,6 +20,7 @@ class JourneyEntry {
   });
 
   bool get hasImage => imageUrl != null && imageUrl!.trim().isNotEmpty;
+  bool get isAutoDailySummary => id.startsWith('auto_journey_') || type == 'Daily auto update';
 
   List<dynamic> toStorageList() {
     return [

@@ -18,6 +18,7 @@ class HiveService {
   static const _journalPrefix = '__journal__';
   static const _journeyPrefix = '__journey__';
   static const _productivityPrefix = '__productivity_snapshot__';
+  static const _autoJourneyPrefix = 'auto_journey_';
   static const _schemaVersionKey = '__meta_schema_version__';
   static const _dashboardThemeKey = '__meta_dashboard_theme__';
   static const int _currentSchemaVersion = 1;
@@ -226,10 +227,12 @@ class HiveService {
 
   Future<void> saveJournalEntry(JournalEntry entry) async {
     await _box.put(_journalKey(entry.date), entry.toStorageList());
+    await _syncAutoJourneyForDate(entry.date);
   }
 
   Future<void> deleteJournalEntry(DateTime date) async {
     await _box.delete(_journalKey(date));
+    await _syncAutoJourneyForDate(date);
   }
 
   List<JournalEntry> getAllJournalEntries() {
@@ -255,10 +258,19 @@ class HiveService {
 
   Future<void> saveJourneyEntry(JourneyEntry entry) async {
     await _box.put(_journeyKey(entry.id), entry.toStorageList());
+    if (!entry.isAutoDailySummary) {
+      await _syncAutoJourneyForDate(entry.date);
+    }
   }
 
   Future<void> deleteJourneyEntry(String id) async {
-    await _box.delete(_journeyKey(id));
+    final key = _journeyKey(id);
+    final raw = _box.get(key);
+    final entry = raw == null ? null : JourneyEntry.fromStorageList(raw.cast<dynamic>(), DateTime.now());
+    await _box.delete(key);
+    if (entry != null && !entry.isAutoDailySummary) {
+      await _syncAutoJourneyForDate(entry.date);
+    }
   }
 
   List<JourneyEntry> getAllJourneyEntries() {
@@ -686,6 +698,7 @@ class HiveService {
   Future<ProductivitySnapshot> recalculateProductivitySnapshotForDate(DateTime date) async {
     final snapshot = calculateProductivitySnapshotForDate(date);
     await _box.put(_productivityKey(date), snapshot.toStorageList());
+    await _syncAutoJourneyForDate(date);
     return snapshot;
   }
 
@@ -755,6 +768,99 @@ class HiveService {
 
   bool _isCompletedTask(Task task) {
     return task.done || task.status.trim().toLowerCase() == 'completed';
+  }
+
+
+  String _autoJourneyId(DateTime date) {
+    return '$_autoJourneyPrefix${_formatKey(date)}';
+  }
+
+  Future<void> _syncAutoJourneyForDate(DateTime date) async {
+    final day = DateTime(date.year, date.month, date.day);
+    final snapshot = calculateProductivitySnapshotForDate(day);
+    final tasks = getTasksForDate(day);
+    final journal = getJournalEntryForDate(day);
+    final manualEntries = getAllJourneyEntries()
+        .where((entry) => !entry.isAutoDailySummary && _isSameDate(entry.date, day))
+        .toList();
+    final photoCount = manualEntries.where((entry) => entry.hasImage).length;
+    final lifetime = getLifetimeProductivityStats();
+    final lines = <String>['${_isSameDate(day, DateTime.now()) ? 'Today' : 'Day'} • ${_humanDate(day)}'];
+
+    for (final task in tasks) {
+      final status = task.status.trim().toLowerCase();
+      final minutes = taskRecordedMinutesForDay(task);
+      if (_isCompletedTask(task) && minutes > 0) {
+        lines.add('${task.repeatTask ? '✅ Routine' : '✅ Task'} ${task.task} completed • +$minutes min');
+      } else if (task.repeatTask && (status == 'missed' || status == 'overdue' || status == 'cancelled')) {
+        lines.add("❌ ${task.task} ${status == 'cancelled' ? 'cancelled' : status}");
+      }
+
+      for (final phase in parseTaskPhases(task.description).where((phase) => phase.isCompleted)) {
+        lines.add('🧩 ${task.task} phase completed: ${phase.name} • +${phase.minutes} min');
+      }
+    }
+
+    final disabledRoutines = tasks.where((task) => task.repeatTask && !task.routineEnabled).length;
+    final enabledRoutines = tasks.where((task) => task.repeatTask && task.routineEnabled).length;
+    if (disabledRoutines > 0) lines.add('⏸️ $disabledRoutines routine${disabledRoutines == 1 ? '' : 's'} disabled');
+    if (enabledRoutines > 0) lines.add('🔁 $enabledRoutines routine${enabledRoutines == 1 ? '' : 's'} enabled');
+
+    lines.add('📊 Productivity score: ${snapshot.productivityScore.toStringAsFixed(1)}%');
+    lines.add('⭐ Points earned: ${snapshot.totalPoints} / ${ProductivitySnapshot.maximumPoints.round()}');
+    lines.add('🔥 Streak: ${lifetime.currentStreak} day${lifetime.currentStreak == 1 ? '' : 's'}');
+    lines.add('🏅 XP: ${lifetime.xp} • Level ${lifetime.level}');
+
+    if (journal != null) {
+      lines.add('😊 Mood: ${journal.mood}');
+      if (journal.reflection.trim().isNotEmpty) lines.add('📝 Reflection added');
+    }
+    if (photoCount > 0) lines.add('📷 $photoCount photo${photoCount == 1 ? '' : 's'} attached');
+
+    final hasActivity = snapshot.totalPoints > 0 || tasks.isNotEmpty || journal != null || manualEntries.isNotEmpty;
+    final key = _journeyKey(_autoJourneyId(day));
+    if (!hasActivity) {
+      await _box.delete(key);
+      return;
+    }
+
+    final accent = tasks.isNotEmpty
+        ? tasks.first.colorValue
+        : journal != null
+            ? _journalMoodColor(journal.mood)
+            : 0xFF1E88E5;
+
+    final entry = JourneyEntry(
+      id: _autoJourneyId(day),
+      date: day,
+      type: 'Daily auto update',
+      title: _isSameDate(day, DateTime.now()) ? 'Today’s activity' : 'Daily activity',
+      description: lines.join('\n'),
+      colorValue: accent,
+    );
+    await _box.put(key, entry.toStorageList());
+  }
+
+  String _humanDate(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${date.day} ${months[(date.month - 1).clamp(0, 11)]} ${date.year}';
+  }
+
+  int _journalMoodColor(String mood) {
+    switch (mood.toLowerCase()) {
+      case 'focused':
+        return 0xFF26A69A;
+      case 'happy':
+        return 0xFFFFB74D;
+      case 'calm':
+        return 0xFF81C784;
+      case 'stressed':
+        return 0xFFFF8A65;
+      case 'tired':
+        return 0xFF9575CD;
+      default:
+        return 0xFF1E88E5;
+    }
   }
 
   Map<String, int> getTaskSummaryForDate(DateTime date) {

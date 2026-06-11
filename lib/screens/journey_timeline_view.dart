@@ -147,7 +147,11 @@ class _DailyJourney {
     }
 
     final journeys = dates.map((date) {
-      final entries = manualByDate[date] ?? const <JourneyEntry>[];
+      final entries = (manualByDate[date] ?? const <JourneyEntry>[]).toList()
+        ..sort((a, b) {
+          if (a.isAutoDailySummary != b.isAutoDailySummary) return a.isAutoDailySummary ? -1 : 1;
+          return b.date.compareTo(a.date);
+        });
       return _DailyJourney(
         date: date,
         tasks: tasksByDate[date] ?? const <Task>[],
@@ -441,11 +445,12 @@ class _JourneyEntryCard extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Delete entry',
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                onPressed: onDelete,
-              ),
+              if (!entry.isAutoDailySummary)
+                IconButton(
+                  tooltip: 'Delete entry',
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  onPressed: onDelete,
+                ),
             ],
           ),
           if (entry.description.trim().isNotEmpty) ...[
@@ -473,6 +478,8 @@ class _JourneyEntryCard extends StatelessWidget {
         return Icons.emoji_events;
       case 'Routine update':
         return Icons.repeat;
+      case 'Daily auto update':
+        return Icons.auto_graph;
       case 'Milestone':
         return Icons.flag;
       default:
