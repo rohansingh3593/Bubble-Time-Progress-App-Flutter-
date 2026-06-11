@@ -96,9 +96,21 @@ class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
               _detailLine('Important', _formatHours(snapshot.importantHours)),
               _detailLine('Urgent', _formatHours(snapshot.urgentHours)),
               _detailLine('Neither', _formatHours(snapshot.neitherHours)),
+              _detailLine('Base Points', '+${snapshot.basePoints}'),
+              _detailLine('Streak Bonus', '+${snapshot.streakBonusPoints}'),
               _detailLine('Total Points', '${snapshot.totalPoints} / ${ProductivitySnapshot.maximumPoints.round()}'),
               _detailLine('Productivity', '${snapshot.productivityScore.toStringAsFixed(1)}%'),
               _detailLine('Rating', snapshot.rating),
+              const SizedBox(height: 12),
+              const Text('Points history', style: TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              if (snapshot.pointEvents.isEmpty)
+                const Text('No point events recorded for this day.')
+              else
+                ...snapshot.pointEvents.map((event) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text('• ${event.title}: base +${event.basePoints}, bonus +${event.streakBonusPoints}, total +${event.totalPoints}${event.reason.isEmpty ? '' : ' (${event.reason})'}'),
+                    )),
               const SizedBox(height: 12),
               const Text('Completed work', style: TextStyle(fontWeight: FontWeight.w900)),
               const SizedBox(height: 6),
@@ -144,6 +156,16 @@ class _LifetimePerformanceCard extends StatelessWidget {
     final nextAchievement = _nextAchievementForPoints(stats.totalPoints);
     final milestone = nextAchievement?.points ?? currentAchievement.points;
     final progress = milestone == 0 ? 1.0 : (stats.totalPoints / milestone).clamp(0.0, 1.0).toDouble();
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    ProductivitySnapshot? todaySnapshot;
+    for (final snapshot in stats.snapshots) {
+      final snapshotDate = DateTime(snapshot.date.year, snapshot.date.month, snapshot.date.day);
+      if (snapshotDate == todayDate) {
+        todaySnapshot = snapshot;
+        break;
+      }
+    }
 
     return _TimelineSection(
       title: '👤 Lifetime Performance',
@@ -176,6 +198,8 @@ class _LifetimePerformanceCard extends StatelessWidget {
             runSpacing: 10,
             children: [
               _StatTile(label: '💎 Lifetime Points', value: _formatInt(stats.totalPoints)),
+              _StatTile(label: '⭐ Today’s Points', value: '+${_formatInt(todaySnapshot?.totalPoints ?? 0)}'),
+              _StatTile(label: '🔥 Today’s Bonus', value: '+${_formatInt(todaySnapshot?.streakBonusPoints ?? 0)}'),
               _StatTile(label: '⚡ Lifetime XP', value: _formatInt(stats.xp)),
               _StatTile(label: '🔥 Current Streak', value: '${stats.currentStreak} days'),
               _StatTile(label: '🏅 Best Streak', value: '${stats.bestStreak} days'),
@@ -183,6 +207,8 @@ class _LifetimePerformanceCard extends StatelessWidget {
               _StatTile(label: '⏱ Focus Hours', value: _formatHours(stats.totalFocusHours)),
               _StatTile(label: '✅ Tasks Completed', value: _formatInt(stats.totalCompletedTasks)),
               _StatTile(label: '📚 Phases Completed', value: _formatInt(stats.projectPhasesCompleted)),
+              _StatTile(label: '🎁 Total Bonus Earned', value: '+${_formatInt(stats.totalBonusEarned)}'),
+              _StatTile(label: '🏆 Highest Streak Bonus', value: '+${_formatInt(stats.highestStreakBonus)}'),
               _StatTile(label: '📅 Active Days', value: _formatInt(stats.activeDays)),
               _StatTile(label: '🏅 Achievement', value: '${currentAchievement.emoji} ${currentAchievement.name}'),
             ].map((tile) => SizedBox(width: 168, child: tile)).toList(),
@@ -248,6 +274,7 @@ class _PointsTotalsCard extends StatelessWidget {
           _StatTile(label: 'This Week', value: '${_formatInt(_pointsSince(snapshots, weekStart))} pts'),
           _StatTile(label: 'This Month', value: '${_formatInt(_pointsSince(snapshots, monthStart))} pts'),
           _StatTile(label: 'This Year', value: '${_formatInt(_pointsSince(snapshots, yearStart))} pts'),
+          _StatTile(label: 'Streak Bonus', value: '+${_formatInt(stats.totalBonusEarned)} pts'),
           _StatTile(label: 'Lifetime', value: '${_formatInt(stats.totalPoints)} pts'),
         ].map((tile) => SizedBox(width: 168, child: tile)).toList(),
       ),
@@ -472,7 +499,7 @@ class _HistoryList extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: CircleAvatar(backgroundColor: _heatColor(snapshot.productivityScore), child: Text('${snapshot.productivityScore.round()}%', style: const TextStyle(fontSize: 11, color: Colors.white))),
                       title: Text(_formatDate(snapshot.date), style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text('Points: ${_formatInt(snapshot.totalPoints)} • Productivity: ${snapshot.productivityScore.toStringAsFixed(1)}% • ${snapshot.rating}'),
+                      subtitle: Text('Points: ${_formatInt(snapshot.totalPoints)} (bonus +${_formatInt(snapshot.streakBonusPoints)}) • Productivity: ${snapshot.productivityScore.toStringAsFixed(1)}% • ${snapshot.rating}'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => onTapSnapshot(snapshot),
                     )),

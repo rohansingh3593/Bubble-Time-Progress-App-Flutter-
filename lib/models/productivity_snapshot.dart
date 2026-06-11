@@ -1,5 +1,44 @@
 import 'dart:math' as math;
 
+class ProductivityPointEvent {
+  final String title;
+  final int basePoints;
+  final int streakBonusPoints;
+  final int totalPoints;
+  final String reason;
+
+  const ProductivityPointEvent({
+    required this.title,
+    required this.basePoints,
+    required this.streakBonusPoints,
+    required this.totalPoints,
+    required this.reason,
+  });
+
+  List<dynamic> toStorageList() {
+    return [title, basePoints, streakBonusPoints, totalPoints, reason];
+  }
+
+  factory ProductivityPointEvent.fromStorageList(List<dynamic> raw) {
+    final base = _readInt(raw, 1);
+    final bonus = _readInt(raw, 2);
+    return ProductivityPointEvent(
+      title: raw.isNotEmpty ? '${raw[0]}' : 'Productivity points',
+      basePoints: base,
+      streakBonusPoints: bonus,
+      totalPoints: raw.length > 3 ? _readInt(raw, 3) : base + bonus,
+      reason: raw.length > 4 ? '${raw[4]}' : '',
+    );
+  }
+
+  static int _readInt(List<dynamic> raw, int index) {
+    if (raw.length <= index) return 0;
+    final value = raw[index];
+    if (value is num) return value.round();
+    return int.tryParse('$value') ?? 0;
+  }
+}
+
 class ProductivitySnapshot {
   static const double maximumPoints = 1600;
 
@@ -10,12 +49,15 @@ class ProductivitySnapshot {
   final double neitherHours;
   final double totalHours;
   final int totalPoints;
+  final int basePoints;
+  final int streakBonusPoints;
   final double productivityScore;
   final String rating;
   final int completedTasks;
   final int routineCompletions;
   final int projectPhasesCompleted;
   final List<String> completedTaskNames;
+  final List<ProductivityPointEvent> pointEvents;
 
   const ProductivitySnapshot({
     required this.date,
@@ -25,12 +67,15 @@ class ProductivitySnapshot {
     required this.neitherHours,
     required this.totalHours,
     required this.totalPoints,
+    required this.basePoints,
+    required this.streakBonusPoints,
     required this.productivityScore,
     required this.rating,
     required this.completedTasks,
     required this.routineCompletions,
     required this.projectPhasesCompleted,
     required this.completedTaskNames,
+    required this.pointEvents,
   });
 
   int get xpEarned => totalPoints ~/ 10;
@@ -52,6 +97,9 @@ class ProductivitySnapshot {
       routineCompletions,
       projectPhasesCompleted,
       completedTaskNames,
+      basePoints,
+      streakBonusPoints,
+      pointEvents.map((event) => event.toStorageList()).toList(),
     ];
   }
 
@@ -65,12 +113,20 @@ class ProductivitySnapshot {
       neitherHours: _asDouble(raw, 4),
       totalHours: _asDouble(raw, 5),
       totalPoints: _asInt(raw, 6),
+      basePoints: raw.length > 13 ? _asInt(raw, 13) : _asInt(raw, 6),
+      streakBonusPoints: raw.length > 14 ? _asInt(raw, 14) : 0,
       productivityScore: _asDouble(raw, 7),
       rating: raw.length > 8 ? '${raw[8]}' : ratingForScore(_asDouble(raw, 7)),
       completedTasks: _asInt(raw, 9),
       routineCompletions: _asInt(raw, 10),
       projectPhasesCompleted: _asInt(raw, 11),
       completedTaskNames: raw.length > 12 && raw[12] is List ? (raw[12] as List).map((item) => '$item').toList() : const <String>[],
+      pointEvents: raw.length > 15 && raw[15] is List
+          ? (raw[15] as List)
+              .whereType<List>()
+              .map((event) => ProductivityPointEvent.fromStorageList(event.cast<dynamic>()))
+              .toList()
+          : const <ProductivityPointEvent>[],
     );
   }
 
@@ -84,12 +140,15 @@ class ProductivitySnapshot {
       neitherHours: 0,
       totalHours: 0,
       totalPoints: 0,
+      basePoints: 0,
+      streakBonusPoints: 0,
       productivityScore: 0,
       rating: ratingForScore(0),
       completedTasks: 0,
       routineCompletions: 0,
       projectPhasesCompleted: 0,
       completedTaskNames: const <String>[],
+      pointEvents: const <ProductivityPointEvent>[],
     );
   }
 
@@ -122,6 +181,8 @@ class LifetimeProductivityStats {
   final List<ProductivitySnapshot> snapshots;
   final double lifetimeProductivity;
   final int totalPoints;
+  final int totalBonusEarned;
+  final int highestStreakBonus;
   final double totalFocusHours;
   final int totalCompletedTasks;
   final int currentStreak;
@@ -140,6 +201,8 @@ class LifetimeProductivityStats {
     required this.snapshots,
     required this.lifetimeProductivity,
     required this.totalPoints,
+    required this.totalBonusEarned,
+    required this.highestStreakBonus,
     required this.totalFocusHours,
     required this.totalCompletedTasks,
     required this.currentStreak,
@@ -162,6 +225,8 @@ class LifetimeProductivityStats {
         snapshots: <ProductivitySnapshot>[],
         lifetimeProductivity: 0,
         totalPoints: 0,
+        totalBonusEarned: 0,
+        highestStreakBonus: 0,
         totalFocusHours: 0,
         totalCompletedTasks: 0,
         currentStreak: 0,
@@ -179,6 +244,8 @@ class LifetimeProductivityStats {
     }
 
     final totalPoints = snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.totalPoints);
+    final totalBonusEarned = snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.streakBonusPoints);
+    final highestStreakBonus = snapshots.fold<int>(0, (highest, snapshot) => math.max(highest, snapshot.streakBonusPoints));
     final totalFocusHours = snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.focusedHours);
     final totalCompletedTasks = snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.completedTasks);
     final averageScore = snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.productivityScore) / snapshots.length;
@@ -194,6 +261,8 @@ class LifetimeProductivityStats {
       snapshots: snapshots,
       lifetimeProductivity: averageScore,
       totalPoints: totalPoints,
+      totalBonusEarned: totalBonusEarned,
+      highestStreakBonus: highestStreakBonus,
       totalFocusHours: totalFocusHours,
       totalCompletedTasks: totalCompletedTasks,
       currentStreak: _currentStreak(snapshots, now ?? DateTime.now()),

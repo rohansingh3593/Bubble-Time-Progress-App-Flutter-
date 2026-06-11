@@ -712,7 +712,10 @@ class HiveService {
     var completedTasks = 0;
     var routineCompletions = 0;
     var projectPhasesCompleted = 0;
+    var basePoints = 0;
+    var streakBonusPoints = 0;
     final completedTaskNames = <String>[];
+    final pointEvents = <ProductivityPointEvent>[];
 
     for (final task in tasks) {
       final recordedMinutes = taskRecordedMinutesForDay(task);
@@ -728,17 +731,45 @@ class HiveService {
         neitherMinutes += recordedMinutes;
       }
 
+      final taskBasePoints = _productivityPointsForTask(task, recordedMinutes);
+      var taskBonusPoints = 0;
+      var reason = 'Base productivity points';
+
       if (_isCompletedTask(task)) {
         completedTasks++;
         completedTaskNames.add(task.task);
-        if (task.repeatTask) routineCompletions++;
+        if (task.repeatTask) {
+          routineCompletions++;
+          final streak = _routineCompletionStreakForDate(task, day);
+          taskBonusPoints = _streakBonusForLength(streak);
+          if (taskBonusPoints > 0) {
+            reason = '$streak-day streak milestone';
+          }
+        }
       }
 
       final phases = parseTaskPhases(task.description);
-      projectPhasesCompleted += phases.where((phase) => phase.isCompleted).length;
-      if (!_isCompletedTask(task) && phases.any((phase) => phase.isCompleted)) {
-        completedTaskNames.add('${task.task} (${phases.where((phase) => phase.isCompleted).length} phases)');
+      final completedPhaseCount = phases.where((phase) => phase.isCompleted).length;
+      projectPhasesCompleted += completedPhaseCount;
+      if (!_isCompletedTask(task) && completedPhaseCount > 0) {
+        completedTaskNames.add('${task.task} ($completedPhaseCount phases)');
       }
+
+      basePoints += taskBasePoints;
+      streakBonusPoints += taskBonusPoints;
+      pointEvents.add(
+        ProductivityPointEvent(
+          title: task.repeatTask
+              ? '${task.task} Completed'
+              : completedPhaseCount > 0
+                  ? '${task.task} Phase Progress'
+                  : '${task.task} Completed',
+          basePoints: taskBasePoints,
+          streakBonusPoints: taskBonusPoints,
+          totalPoints: taskBasePoints + taskBonusPoints,
+          reason: taskBonusPoints > 0 ? reason : (completedPhaseCount > 0 ? '$completedPhaseCount project phase${completedPhaseCount == 1 ? '' : 's'} completed' : reason),
+        ),
+      );
     }
 
     final bothHours = bothMinutes / 60.0;
@@ -746,7 +777,7 @@ class HiveService {
     final urgentHours = urgentMinutes / 60.0;
     final neitherHours = neitherMinutes / 60.0;
     final totalHours = bothHours + importantHours + urgentHours + neitherHours;
-    final totalPoints = (bothHours * 100 + importantHours * 80 + urgentHours * 50 + neitherHours * 10).round();
+    final totalPoints = basePoints + streakBonusPoints;
     final score = (totalPoints / ProductivitySnapshot.maximumPoints * 100).clamp(0.0, 100.0).toDouble();
 
     return ProductivitySnapshot(
@@ -757,17 +788,74 @@ class HiveService {
       neitherHours: neitherHours,
       totalHours: totalHours,
       totalPoints: totalPoints,
+      basePoints: basePoints,
+      streakBonusPoints: streakBonusPoints,
       productivityScore: score,
       rating: ProductivitySnapshot.ratingForScore(score),
       completedTasks: completedTasks,
       routineCompletions: routineCompletions,
       projectPhasesCompleted: projectPhasesCompleted,
       completedTaskNames: completedTaskNames,
+      pointEvents: pointEvents,
     );
   }
 
   bool _isCompletedTask(Task task) {
     return task.done || task.status.trim().toLowerCase() == 'completed';
+  }
+
+
+  int _productivityPointsForTask(Task task, int recordedMinutes) {
+    return (recordedMinutes / 60 * _productivityPointRate(task)).round();
+  }
+
+  int _productivityPointRate(Task task) {
+    if (task.urgent && task.important) return 100;
+    if (task.important) return 80;
+    if (task.urgent) return 50;
+    return 10;
+  }
+
+  int _streakBonusForLength(int streakLength) {
+    const bonuses = {
+      3: 10,
+      7: 25,
+      15: 50,
+      30: 100,
+      60: 200,
+      100: 500,
+    };
+    return bonuses[streakLength] ?? 0;
+  }
+
+  int _routineCompletionStreakForDate(Task task, DateTime date) {
+    if (!task.repeatTask || !_isCompletedTask(task)) return 0;
+    final frequency = _normalizedRepeatFrequency(task.repeatFrequency);
+    final stepDays = frequency == 'daily'
+        ? 1
+        : frequency == 'weekly'
+            ? 7
+            : 0;
+    if (stepDays == 0) return 0;
+
+    final completedOccurrences = <DateTime>{};
+    for (final entry in getAllTasksByDate().entries) {
+      for (final candidate in entry.value) {
+        if (_isSameRecurringSeriesIdentity(candidate, task) && _isCompletedTask(candidate)) {
+          final occurrence = _currentOccurrenceDate(candidate.repeatFrequency, candidate.dueDate);
+          completedOccurrences.add(DateTime(occurrence.year, occurrence.month, occurrence.day));
+        }
+      }
+    }
+
+    var cursor = _currentOccurrenceDate(task.repeatFrequency, date);
+    cursor = DateTime(cursor.year, cursor.month, cursor.day);
+    var streak = 0;
+    while (completedOccurrences.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(Duration(days: stepDays));
+    }
+    return streak;
   }
 
 
@@ -808,6 +896,10 @@ class HiveService {
 
     lines.add('📊 Productivity score: ${snapshot.productivityScore.toStringAsFixed(1)}%');
     lines.add('⭐ Points earned today: +${snapshot.totalPoints}');
+    if (snapshot.streakBonusPoints > 0) lines.add('🏆 Streak bonus earned: +${snapshot.streakBonusPoints}');
+    for (final event in snapshot.pointEvents.where((event) => event.streakBonusPoints > 0)) {
+      lines.add('🔥 ${event.title} • ${event.reason} • +${event.streakBonusPoints} bonus points');
+    }
     lines.add('💎 Lifetime points: ${lifetime.totalPoints}');
     lines.add('🔥 Streak: ${lifetime.currentStreak} day${lifetime.currentStreak == 1 ? '' : 's'}');
     lines.add('🏅 Lifetime XP: ${lifetime.xp} • Level ${lifetime.level}');
