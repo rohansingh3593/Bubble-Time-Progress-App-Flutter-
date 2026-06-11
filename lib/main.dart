@@ -91,7 +91,6 @@ class MyApp extends StatelessWidget {
     return base.apply(
       bodyColor: style.textPrimary,
       displayColor: style.textPrimary,
-      fontSizeFactor: scale,
     ).copyWith(
       displayLarge: themed(base.displayLarge, weight: isGamified ? FontWeight.w900 : _strongerWeight(selectedWeight, 2)),
       displayMedium: themed(base.displayMedium, weight: isGamified ? FontWeight.w900 : _strongerWeight(selectedWeight, 2)),
