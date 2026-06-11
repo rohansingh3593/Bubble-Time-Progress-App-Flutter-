@@ -7,6 +7,7 @@ import '../constants/dashboard_themes.dart';
 import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
+import '../utils/task_time_utils.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import 'journal_view.dart';
@@ -1384,16 +1385,86 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Widget _buildProjectsSection(List<Task> tasks) {
-    final projects = tasks.where((t)=>!t.repeatTask).take(4).toList();
-    return _darkSection('Projects / Phases', Column(children: projects.map((p) {
-      final done = p.done || p.status=='Completed';
-      return ListTile(
-        contentPadding: EdgeInsets.zero,
-        title: Text(p.task, style: const TextStyle(color: Colors.white)),
-        subtitle: Text(p.category, style: const TextStyle(color: Color(0xFF9CB3FF))),
-        trailing: Icon(done ? Icons.check_circle : Icons.timelapse, color: done ? Colors.greenAccent : Colors.orangeAccent),
-      );
-    }).toList()), action: 'Expand');
+    final style = _dashboardStyle();
+    final projects = tasks.where((task) => !task.repeatTask).take(4).toList();
+    return _darkSection(
+      'Projects / Phases',
+      Column(
+        children: projects.map((project) {
+          final phases = parseTaskPhases(project.description);
+          final completedPhases = phases.where((phase) => phase.isCompleted).length;
+          final totalPhases = phases.isEmpty ? 1 : phases.length;
+          final progress = phases.isEmpty ? (project.done || project.status == 'Completed' ? 1.0 : 0.0) : completedPhases / totalPhases;
+          final done = progress >= 1;
+          final subtitle = phases.isEmpty
+              ? '${project.category} • ${project.status}'
+              : '${project.category} • $completedPhases/$totalPhases phases • ${(progress * 100).round()}%';
+
+          return InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => _editTask(project),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(project.task, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
+                    subtitle: Text(subtitle, style: TextStyle(color: style.primary, fontWeight: FontWeight.w700)),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(done ? Icons.check_circle : Icons.timelapse, color: done ? Colors.greenAccent : Colors.orangeAccent),
+                        if (phases.isNotEmpty)
+                          Text('${(progress * 100).round()}%', style: TextStyle(color: style.textMuted, fontSize: 11, fontWeight: FontWeight.w800)),
+                      ],
+                    ),
+                  ),
+                  if (phases.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: progress.clamp(0.0, 1.0).toDouble(),
+                        minHeight: 6,
+                        backgroundColor: Colors.white.withOpacity(0.16),
+                        color: done ? Colors.greenAccent : Colors.orangeAccent,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: phases.map((phase) {
+                        final completed = phase.isCompleted;
+                        return _projectPhaseChip(
+                          label: '${phase.name.isEmpty ? 'Phase' : phase.name}: ${phase.status}',
+                          color: completed ? Colors.greenAccent : Colors.orangeAccent,
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+      action: 'Expand',
+    );
+  }
+
+
+  Widget _projectPhaseChip({required String label, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Text(label, style: TextStyle(color: _dashboardStyle().dark ? Colors.white : const Color(0xFF2D241E), fontSize: 11, fontWeight: FontWeight.w800)),
+    );
   }
 
   Widget _heroMetric(String label, String value) {

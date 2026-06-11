@@ -420,16 +420,19 @@ Future<Task?> showTaskFormDialog(
                 final mergedDescription = !repeatTask
                     ? _ProjectPhaseDraft.mergeIntoDescription(descriptionController.text.trim(), projectPhases)
                     : descriptionController.text.trim();
+                final inferredStatus = repeatTask
+                    ? 'Not Updated'
+                    : _ProjectPhaseDraft.inferTaskStatus(projectPhases, selectedStatus);
 
                 Navigator.of(context).pop(Task(
                   task: name,
                   description: mergedDescription,
                   dueDate: dueDate,
                   priority: repeatTask ? 'Medium' : selectedPriority,
-                  status: repeatTask ? 'Not Updated' : selectedStatus,
+                  status: inferredStatus,
                   category: selectedCategory,
                   delegatedTo: repeatTask ? null : selectedDelegate,
-                  done: repeatTask ? false : selectedStatus == 'Completed',
+                  done: !repeatTask && inferredStatus == 'Completed',
                   repeatTask: repeatTask,
                   repeatFrequency: repeatTask ? repeatFrequency : null,
                   urgent: selectedUrgent,
@@ -537,6 +540,22 @@ class _ProjectPhaseDraft {
         .join('\n');
     if (serializedPhases.isEmpty) return cleanBase;
     return '$cleanBase\n\n$taskPhaseMarker\n$serializedPhases'.trim();
+  }
+
+
+  static String inferTaskStatus(List<_ProjectPhaseDraft> phases, String fallbackStatus) {
+    final active = phases
+        .where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty)
+        .toList();
+    if (active.isEmpty) return fallbackStatus;
+
+    final statuses = active.map((phase) => phase.status.trim().toLowerCase()).toList();
+    if (statuses.every((status) => status == 'completed')) return 'Completed';
+    if (statuses.every((status) => status == 'cancelled')) return 'Cancelled';
+    if (statuses.any((status) => status == 'completed' || status == 'in progress')) {
+      return 'In Progress';
+    }
+    return fallbackStatus;
   }
 
   static int totalMinutes(List<_ProjectPhaseDraft> phases) {
