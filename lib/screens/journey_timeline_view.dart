@@ -488,6 +488,32 @@ class _JourneyEntryCard extends StatelessWidget {
   }
 }
 
+class _RelatedTaskDropdownItem extends StatelessWidget {
+  final Task task;
+  final bool compact;
+
+  const _RelatedTaskDropdownItem({required this.task, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: compact ? double.infinity : 260,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: Color(task.colorValue), shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Flexible(child: Text(task.task, overflow: TextOverflow.ellipsis, maxLines: 1)),
+        ],
+      ),
+    );
+  }
+}
+
 class _JourneyChip extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -645,22 +671,21 @@ class _JourneyEntryDialogState extends State<_JourneyEntryDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<Task?>(
               value: _relatedTask,
+              isExpanded: true,
               decoration: InputDecoration(
                 labelText: 'Related habit/task',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
               ),
+              selectedItemBuilder: (context) => [
+                const Text('No related task', overflow: TextOverflow.ellipsis),
+                ...taskOptions.map((task) => _RelatedTaskDropdownItem(task: task, compact: true)),
+              ],
               items: [
                 const DropdownMenuItem<Task?>(value: null, child: Text('No related task')),
                 ...taskOptions.map(
                   (task) => DropdownMenuItem<Task?>(
                     value: task,
-                    child: Row(
-                      children: [
-                        Container(width: 10, height: 10, decoration: BoxDecoration(color: Color(task.colorValue), shape: BoxShape.circle)),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(task.task, overflow: TextOverflow.ellipsis)),
-                      ],
-                    ),
+                    child: _RelatedTaskDropdownItem(task: task),
                   ),
                 ),
               ],
