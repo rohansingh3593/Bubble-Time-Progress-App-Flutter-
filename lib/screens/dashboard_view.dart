@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../constants/dashboard_themes.dart';
 import '../models/rank_profile.dart';
@@ -894,6 +895,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final style = _dashboardStyle();
     final selectedTheme = widget.hiveService.getDashboardTheme();
     final selectedPalette = widget.hiveService.getDashboardPalette();
+    final selectedFont = widget.hiveService.getAppFontFamily();
+    final selectedScale = widget.hiveService.getAppFontScale();
+    final selectedWeight = widget.hiveService.getAppFontWeight();
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 350),
@@ -966,11 +970,263 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               }).toList(),
             ),
           ),
+          const SizedBox(height: 14),
+          _buildTypographySelector(
+            style: style,
+            selectedFont: selectedFont,
+            selectedScale: selectedScale,
+            selectedWeight: selectedWeight,
+          ),
           const SizedBox(height: 8),
-          Text('${selectedTheme.description} • ${selectedPalette.label} palette is applied app-wide.', style: TextStyle(color: style.textMuted, fontSize: 12)),
+          Text(
+            '${selectedTheme.description} • ${selectedPalette.label} palette • ${selectedFont.familyName} typography applied app-wide.',
+            style: TextStyle(color: style.textMuted, fontSize: 12),
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildTypographySelector({
+    required DashboardThemeStyle style,
+    required AppFontFamily selectedFont,
+    required AppFontScale selectedScale,
+    required AppFontWeightChoice selectedWeight,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.text_fields_rounded, color: style.primary, size: 18),
+            const SizedBox(width: 8),
+            Text('Typography', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${selectedFont.familyName} • ${selectedScale.label} • ${selectedWeight.label}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: AppFontFamily.values.map((font) {
+              final isSelected = font == selectedFont;
+              return Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: _fontChoiceCard(
+                  font: font,
+                  selected: isSelected,
+                  style: style,
+                  scale: selectedScale,
+                  weight: selectedWeight,
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text('Font Size', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+        const SizedBox(height: 6),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: AppFontScale.values.map((scale) {
+              final isSelected = scale == selectedScale;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _themeSelectorChip(
+                  selected: isSelected,
+                  label: scale.label,
+                  leading: Text(
+                    'A',
+                    style: TextStyle(
+                      color: _selectorTextColor(isSelected, style),
+                      fontSize: 11 * scale.scale,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  style: style,
+                  onTap: () => widget.hiveService.setAppFontScale(scale),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text('Font Weight', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+        const SizedBox(height: 6),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: AppFontWeightChoice.values.map((weight) {
+              final isSelected = weight == selectedWeight;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _themeSelectorChip(
+                  selected: isSelected,
+                  label: weight.label,
+                  leading: Text(
+                    'Aa',
+                    style: TextStyle(
+                      color: _selectorTextColor(isSelected, style),
+                      fontWeight: weight.weight,
+                      fontSize: 12,
+                    ),
+                  ),
+                  style: style,
+                  onTap: () => widget.hiveService.setAppFontWeight(weight),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: style.elevatedSurface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: style.primary.withOpacity(0.18)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'The quick brown fox jumps over the lazy dog.',
+                style: _fontPreviewStyle(selectedFont, style, selectedScale, selectedWeight, size: 13),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'Small Wins. Massive Progress.',
+                style: _fontPreviewStyle(selectedFont, style, selectedScale, selectedWeight, size: 16, heading: true),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _fontChoiceCard({
+    required AppFontFamily font,
+    required bool selected,
+    required DashboardThemeStyle style,
+    required AppFontScale scale,
+    required AppFontWeightChoice weight,
+  }) {
+    final cardColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.38 : 0.18)! : style.elevatedSurface;
+    final foreground = _readableOn(cardColor);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => widget.hiveService.setAppFontFamily(font),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: 220,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: selected ? foreground.withOpacity(0.78) : style.primary.withOpacity(0.18), width: selected ? 1.5 : 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text('Aa', style: _fontPreviewStyle(font, style, scale, weight, size: 18, heading: true, color: foreground)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(font.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _fontPreviewStyle(font, style, scale, weight, size: 13, heading: true, color: foreground)),
+                        Text(font.familyName, maxLines: 1, overflow: TextOverflow.ellipsis, style: _fontPreviewStyle(font, style, scale, weight, size: 11, color: foreground.withOpacity(0.75))),
+                      ],
+                    ),
+                  ),
+                  if (selected) Icon(Icons.check_circle_rounded, color: foreground, size: 18),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Small Wins. Massive Progress.',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _fontPreviewStyle(font, style, scale, weight, size: 12, color: foreground),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                font.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: foreground.withOpacity(0.72), fontSize: 10.5, height: 1.15),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  TextStyle _fontPreviewStyle(
+    AppFontFamily font,
+    DashboardThemeStyle style,
+    AppFontScale scale,
+    AppFontWeightChoice weight, {
+    required double size,
+    bool heading = false,
+    Color? color,
+  }) {
+    final textStyle = TextStyle(
+      color: color ?? style.textPrimary,
+      fontSize: size * scale.scale,
+      fontWeight: heading ? _strongerPreviewWeight(weight.weight, 2) : weight.weight,
+      letterSpacing: heading && style.type == DashboardThemeType.minimal ? 0.4 : 0,
+      height: 1.18,
+    );
+    switch (font) {
+      case AppFontFamily.modern:
+        return GoogleFonts.inter(textStyle: textStyle);
+      case AppFontFamily.elegant:
+        return GoogleFonts.poppins(textStyle: textStyle);
+      case AppFontFamily.minimal:
+        return GoogleFonts.manrope(textStyle: textStyle);
+      case AppFontFamily.friendly:
+        return GoogleFonts.nunito(textStyle: textStyle);
+      case AppFontFamily.professional:
+        return GoogleFonts.roboto(textStyle: textStyle);
+      case AppFontFamily.premium:
+        return GoogleFonts.outfit(textStyle: textStyle);
+      case AppFontFamily.classic:
+        return GoogleFonts.lato(textStyle: textStyle);
+      case AppFontFamily.reading:
+        return GoogleFonts.merriweather(textStyle: textStyle);
+      case AppFontFamily.rounded:
+        return GoogleFonts.quicksand(textStyle: textStyle);
+      case AppFontFamily.tech:
+        return GoogleFonts.spaceGrotesk(textStyle: textStyle);
+      case AppFontFamily.luxury:
+        return GoogleFonts.plusJakartaSans(textStyle: textStyle);
+      case AppFontFamily.futuristic:
+        return GoogleFonts.sora(textStyle: textStyle);
+    }
+  }
+
+  FontWeight _strongerPreviewWeight(FontWeight weight, int steps) {
+    final nextIndex = (weight.index + steps).clamp(0, FontWeight.values.length - 1).toInt();
+    return FontWeight.values[nextIndex];
   }
 
   Widget _themeSelectorChip({

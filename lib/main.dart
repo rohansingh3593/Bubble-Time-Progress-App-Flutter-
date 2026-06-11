@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'models/task_model.dart';
 import 'services/hive_service.dart';
@@ -29,41 +30,96 @@ class MyApp extends StatelessWidget {
 
   const MyApp({super.key, required this.hiveService});
 
-  TextTheme _textThemeFor(DashboardThemeStyle style) {
-    final base = ThemeData(brightness: style.dark ? Brightness.dark : Brightness.light).textTheme;
+  TextTheme _googleFontTextTheme(AppFontFamily fontFamily, TextTheme base) {
+    switch (fontFamily) {
+      case AppFontFamily.modern:
+        return GoogleFonts.interTextTheme(base);
+      case AppFontFamily.elegant:
+        return GoogleFonts.poppinsTextTheme(base);
+      case AppFontFamily.minimal:
+        return GoogleFonts.manropeTextTheme(base);
+      case AppFontFamily.friendly:
+        return GoogleFonts.nunitoTextTheme(base);
+      case AppFontFamily.professional:
+        return GoogleFonts.robotoTextTheme(base);
+      case AppFontFamily.premium:
+        return GoogleFonts.outfitTextTheme(base);
+      case AppFontFamily.classic:
+        return GoogleFonts.latoTextTheme(base);
+      case AppFontFamily.reading:
+        return GoogleFonts.merriweatherTextTheme(base);
+      case AppFontFamily.rounded:
+        return GoogleFonts.quicksandTextTheme(base);
+      case AppFontFamily.tech:
+        return GoogleFonts.spaceGroteskTextTheme(base);
+      case AppFontFamily.luxury:
+        return GoogleFonts.plusJakartaSansTextTheme(base);
+      case AppFontFamily.futuristic:
+        return GoogleFonts.soraTextTheme(base);
+    }
+  }
+
+  FontWeight _strongerWeight(FontWeight weight, int steps) {
+    final nextIndex = (weight.index + steps).clamp(0, FontWeight.values.length - 1).toInt();
+    return FontWeight.values[nextIndex];
+  }
+
+  TextTheme _textThemeFor(
+    DashboardThemeStyle style, {
+    required AppFontFamily fontFamily,
+    required AppFontScale fontScale,
+    required AppFontWeightChoice fontWeight,
+  }) {
+    final baseMaterial = ThemeData(brightness: style.dark ? Brightness.dark : Brightness.light).textTheme;
+    final base = _googleFontTextTheme(fontFamily, baseMaterial);
+    final scale = fontScale.scale;
+    final selectedWeight = fontWeight.weight;
     final isGamified = style.type == DashboardThemeType.gamified;
     final isMinimal = style.type == DashboardThemeType.minimal;
     final isCalm = style.type == DashboardThemeType.calm;
+
+    TextStyle? themed(TextStyle? source, {FontWeight? weight, double letterSpacing = 0}) {
+      if (source == null) return null;
+      return source.copyWith(
+        color: style.textPrimary,
+        fontSize: source.fontSize == null ? null : source.fontSize! * scale,
+        fontWeight: weight ?? selectedWeight,
+        letterSpacing: letterSpacing,
+      );
+    }
+
     return base.apply(
       bodyColor: style.textPrimary,
       displayColor: style.textPrimary,
-      fontFamily: isMinimal ? 'monospace' : null,
+      fontSizeFactor: scale,
     ).copyWith(
-      headlineSmall: base.headlineSmall?.copyWith(
-        color: style.textPrimary,
-        fontWeight: isGamified ? FontWeight.w900 : FontWeight.w800,
+      displayLarge: themed(base.displayLarge, weight: isGamified ? FontWeight.w900 : _strongerWeight(selectedWeight, 2)),
+      displayMedium: themed(base.displayMedium, weight: isGamified ? FontWeight.w900 : _strongerWeight(selectedWeight, 2)),
+      headlineSmall: themed(
+        base.headlineSmall,
+        weight: isGamified ? FontWeight.w900 : _strongerWeight(selectedWeight, 2),
         letterSpacing: isGamified ? 0.8 : isMinimal ? 1.2 : 0,
       ),
-      titleLarge: base.titleLarge?.copyWith(
-        color: style.textPrimary,
-        fontWeight: FontWeight.w900,
+      titleLarge: themed(
+        base.titleLarge,
+        weight: _strongerWeight(selectedWeight, 3),
         letterSpacing: isCalm ? 0.4 : isMinimal ? 1.0 : 0,
       ),
-      titleMedium: base.titleMedium?.copyWith(
-        color: style.textPrimary,
-        fontWeight: isGamified ? FontWeight.w900 : FontWeight.w700,
+      titleMedium: themed(
+        base.titleMedium,
+        weight: isGamified ? FontWeight.w900 : _strongerWeight(selectedWeight, 1),
         letterSpacing: isMinimal ? 0.8 : 0,
       ),
-      bodyMedium: base.bodyMedium?.copyWith(
-        color: style.textPrimary,
-        fontWeight: isGamified ? FontWeight.w600 : FontWeight.normal,
-      ),
-      bodySmall: base.bodySmall?.copyWith(color: style.textMuted),
-      labelLarge: base.labelLarge?.copyWith(
-        color: style.textPrimary,
-        fontWeight: FontWeight.w800,
+      bodyLarge: themed(base.bodyLarge),
+      bodyMedium: themed(base.bodyMedium, weight: isGamified ? FontWeight.w600 : selectedWeight),
+      bodySmall: themed(base.bodySmall, weight: selectedWeight)?.copyWith(color: style.textMuted),
+      labelLarge: themed(
+        base.labelLarge,
+        weight: _strongerWeight(selectedWeight, 2),
         letterSpacing: isMinimal ? 0.7 : 0,
       ),
+      labelMedium: themed(base.labelMedium, weight: selectedWeight),
+      labelSmall: themed(base.labelSmall, weight: selectedWeight)?.copyWith(color: style.textMuted),
     );
   }
 
@@ -73,6 +129,12 @@ class MyApp extends StatelessWidget {
       valueListenable: hiveService.getBoxListenable(),
       builder: (context, box, _) {
         final dashboardStyle = DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
+        final appTextTheme = _textThemeFor(
+          dashboardStyle,
+          fontFamily: hiveService.getAppFontFamily(),
+          fontScale: hiveService.getAppFontScale(),
+          fontWeight: hiveService.getAppFontWeight(),
+        );
         return MaterialApp(
           title: 'Bubble Time Progress',
           theme: ThemeData(
@@ -88,8 +150,8 @@ class MyApp extends StatelessWidget {
               brightness: dashboardStyle.dark ? Brightness.dark : Brightness.light,
             ),
             scaffoldBackgroundColor: dashboardStyle.background,
-            textTheme: _textThemeFor(dashboardStyle),
-            primaryTextTheme: _textThemeFor(dashboardStyle).apply(bodyColor: Colors.white, displayColor: Colors.white),
+            textTheme: appTextTheme,
+            primaryTextTheme: appTextTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
             appBarTheme: AppBarTheme(
               backgroundColor: dashboardStyle.primary,
               foregroundColor: Colors.white,

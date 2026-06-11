@@ -24,6 +24,9 @@ class HiveService {
   static const _schemaVersionKey = '__meta_schema_version__';
   static const _dashboardThemeKey = '__meta_dashboard_theme__';
   static const _dashboardPaletteKey = '__meta_dashboard_palette__';
+  static const _appFontFamilyKey = '__meta_app_font_family__';
+  static const _appFontScaleKey = '__meta_app_font_scale__';
+  static const _appFontWeightKey = '__meta_app_font_weight__';
   static const int _currentSchemaVersion = 1;
 
   static const List<String> _defaultCategories = [
@@ -390,6 +393,36 @@ class HiveService {
 
   Future<void> setDashboardPalette(DashboardPaletteType palette) async {
     await _box.put(_dashboardPaletteKey, <String>[palette.storageKey]);
+  }
+
+  AppFontFamily getAppFontFamily() {
+    final stored = _box.get(_appFontFamilyKey);
+    final firstValue = stored == null || stored.isEmpty ? null : stored.first;
+    return appFontFamilyFromStorage(firstValue is String ? firstValue : null);
+  }
+
+  Future<void> setAppFontFamily(AppFontFamily font) async {
+    await _box.put(_appFontFamilyKey, <String>[font.storageKey]);
+  }
+
+  AppFontScale getAppFontScale() {
+    final stored = _box.get(_appFontScaleKey);
+    final firstValue = stored == null || stored.isEmpty ? null : stored.first;
+    return appFontScaleFromStorage(firstValue is String ? firstValue : null);
+  }
+
+  Future<void> setAppFontScale(AppFontScale scale) async {
+    await _box.put(_appFontScaleKey, <String>[scale.storageKey]);
+  }
+
+  AppFontWeightChoice getAppFontWeight() {
+    final stored = _box.get(_appFontWeightKey);
+    final firstValue = stored == null || stored.isEmpty ? null : stored.first;
+    return appFontWeightFromStorage(firstValue is String ? firstValue : null);
+  }
+
+  Future<void> setAppFontWeight(AppFontWeightChoice weight) async {
+    await _box.put(_appFontWeightKey, <String>[weight.storageKey]);
   }
 
   List<String> getDelegates() {

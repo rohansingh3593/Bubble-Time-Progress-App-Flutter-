@@ -1,5 +1,201 @@
 import 'package:flutter/material.dart';
 
+enum AppFontFamily {
+  modern,
+  elegant,
+  minimal,
+  friendly,
+  professional,
+  premium,
+  classic,
+  reading,
+  rounded,
+  tech,
+  luxury,
+  futuristic,
+}
+
+extension AppFontFamilyX on AppFontFamily {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case AppFontFamily.modern:
+        return 'Modern';
+      case AppFontFamily.elegant:
+        return 'Elegant';
+      case AppFontFamily.minimal:
+        return 'Minimal';
+      case AppFontFamily.friendly:
+        return 'Friendly';
+      case AppFontFamily.professional:
+        return 'Professional';
+      case AppFontFamily.premium:
+        return 'Premium';
+      case AppFontFamily.classic:
+        return 'Classic';
+      case AppFontFamily.reading:
+        return 'Reading';
+      case AppFontFamily.rounded:
+        return 'Rounded';
+      case AppFontFamily.tech:
+        return 'Tech';
+      case AppFontFamily.luxury:
+        return 'Luxury';
+      case AppFontFamily.futuristic:
+        return 'Futuristic';
+    }
+  }
+
+  String get familyName {
+    switch (this) {
+      case AppFontFamily.modern:
+        return 'Inter';
+      case AppFontFamily.elegant:
+        return 'Poppins';
+      case AppFontFamily.minimal:
+        return 'Manrope';
+      case AppFontFamily.friendly:
+        return 'Nunito';
+      case AppFontFamily.professional:
+        return 'Roboto';
+      case AppFontFamily.premium:
+        return 'Outfit';
+      case AppFontFamily.classic:
+        return 'Lato';
+      case AppFontFamily.reading:
+        return 'Merriweather';
+      case AppFontFamily.rounded:
+        return 'Quicksand';
+      case AppFontFamily.tech:
+        return 'Space Grotesk';
+      case AppFontFamily.luxury:
+        return 'Plus Jakarta Sans';
+      case AppFontFamily.futuristic:
+        return 'Sora';
+    }
+  }
+
+  String get description {
+    switch (this) {
+      case AppFontFamily.modern:
+        return 'Recommended default • clean and modern';
+      case AppFontFamily.elegant:
+        return 'Rounded headlines and friendly cards';
+      case AppFontFamily.minimal:
+        return 'Minimal professional dashboards';
+      case AppFontFamily.friendly:
+        return 'Soft habit and journal style';
+      case AppFontFamily.professional:
+        return 'Material Design compatibility';
+      case AppFontFamily.premium:
+        return 'Premium startup feeling';
+      case AppFontFamily.classic:
+        return 'Simple elegant long text';
+      case AppFontFamily.reading:
+        return 'Reading-focused notes and reflections';
+      case AppFontFamily.rounded:
+        return 'Playful habits and reflection';
+      case AppFontFamily.tech:
+        return 'Analytics, XP, and statistics';
+      case AppFontFamily.luxury:
+        return 'Luxury SaaS profile style';
+      case AppFontFamily.futuristic:
+        return 'Rank, XP, and hero cards';
+    }
+  }
+}
+
+AppFontFamily appFontFamilyFromStorage(String? value) {
+  return AppFontFamily.values.firstWhere(
+    (font) => font.storageKey == value,
+    orElse: () => AppFontFamily.modern,
+  );
+}
+
+enum AppFontScale { small, medium, large, extraLarge }
+
+extension AppFontScaleX on AppFontScale {
+  String get storageKey => name;
+  String get label {
+    switch (this) {
+      case AppFontScale.small:
+        return 'Small';
+      case AppFontScale.medium:
+        return 'Medium';
+      case AppFontScale.large:
+        return 'Large';
+      case AppFontScale.extraLarge:
+        return 'Extra Large';
+    }
+  }
+
+  double get scale {
+    switch (this) {
+      case AppFontScale.small:
+        return 0.90;
+      case AppFontScale.medium:
+        return 1.0;
+      case AppFontScale.large:
+        return 1.12;
+      case AppFontScale.extraLarge:
+        return 1.24;
+    }
+  }
+}
+
+AppFontScale appFontScaleFromStorage(String? value) {
+  return AppFontScale.values.firstWhere(
+    (scale) => scale.storageKey == value,
+    orElse: () => AppFontScale.medium,
+  );
+}
+
+enum AppFontWeightChoice { light, regular, medium, semiBold, bold, extraBold }
+
+extension AppFontWeightChoiceX on AppFontWeightChoice {
+  String get storageKey => name;
+  String get label {
+    switch (this) {
+      case AppFontWeightChoice.light:
+        return 'Light';
+      case AppFontWeightChoice.regular:
+        return 'Regular';
+      case AppFontWeightChoice.medium:
+        return 'Medium';
+      case AppFontWeightChoice.semiBold:
+        return 'SemiBold';
+      case AppFontWeightChoice.bold:
+        return 'Bold';
+      case AppFontWeightChoice.extraBold:
+        return 'ExtraBold';
+    }
+  }
+
+  FontWeight get weight {
+    switch (this) {
+      case AppFontWeightChoice.light:
+        return FontWeight.w300;
+      case AppFontWeightChoice.regular:
+        return FontWeight.w400;
+      case AppFontWeightChoice.medium:
+        return FontWeight.w500;
+      case AppFontWeightChoice.semiBold:
+        return FontWeight.w600;
+      case AppFontWeightChoice.bold:
+        return FontWeight.w700;
+      case AppFontWeightChoice.extraBold:
+        return FontWeight.w800;
+    }
+  }
+}
+
+AppFontWeightChoice appFontWeightFromStorage(String? value) {
+  return AppFontWeightChoice.values.firstWhere(
+    (weight) => weight.storageKey == value,
+    orElse: () => AppFontWeightChoice.semiBold,
+  );
+}
 
 enum DashboardPaletteType {
   seaCalm,
