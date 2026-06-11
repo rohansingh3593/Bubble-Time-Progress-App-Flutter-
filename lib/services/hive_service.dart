@@ -807,9 +807,10 @@ class HiveService {
     if (enabledRoutines > 0) lines.add('🔁 $enabledRoutines routine${enabledRoutines == 1 ? '' : 's'} enabled');
 
     lines.add('📊 Productivity score: ${snapshot.productivityScore.toStringAsFixed(1)}%');
-    lines.add('⭐ Points earned: ${snapshot.totalPoints} / ${ProductivitySnapshot.maximumPoints.round()}');
+    lines.add('⭐ Points earned today: +${snapshot.totalPoints}');
+    lines.add('💎 Lifetime points: ${lifetime.totalPoints}');
     lines.add('🔥 Streak: ${lifetime.currentStreak} day${lifetime.currentStreak == 1 ? '' : 's'}');
-    lines.add('🏅 XP: ${lifetime.xp} • Level ${lifetime.level}');
+    lines.add('🏅 Lifetime XP: ${lifetime.xp} • Level ${lifetime.level}');
 
     if (journal != null) {
       lines.add('😊 Mood: ${journal.mood}');

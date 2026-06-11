@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
 import '../models/productivity_snapshot.dart';
+import '../models/rank_profile.dart';
 import '../services/hive_service.dart';
 
 class ProductivityTimelineView extends StatefulWidget {
@@ -33,10 +34,17 @@ class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
         builder: (context, box, child) {
           final snapshots = widget.hiveService.getProductivitySnapshots();
           final stats = widget.hiveService.getLifetimeProductivityStats();
+          final username = widget.hiveService.getUsername();
           final filtered = _filterSnapshots(snapshots, _range);
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
             children: [
+              _LifetimePerformanceCard(username: username, stats: stats),
+              const SizedBox(height: 16),
+              _PointsTotalsCard(snapshots: snapshots, stats: stats),
+              const SizedBox(height: 16),
+              _PointsAnalyticsCard(snapshots: snapshots),
+              const SizedBox(height: 16),
               _OverviewCards(stats: stats),
               const SizedBox(height: 16),
               _TrendCard(
@@ -116,6 +124,179 @@ class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
         children: [
           Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700))),
           Text(value),
+        ],
+      ),
+    );
+  }
+}
+
+
+class _LifetimePerformanceCard extends StatelessWidget {
+  final String username;
+  final LifetimeProductivityStats stats;
+
+  const _LifetimePerformanceCard({required this.username, required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final rank = RankTier.forLevel(stats.level);
+    final currentAchievement = _achievementForPoints(stats.totalPoints);
+    final nextAchievement = _nextAchievementForPoints(stats.totalPoints);
+    final milestone = nextAchievement?.points ?? currentAchievement.points;
+    final progress = milestone == 0 ? 1.0 : (stats.totalPoints / milestone).clamp(0.0, 1.0).toDouble();
+
+    return _TimelineSection(
+      title: '👤 Lifetime Performance',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: Color(rank.colorValue).withOpacity(0.16),
+                child: Text(rank.emoji, style: const TextStyle(fontSize: 22)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(username, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                    const SizedBox(height: 2),
+                    Text('🏆 Rank: ${rank.name}  •  ⭐ Level: ${stats.level}', style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.black54)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _StatTile(label: '💎 Lifetime Points', value: _formatInt(stats.totalPoints)),
+              _StatTile(label: '⚡ Lifetime XP', value: _formatInt(stats.xp)),
+              _StatTile(label: '🔥 Current Streak', value: '${stats.currentStreak} days'),
+              _StatTile(label: '🏅 Best Streak', value: '${stats.bestStreak} days'),
+              _StatTile(label: '📊 Avg Productivity', value: '${stats.averageDailyScore.toStringAsFixed(1)}%'),
+              _StatTile(label: '⏱ Focus Hours', value: _formatHours(stats.totalFocusHours)),
+              _StatTile(label: '✅ Tasks Completed', value: _formatInt(stats.totalCompletedTasks)),
+              _StatTile(label: '📚 Phases Completed', value: _formatInt(stats.projectPhasesCompleted)),
+              _StatTile(label: '📅 Active Days', value: _formatInt(stats.activeDays)),
+              _StatTile(label: '🏅 Achievement', value: '${currentAchievement.emoji} ${currentAchievement.name}'),
+            ].map((tile) => SizedBox(width: 168, child: tile)).toList(),
+          ),
+          const SizedBox(height: 16),
+          Text('Lifetime Points Milestone', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 12,
+              color: AppColors.primary,
+              backgroundColor: Colors.black12,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            nextAchievement == null
+                ? '${_formatInt(stats.totalPoints)} lifetime points • All milestones unlocked'
+                : '${_formatInt(stats.totalPoints)} / ${_formatInt(nextAchievement.points)} (${(progress * 100).round()}%) • Next: ${nextAchievement.emoji} ${nextAchievement.name}',
+            style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _pointAchievements.map((achievement) {
+              final unlocked = stats.totalPoints >= achievement.points;
+              return Chip(
+                avatar: Text(achievement.emoji),
+                label: Text('${achievement.name} (${_formatInt(achievement.points)})'),
+                backgroundColor: unlocked ? AppColors.primary.withOpacity(0.14) : Colors.grey.shade200,
+                labelStyle: TextStyle(fontWeight: FontWeight.w800, color: unlocked ? AppColors.textPrimary : Colors.black45),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PointsTotalsCard extends StatelessWidget {
+  final List<ProductivitySnapshot> snapshots;
+  final LifetimeProductivityStats stats;
+
+  const _PointsTotalsCard({required this.snapshots, required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final weekStart = today.subtract(Duration(days: today.weekday - 1));
+    final monthStart = DateTime(today.year, today.month, 1);
+    final yearStart = DateTime(today.year, 1, 1);
+    return _TimelineSection(
+      title: '📉 Cumulative Points',
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          _StatTile(label: 'This Week', value: '${_formatInt(_pointsSince(snapshots, weekStart))} pts'),
+          _StatTile(label: 'This Month', value: '${_formatInt(_pointsSince(snapshots, monthStart))} pts'),
+          _StatTile(label: 'This Year', value: '${_formatInt(_pointsSince(snapshots, yearStart))} pts'),
+          _StatTile(label: 'Lifetime', value: '${_formatInt(stats.totalPoints)} pts'),
+        ].map((tile) => SizedBox(width: 168, child: tile)).toList(),
+      ),
+    );
+  }
+}
+
+class _PointsAnalyticsCard extends StatelessWidget {
+  final List<ProductivitySnapshot> snapshots;
+
+  const _PointsAnalyticsCard({required this.snapshots});
+
+  @override
+  Widget build(BuildContext context) {
+    final recent = snapshots.length <= 14 ? snapshots : snapshots.sublist(snapshots.length - 14);
+    final maxPoints = recent.fold<int>(1, (max, snapshot) => math.max(max, snapshot.totalPoints));
+    var cumulative = 0;
+    return _TimelineSection(
+      title: '📈 Points Analytics',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (recent.isEmpty)
+            const Text('Complete tasks to build daily points charts.')
+          else
+            ...recent.map((snapshot) {
+              cumulative += snapshot.totalPoints;
+              final value = snapshot.totalPoints / maxPoints;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    SizedBox(width: 54, child: Text('${snapshot.date.month}/${snapshot.date.day}', style: const TextStyle(fontWeight: FontWeight.w800))),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(999),
+                        child: LinearProgressIndicator(value: value, minHeight: 10, color: _heatColor(snapshot.productivityScore), backgroundColor: Colors.black12),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(width: 92, child: Text('${_formatInt(snapshot.totalPoints)} pts', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w800))),
+                  ],
+                ),
+              );
+            }),
+          if (recent.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Lifetime growth in this view: ${_formatInt(cumulative)} points', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w800)),
+          ],
         ],
       ),
     );
@@ -285,17 +466,37 @@ class _HistoryList extends StatelessWidget {
       child: Column(
         children: snapshots.isEmpty
             ? [const Text('Daily records will appear here automatically after tasks are completed.')]
-            : snapshots
-                .take(30)
-                .map((snapshot) => ListTile(
+            : [
+                const _DailyHistoryHeader(),
+                ...snapshots.take(30).map((snapshot) => ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: CircleAvatar(backgroundColor: _heatColor(snapshot.productivityScore), child: Text('${snapshot.productivityScore.round()}%', style: const TextStyle(fontSize: 11, color: Colors.white))),
                       title: Text(_formatDate(snapshot.date), style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text('${_formatHours(snapshot.totalHours)} • ${snapshot.totalPoints} pts • ${snapshot.rating}'),
+                      subtitle: Text('Points: ${_formatInt(snapshot.totalPoints)} • Productivity: ${snapshot.productivityScore.toStringAsFixed(1)}% • ${snapshot.rating}'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => onTapSnapshot(snapshot),
-                    ))
-                .toList(),
+                    )),
+              ],
+      ),
+    );
+  }
+}
+
+
+class _DailyHistoryHeader extends StatelessWidget {
+  const _DailyHistoryHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Colors.black12))),
+      child: const Row(
+        children: [
+          SizedBox(width: 48, child: Text('Score', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black54))),
+          Expanded(flex: 2, child: Text('Date', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black54))),
+          Expanded(flex: 3, child: Text('Points • Productivity • Rating', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black54))),
+        ],
       ),
     );
   }
@@ -458,6 +659,59 @@ class _ProductivityReport {
       completedTasks: sorted.fold<int>(0, (sum, snapshot) => sum + snapshot.completedTasks),
     );
   }
+}
+
+
+class _PointAchievement {
+  final int points;
+  final String emoji;
+  final String name;
+
+  const _PointAchievement(this.points, this.emoji, this.name);
+}
+
+const _pointAchievements = [
+  _PointAchievement(1000, '🌱', 'Beginner'),
+  _PointAchievement(5000, '🎯', 'Focused'),
+  _PointAchievement(10000, '💪', 'Consistent'),
+  _PointAchievement(25000, '🚀', 'Achiever'),
+  _PointAchievement(50000, '🔥', 'Momentum Master'),
+  _PointAchievement(100000, '👑', 'Legend'),
+  _PointAchievement(250000, '💎', 'Grandmaster'),
+  _PointAchievement(500000, '🌟', 'Productivity Titan'),
+];
+
+_PointAchievement _achievementForPoints(int points) {
+  var current = _pointAchievements.first;
+  for (final achievement in _pointAchievements) {
+    if (points >= achievement.points) current = achievement;
+  }
+  return current;
+}
+
+_PointAchievement? _nextAchievementForPoints(int points) {
+  for (final achievement in _pointAchievements) {
+    if (points < achievement.points) return achievement;
+  }
+  return null;
+}
+
+int _pointsSince(List<ProductivitySnapshot> snapshots, DateTime start) {
+  final startDay = DateTime(start.year, start.month, start.day);
+  return snapshots
+      .where((snapshot) => !DateTime(snapshot.date.year, snapshot.date.month, snapshot.date.day).isBefore(startDay))
+      .fold<int>(0, (sum, snapshot) => sum + snapshot.totalPoints);
+}
+
+String _formatInt(int value) {
+  final text = value.toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < text.length; i++) {
+    final remaining = text.length - i;
+    buffer.write(text[i]);
+    if (remaining > 1 && remaining % 3 == 1) buffer.write(',');
+  }
+  return buffer.toString();
 }
 
 Color _heatColor(double score) {

@@ -33,7 +33,7 @@ class ProductivitySnapshot {
     required this.completedTaskNames,
   });
 
-  int get xpEarned => (totalPoints / 10).round();
+  int get xpEarned => totalPoints ~/ 10;
   double get focusedHours => bothHours + importantHours + urgentHours;
   double get distractionHours => neitherHours;
 
@@ -188,7 +188,7 @@ class LifetimeProductivityStats {
         : (sortedScores[(sortedScores.length ~/ 2) - 1] + sortedScores[sortedScores.length ~/ 2]) / 2;
     final highest = snapshots.reduce((a, b) => a.productivityScore >= b.productivityScore ? a : b);
     final lowest = snapshots.reduce((a, b) => a.productivityScore <= b.productivityScore ? a : b);
-    final xp = snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.xpEarned);
+    final xp = totalPoints ~/ 10;
 
     return LifetimeProductivityStats(
       snapshots: snapshots,
