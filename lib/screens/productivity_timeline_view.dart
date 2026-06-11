@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../constants/colors.dart';
 import '../models/productivity_snapshot.dart';
@@ -274,20 +275,29 @@ class _LifetimePerformanceCard extends StatelessWidget {
   Future<void> _showProfilePhotoActions(BuildContext context) async {
     final action = await showModalBottomSheet<String>(
       context: context,
+      showDragHandle: true,
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(leading: const Icon(Icons.photo_camera_outlined), title: const Text('Take Photo (Camera)'), onTap: () => Navigator.pop(context, 'camera')),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 8, 20, 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Change Profile Photo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+              ),
+            ),
+            ListTile(leading: const Icon(Icons.photo_camera_outlined), title: const Text('Take Photo'), onTap: () => Navigator.pop(context, 'camera')),
             ListTile(leading: const Icon(Icons.photo_library_outlined), title: const Text('Choose from Gallery'), onTap: () => Navigator.pop(context, 'gallery')),
-            ListTile(leading: const Icon(Icons.visibility_outlined), title: const Text('View Full Screen'), onTap: () => Navigator.pop(context, 'view')),
-            ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Change Photo'), onTap: () => Navigator.pop(context, 'change')),
+            ListTile(leading: const Icon(Icons.visibility_outlined), title: const Text('View Current Photo'), onTap: () => Navigator.pop(context, 'view')),
+            ListTile(leading: const Icon(Icons.crop_outlined), title: const Text('Crop & Edit'), onTap: () => Navigator.pop(context, 'edit')),
             ListTile(leading: const Icon(Icons.delete_outline), title: const Text('Remove Photo'), onTap: () => Navigator.pop(context, 'remove')),
+            ListTile(leading: const Icon(Icons.close), title: const Text('Cancel'), onTap: () => Navigator.pop(context, 'cancel')),
           ],
         ),
       ),
     );
-    if (action == null) return;
+    if (action == null || action == 'cancel') return;
     if (action == 'view') {
       if (!context.mounted) return;
       await showDialog<void>(
@@ -313,33 +323,32 @@ class _LifetimePerformanceCard extends StatelessWidget {
       await hiveService.removeProfilePhoto();
       return;
     }
-    if (!context.mounted) return;
-    final path = await _askForPhotoPath(context, action == 'camera' ? 'Camera photo path' : 'Gallery image path');
-    if (path == null || path.trim().isEmpty) return;
-    await hiveService.saveUserProfile(userProfile.copyWith(profilePhotoPath: path.trim()));
+
+    final source = action == 'camera' ? ImageSource.camera : ImageSource.gallery;
+    await _pickAndSaveProfilePhoto(context, source);
   }
 
-  Future<String?> _askForPhotoPath(BuildContext context, String title) async {
-    final controller = TextEditingController(text: userProfile.profilePhotoPath);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Image file path',
-            helperText: 'Paste a local image path. It will be reused across the app.',
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
-        ],
-      ),
-    );
-    controller.dispose();
-    return result;
+  Future<void> _pickAndSaveProfilePhoto(BuildContext context, ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(
+        source: source,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 88,
+      );
+      if (image == null) return;
+      await hiveService.saveUserProfile(userProfile.copyWith(profilePhotoPath: image.path));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo updated')),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open image picker: $error')),
+      );
+    }
   }
 
   Future<void> _showEditProfileDialog(BuildContext context) async {
