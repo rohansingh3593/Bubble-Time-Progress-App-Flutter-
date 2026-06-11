@@ -222,29 +222,93 @@ class DashboardThemeStyle {
 
   static DashboardThemeStyle _fromPalette(DashboardThemeType type, DashboardPaletteType palette) {
     final colors = palette.colors;
-    final background = _tint(colors[3], Colors.white, 0.28);
-    final surface = _tint(colors[3], Colors.white, 0.58);
-    final elevatedSurface = _tint(colors[2], Colors.white, 0.54);
     final primary = colors[0];
     final secondary = colors[1];
     final accent = colors[2];
-    final textPrimary = _readableTextOn(background);
-    final textMuted = textPrimary == Colors.white ? const Color(0xFFD7E8E2) : Color.lerp(primary, Colors.black54, 0.55)!;
-    final dark = background.computeLuminance() < 0.35;
-    return DashboardThemeStyle(
-      type: type,
-      background: background,
-      surface: surface,
-      elevatedSurface: elevatedSurface,
-      primary: primary,
-      secondary: secondary,
-      accent: accent,
-      textPrimary: textPrimary,
-      textMuted: textMuted,
-      heroGradient: [primary, secondary, accent],
-      dark: dark,
-      animated: true,
-    );
+    final base = colors[3];
+
+    DashboardThemeStyle build({
+      required Color background,
+      required Color surface,
+      required Color elevatedSurface,
+      required Color textPrimary,
+      required Color textMuted,
+      required List<Color> heroGradient,
+      required bool dark,
+      bool animated = true,
+    }) {
+      return DashboardThemeStyle(
+        type: type,
+        background: background,
+        surface: surface,
+        elevatedSurface: elevatedSurface,
+        primary: primary,
+        secondary: secondary,
+        accent: accent,
+        textPrimary: textPrimary,
+        textMuted: textMuted,
+        heroGradient: heroGradient,
+        dark: dark,
+        animated: animated,
+      );
+    }
+
+    switch (type) {
+      case DashboardThemeType.light:
+        final background = _tint(base, Colors.white, 0.36);
+        return build(
+          background: background,
+          surface: _tint(base, Colors.white, 0.68),
+          elevatedSurface: _tint(accent, Colors.white, 0.62),
+          textPrimary: _readableTextOn(background),
+          textMuted: Color.lerp(primary, Colors.black54, 0.56)!,
+          heroGradient: [secondary, accent, primary],
+          dark: false,
+        );
+      case DashboardThemeType.dark:
+        return build(
+          background: _tint(primary, Colors.black, 0.74),
+          surface: _tint(primary, Colors.black, 0.58),
+          elevatedSurface: _tint(secondary, Colors.black, 0.52),
+          textPrimary: Colors.white,
+          textMuted: _tint(accent, Colors.white, 0.38),
+          heroGradient: [_tint(primary, Colors.black, 0.18), _tint(secondary, Colors.black, 0.20), _tint(accent, Colors.black, 0.26)],
+          dark: true,
+        );
+      case DashboardThemeType.gamified:
+        return build(
+          background: _tint(secondary, Colors.black, 0.68),
+          surface: _tint(secondary, Colors.black, 0.46),
+          elevatedSurface: _tint(accent, Colors.black, 0.34),
+          textPrimary: Colors.white,
+          textMuted: _tint(base, Colors.white, 0.18),
+          heroGradient: [primary, secondary, accent],
+          dark: true,
+        );
+      case DashboardThemeType.calm:
+        final background = _tint(base, const Color(0xFFFFF7EA), 0.46);
+        return build(
+          background: background,
+          surface: _tint(base, Colors.white, 0.74),
+          elevatedSurface: _tint(accent, const Color(0xFFFFF7EA), 0.60),
+          textPrimary: const Color(0xFF2D241A),
+          textMuted: Color.lerp(primary, const Color(0xFF756B5D), 0.58)!,
+          heroGradient: [primary, _tint(secondary, const Color(0xFFE89A5B), 0.35)],
+          dark: false,
+          animated: false,
+        );
+      case DashboardThemeType.minimal:
+        return build(
+          background: _tint(base, const Color(0xFFF3F4F6), 0.72),
+          surface: _tint(base, Colors.white, 0.88),
+          elevatedSurface: _tint(accent, const Color(0xFFE5E7EB), 0.74),
+          textPrimary: const Color(0xFF111827),
+          textMuted: const Color(0xFF6B7280),
+          heroGradient: [_tint(primary, const Color(0xFF4B5563), 0.42), _tint(secondary, const Color(0xFF111827), 0.28)],
+          dark: false,
+          animated: false,
+        );
+    }
   }
 
   static Color _tint(Color color, Color mix, double amount) {
