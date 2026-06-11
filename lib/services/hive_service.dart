@@ -4,6 +4,7 @@ import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/productivity_snapshot.dart';
 import '../models/task_model.dart';
+import '../models/user_profile.dart';
 import '../constants/dashboard_themes.dart';
 import '../utils/task_time_utils.dart';
 
@@ -15,6 +16,7 @@ class HiveService {
   static const _categoriesKey = '__meta_categories__';
   static const _delegatesKey = '__meta_delegates__';
   static const _usernameKey = '__meta_username__';
+  static const _userProfileKey = '__meta_user_profile__';
   static const _journalPrefix = '__journal__';
   static const _journeyPrefix = '__journey__';
   static const _productivityPrefix = '__productivity_snapshot__';
@@ -202,16 +204,97 @@ class HiveService {
     }
   }
 
-  String getUsername() {
-    final saved = (_box.get(_usernameKey) ?? <String>['Productivity Hero']).cast<String>();
-    if (saved.isEmpty || saved.first.trim().isEmpty) return 'Productivity Hero';
-    return saved.first.trim();
-  }
+  String getUsername() => getUserProfile().displayName;
 
   Future<void> setUsername(String username) async {
     final trimmed = username.trim();
     if (trimmed.isEmpty) return;
-    await _box.put(_usernameKey, <String>[trimmed]);
+    await saveUserProfile(getUserProfile().copyWith(fullName: trimmed));
+  }
+
+  UserProfile getUserProfile() {
+    final legacyName = (_box.get(_usernameKey) ?? <String>['Productivity Hero']).cast<String>();
+    final fallbackName = legacyName.isNotEmpty && legacyName.first.trim().isNotEmpty ? legacyName.first.trim() : 'Productivity Hero';
+    final raw = _box.get(_userProfileKey);
+    if (raw == null) return UserProfile.defaults(fullName: fallbackName);
+    return UserProfile.fromStorageList(raw.cast<dynamic>(), fallbackName: fallbackName);
+  }
+
+  Future<void> saveUserProfile(UserProfile profile) async {
+    final previous = getUserProfile();
+    final trimmed = profile.copyWith(
+      fullName: profile.fullName.trim().isEmpty ? previous.displayName : profile.fullName.trim(),
+      nickname: profile.nickname.trim(),
+      bio: profile.bio.trim(),
+      occupation: profile.occupation.trim(),
+      birthday: profile.birthday.trim(),
+      favoriteTheme: profile.favoriteTheme.trim().isEmpty ? 'Calm' : profile.favoriteTheme.trim(),
+      avatarBorderStyle: profile.avatarBorderStyle.trim().isEmpty ? _avatarFrameForAchievement(getLifetimeProductivityStats().totalPoints) : profile.avatarBorderStyle.trim(),
+      profilePhotoPath: profile.profilePhotoPath.trim(),
+      photoHistory: _mergedPhotoHistory(previous, profile),
+    );
+    await _box.put(_userProfileKey, trimmed.toStorageList());
+    await _box.put(_usernameKey, <String>[trimmed.displayName]);
+    await _box.put(_dashboardThemeKey, <String>[_themeStorageKeyForLabel(trimmed.favoriteTheme)]);
+    await _logProfileUpdate(previous, trimmed);
+    await _syncAutoJourneyForDate(DateTime.now());
+  }
+
+  Future<void> removeProfilePhoto() async {
+    final profile = getUserProfile();
+    await saveUserProfile(profile.copyWith(profilePhotoPath: ''));
+  }
+
+  List<String> _mergedPhotoHistory(UserProfile previous, UserProfile next) {
+    final history = <String>[...previous.photoHistory];
+    final previousPhoto = previous.profilePhotoPath.trim();
+    if (previousPhoto.isNotEmpty && previousPhoto != next.profilePhotoPath.trim() && !history.contains(previousPhoto)) {
+      history.insert(0, previousPhoto);
+    }
+    return history.take(12).toList();
+  }
+
+  Future<void> _logProfileUpdate(UserProfile previous, UserProfile next) async {
+    final changes = <String>[];
+    if (previous.profilePhotoPath.trim() != next.profilePhotoPath.trim()) {
+      changes.add(next.profilePhotoPath.trim().isEmpty ? '🗑️ Removed profile picture' : '📸 Updated profile picture');
+    }
+    if (previous.displayName != next.displayName || previous.nickname != next.nickname) changes.add('👤 Updated profile identity');
+    if (previous.bio != next.bio) changes.add('😊 Changed bio');
+    if (previous.occupation != next.occupation) changes.add('💼 Updated occupation');
+    if (previous.favoriteTheme != next.favoriteTheme || previous.avatarBorderStyle != next.avatarBorderStyle) changes.add('🎨 Updated profile style');
+    if (changes.isEmpty) return;
+
+    final now = DateTime.now();
+    final entry = JourneyEntry(
+      id: 'profile_${now.microsecondsSinceEpoch}',
+      date: now,
+      type: 'Profile update',
+      title: 'Profile updated',
+      description: changes.join('\n'),
+      colorValue: 0xFF8E24AA,
+      imageUrl: next.profilePhotoPath.trim().isEmpty ? null : next.profilePhotoPath.trim(),
+    );
+    await saveJourneyEntry(entry);
+  }
+
+  String _avatarFrameForAchievement(int points) {
+    if (points >= 100000) return 'Animated Rainbow';
+    if (points >= 50000) return 'Golden Frame';
+    if (points >= 25000) return 'Purple Aura';
+    if (points >= 10000) return 'Green Ring';
+    if (points >= 5000) return 'Blue Glow';
+    return 'Silver';
+  }
+
+  String _themeStorageKeyForLabel(String label) {
+    final normalized = label.trim().toLowerCase();
+    for (final theme in DashboardThemeType.values) {
+      if (theme.label.toLowerCase() == normalized || theme.storageKey.toLowerCase() == normalized) {
+        return theme.storageKey;
+      }
+    }
+    return DashboardThemeType.calm.storageKey;
   }
 
 

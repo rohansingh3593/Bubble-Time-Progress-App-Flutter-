@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import '../constants/colors.dart';
 import '../models/productivity_snapshot.dart';
 import '../models/rank_profile.dart';
+import '../models/user_profile.dart';
 import '../services/hive_service.dart';
+import '../widgets/profile_avatar.dart';
 
 class ProductivityTimelineView extends StatefulWidget {
   final HiveService hiveService;
@@ -35,11 +37,14 @@ class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
           final snapshots = widget.hiveService.getProductivitySnapshots();
           final stats = widget.hiveService.getLifetimeProductivityStats();
           final username = widget.hiveService.getUsername();
+          final userProfile = widget.hiveService.getUserProfile();
           final filtered = _filterSnapshots(snapshots, _range);
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
             children: [
-              _LifetimePerformanceCard(username: username, stats: stats),
+              _LifetimePerformanceCard(username: username, stats: stats, userProfile: userProfile, hiveService: widget.hiveService),
+              const SizedBox(height: 16),
+              _PhotoGalleryCard(userProfile: userProfile, hiveService: widget.hiveService),
               const SizedBox(height: 16),
               _PointsTotalsCard(snapshots: snapshots, stats: stats),
               const SizedBox(height: 16),
@@ -146,8 +151,10 @@ class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
 class _LifetimePerformanceCard extends StatelessWidget {
   final String username;
   final LifetimeProductivityStats stats;
+  final UserProfile userProfile;
+  final HiveService hiveService;
 
-  const _LifetimePerformanceCard({required this.username, required this.stats});
+  const _LifetimePerformanceCard({required this.username, required this.stats, required this.userProfile, required this.hiveService});
 
   @override
   Widget build(BuildContext context) {
@@ -174,10 +181,12 @@ class _LifetimePerformanceCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: Color(rank.colorValue).withOpacity(0.16),
-                child: Text(rank.emoji, style: const TextStyle(fontSize: 22)),
+              ProfileAvatar(
+                profile: userProfile,
+                radius: 38,
+                accentColor: Color(rank.colorValue),
+                badge: rank.emoji,
+                onTap: () => _showProfilePhotoActions(context),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -185,12 +194,24 @@ class _LifetimePerformanceCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(username, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                    if (userProfile.nickname.isNotEmpty) Text('@${userProfile.nickname}', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
                     const SizedBox(height: 2),
                     Text('🏆 Rank: ${rank.name}  •  ⭐ Level: ${stats.level}', style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.black54)),
+                    if (userProfile.bio.isNotEmpty) Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text('“${userProfile.bio}”', style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.black54)),
+                    ),
                   ],
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => _showEditProfileDialog(context),
+            icon: const Icon(Icons.edit),
+            label: const Text('Edit Profile'),
+            style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999))),
           ),
           const SizedBox(height: 14),
           Wrap(
@@ -248,6 +269,193 @@ class _LifetimePerformanceCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+  Future<void> _showProfilePhotoActions(BuildContext context) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(leading: const Icon(Icons.photo_camera_outlined), title: const Text('Take Photo (Camera)'), onTap: () => Navigator.pop(context, 'camera')),
+            ListTile(leading: const Icon(Icons.photo_library_outlined), title: const Text('Choose from Gallery'), onTap: () => Navigator.pop(context, 'gallery')),
+            ListTile(leading: const Icon(Icons.visibility_outlined), title: const Text('View Full Screen'), onTap: () => Navigator.pop(context, 'view')),
+            ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Change Photo'), onTap: () => Navigator.pop(context, 'change')),
+            ListTile(leading: const Icon(Icons.delete_outline), title: const Text('Remove Photo'), onTap: () => Navigator.pop(context, 'remove')),
+          ],
+        ),
+      ),
+    );
+    if (action == null) return;
+    if (action == 'view') {
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => Dialog(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ProfileAvatar(profile: userProfile, radius: 120, accentColor: Color(RankTier.forLevel(stats.level).colorValue), badge: RankTier.forLevel(stats.level).emoji),
+                const SizedBox(height: 16),
+                Text(userProfile.displayName, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+                Text(userProfile.avatarBorderStyle),
+              ],
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    if (action == 'remove') {
+      await hiveService.removeProfilePhoto();
+      return;
+    }
+    if (!context.mounted) return;
+    final path = await _askForPhotoPath(context, action == 'camera' ? 'Camera photo path' : 'Gallery image path');
+    if (path == null || path.trim().isEmpty) return;
+    await hiveService.saveUserProfile(userProfile.copyWith(profilePhotoPath: path.trim()));
+  }
+
+  Future<String?> _askForPhotoPath(BuildContext context, String title) async {
+    final controller = TextEditingController(text: userProfile.profilePhotoPath);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Image file path',
+            helperText: 'Paste a local image path. It will be reused across the app.',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _showEditProfileDialog(BuildContext context) async {
+    final nameController = TextEditingController(text: userProfile.fullName);
+    final nicknameController = TextEditingController(text: userProfile.nickname);
+    final bioController = TextEditingController(text: userProfile.bio);
+    final occupationController = TextEditingController(text: userProfile.occupation);
+    final birthdayController = TextEditingController(text: userProfile.birthday);
+    const themeOptions = ['Light', 'Dark', 'Gamified', 'Calm', 'Minimal'];
+    const frameOptions = ['Silver', 'Blue Glow', 'Green Ring', 'Purple Aura', 'Golden Frame', 'Animated Rainbow'];
+    var selectedTheme = themeOptions.contains(userProfile.favoriteTheme) ? userProfile.favoriteTheme : 'Calm';
+    var selectedFrame = frameOptions.contains(userProfile.avatarBorderStyle) ? userProfile.avatarBorderStyle : 'Silver';
+    final saved = await showDialog<UserProfile>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Profile'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Full Name')),
+                TextField(controller: nicknameController, decoration: const InputDecoration(labelText: 'Nickname')),
+                TextField(controller: bioController, decoration: const InputDecoration(labelText: 'Bio / Personal Quote')),
+                TextField(controller: occupationController, decoration: const InputDecoration(labelText: 'Occupation')),
+                TextField(controller: birthdayController, decoration: const InputDecoration(labelText: 'Birthday (Optional)')),
+                DropdownButtonFormField<String>(
+                  value: selectedTheme,
+                  decoration: const InputDecoration(labelText: 'Favorite Theme'),
+                  items: themeOptions.map((theme) => DropdownMenuItem(value: theme, child: Text(theme))).toList(),
+                  onChanged: (value) => setDialogState(() => selectedTheme = value ?? selectedTheme),
+                ),
+                DropdownButtonFormField<String>(
+                  value: selectedFrame,
+                  decoration: const InputDecoration(labelText: 'Avatar Border Style'),
+                  items: frameOptions.map((frame) => DropdownMenuItem(value: frame, child: Text(frame))).toList(),
+                  onChanged: (value) => setDialogState(() => selectedFrame = value ?? selectedFrame),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(
+                context,
+                userProfile.copyWith(
+                  fullName: nameController.text,
+                  nickname: nicknameController.text,
+                  bio: bioController.text,
+                  occupation: occupationController.text,
+                  birthday: birthdayController.text,
+                  favoriteTheme: selectedTheme,
+                  avatarBorderStyle: selectedFrame,
+                ),
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameController.dispose();
+    nicknameController.dispose();
+    bioController.dispose();
+    occupationController.dispose();
+    birthdayController.dispose();
+    if (saved != null) await hiveService.saveUserProfile(saved);
+  }
+
+}
+
+class _PhotoGalleryCard extends StatelessWidget {
+  final UserProfile userProfile;
+  final HiveService hiveService;
+
+  const _PhotoGalleryCard({required this.userProfile, required this.hiveService});
+
+  @override
+  Widget build(BuildContext context) {
+    final photos = <String>[
+      if (userProfile.profilePhotoPath.trim().isNotEmpty) userProfile.profilePhotoPath.trim(),
+      ...userProfile.photoHistory,
+    ];
+    return _TimelineSection(
+      title: '📷 Photo Gallery',
+      child: photos.isEmpty
+          ? const Text('Profile photo history will appear here after you add or change your photo.')
+          : Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: photos.map((path) {
+                final isCurrent = path == userProfile.profilePhotoPath;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: isCurrent ? null : () => hiveService.saveUserProfile(userProfile.copyWith(profilePhotoPath: path)),
+                  child: Container(
+                    width: 150,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isCurrent ? AppColors.primary.withOpacity(0.12) : Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: isCurrent ? AppColors.primary : AppColors.primary.withOpacity(0.16)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ProfileAvatar(profile: userProfile.copyWith(profilePhotoPath: path), radius: 42, accentColor: AppColors.primary),
+                        const SizedBox(height: 8),
+                        Text(isCurrent ? 'Current photo' : 'Tap to restore', style: const TextStyle(fontWeight: FontWeight.w800), textAlign: TextAlign.center),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
     );
   }
 }

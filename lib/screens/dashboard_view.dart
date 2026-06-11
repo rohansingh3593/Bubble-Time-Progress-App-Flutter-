@@ -8,6 +8,7 @@ import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../utils/task_time_utils.dart';
+import '../widgets/profile_avatar.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import 'journal_view.dart';
@@ -858,13 +859,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final style = _dashboardStyle();
     return Row(
       children: [
-        CircleAvatar(
+        ProfileAvatar(
+          profile: widget.hiveService.getUserProfile(),
           radius: 22,
-          backgroundColor: style.primary,
-          child: Text(
-            profile.username.isNotEmpty ? profile.username[0].toUpperCase() : 'U',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20),
-          ),
+          accentColor: style.primary,
+          showGlow: false,
+          onTap: _openProductivityTimeline,
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -1017,8 +1017,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.workspace_premium_rounded, color: Color(0xFFFFD86D), size: 32),
-                                const SizedBox(width: 10),
+                                ProfileAvatar(
+                                  profile: widget.hiveService.getUserProfile(),
+                                  radius: 26,
+                                  accentColor: const Color(0xFFFFD86D),
+                                  badge: profile.currentRank.emoji,
+                                  onTap: _openProductivityTimeline,
+                                ),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,

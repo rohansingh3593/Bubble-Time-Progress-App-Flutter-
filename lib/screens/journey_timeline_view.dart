@@ -5,6 +5,7 @@ import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
+import '../widgets/profile_avatar.dart';
 
 class JourneyTimelineView extends StatelessWidget {
   final HiveService hiveService;
@@ -47,7 +48,7 @@ class JourneyTimelineView extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
             children: [
-              _JourneyHero(onAdd: () => _showEntryDialog(context, allTasks)),
+              _JourneyHero(onAdd: () => _showEntryDialog(context, allTasks), hiveService: hiveService),
               const SizedBox(height: 14),
               if (dailyJourneys.isEmpty)
                 const _EmptyJourneyState()
@@ -340,8 +341,9 @@ class _TaskWrap extends StatelessWidget {
 
 class _JourneyHero extends StatelessWidget {
   final VoidCallback onAdd;
+  final HiveService hiveService;
 
-  const _JourneyHero({required this.onAdd});
+  const _JourneyHero({required this.onAdd, required this.hiveService});
 
   @override
   Widget build(BuildContext context) {
@@ -365,11 +367,11 @@ class _JourneyHero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.auto_stories, color: Colors.white),
-              SizedBox(width: 8),
-              Expanded(
+              ProfileAvatar(profile: hiveService.getUserProfile(), radius: 24, accentColor: AppColors.accent, showGlow: false),
+              const SizedBox(width: 10),
+              const Expanded(
                 child: Text(
                   'Personal Journey Timeline',
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20),

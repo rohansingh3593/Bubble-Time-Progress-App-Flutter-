@@ -163,6 +163,7 @@ class _JournalViewState extends State<JournalView> {
                 profile: rankProfile,
                 onUsernameChanged: widget.hiveService.setUsername,
                 compact: true,
+                userProfile: widget.hiveService.getUserProfile(),
               ),
               const SizedBox(height: 14),
               _DateHeader(
