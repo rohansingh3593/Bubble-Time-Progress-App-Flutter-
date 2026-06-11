@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
+import '../widgets/productivity_period_summary.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
 import '../models/task_model.dart';
+import '../models/productivity_snapshot.dart';
 
 class MonthView extends StatefulWidget {
   final HiveService hiveService;
@@ -103,6 +105,57 @@ class _MonthViewState extends State<MonthView> {
 
   List<String> _getDayHeaders() {
     return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  }
+
+  List<DateTime> _daysInCurrentMonth() {
+    final daysInMonth = _getDaysInMonth(_currentMonth);
+    return List.generate(daysInMonth, (index) => DateTime(_currentMonth.year, _currentMonth.month, index + 1));
+  }
+
+  bool _isCompletedTask(Task task) {
+    return task.done || task.status.trim().toLowerCase() == 'completed';
+  }
+
+  PeriodProductivityStats _monthlyProductivityStats() {
+    final days = _daysInCurrentMonth();
+    final snapshots = days.map((date) => widget.hiveService.calculateProductivitySnapshotForDate(date)).toList();
+    final monthTasks = days.expand((date) => widget.hiveService.getTasksForDate(date)).toList();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final completedTasks = monthTasks.where(_isCompletedTask).length;
+    final pendingTasks = monthTasks.where((task) => !_isCompletedTask(task) && task.status != 'Cancelled').length;
+    final overdueTasks = monthTasks.where((task) {
+      final due = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+      return due.isBefore(today) && !_isCompletedTask(task) && task.status != 'Cancelled';
+    }).length;
+
+    return PeriodProductivityStats(
+      title: '📅 Monthly Productivity',
+      periodLabel: '${_getMonthName(_currentMonth.month)} ${_currentMonth.year}',
+      snapshots: snapshots,
+      maximumPoints: days.length * ProductivitySnapshot.maximumPoints.round(),
+      totalDays: days.length,
+      completedTasks: completedTasks,
+      pendingTasks: pendingTasks,
+      overdueTasks: overdueTasks,
+      intervals: _monthlyWeekIntervals(days, snapshots),
+    );
+  }
+
+  List<ProductivityIntervalSummary> _monthlyWeekIntervals(List<DateTime> days, List<ProductivitySnapshot> snapshots) {
+    final intervals = <ProductivityIntervalSummary>[];
+    for (var start = 0; start < days.length; start += 7) {
+      final end = (start + 7).clamp(0, days.length).toInt();
+      final weekSnapshots = snapshots.sublist(start, end);
+      final points = weekSnapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.totalPoints);
+      final maxPoints = weekSnapshots.length * ProductivitySnapshot.maximumPoints;
+      intervals.add(ProductivityIntervalSummary(
+        label: 'Week ${intervals.length + 1}',
+        points: points,
+        score: maxPoints == 0 ? 0 : (points / maxPoints * 100).clamp(0.0, 100.0).toDouble(),
+      ));
+    }
+    return intervals;
   }
 
   int _getWeekdayOffset(DateTime month) {
@@ -239,9 +292,12 @@ class _MonthViewState extends State<MonthView> {
         valueListenable: widget.hiveService.getBoxListenable(),
         builder: (context, box, _) {
           final monthlyTasks = _getMonthlyRepeatingTasks();
-          return Column(
+          final monthlyStats = _monthlyProductivityStats();
+          return ListView(
+            padding: const EdgeInsets.all(16),
             children: [
-              // Day headers
+              ProductivityPeriodSummaryCard(stats: monthlyStats),
+              const SizedBox(height: 16),
               Row(
                 children: _getDayHeaders().map((day) => Expanded(
                   child: Center(
@@ -253,38 +309,36 @@ class _MonthViewState extends State<MonthView> {
                 )).toList(),
               ),
               const SizedBox(height: 8.0),
-              // Grid
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.all(16.0),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 7,
-                    childAspectRatio: 1.0,
-                    crossAxisSpacing: 4.0,
-                    mainAxisSpacing: 4.0,
-                  ),
-                  itemCount: totalCells,
-                  itemBuilder: (context, index) {
-                    if (index < weekdayOffset) {
-                      return const SizedBox.shrink(); // Empty cells
-                    }
-
-                    final day = index - weekdayOffset + 1;
-                    final date = DateTime(_currentMonth.year, _currentMonth.month, day);
-                    final summary = _getCompletedSummaryForDate(date);
-                    final isToday = isCurrentMonth && day == now.day;
-                    final todayStart = DateTime(now.year, now.month, now.day);
-
-                    return BubbleWidget(
-                      color: _getBubbleColor(date, summary, todayStart),
-                      isHighlighted: isToday,
-                      onTap: () => _openQuickAddForDate(date),
-                      label: day.toString(),
-                    );
-                  },
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 7,
+                  childAspectRatio: 1.0,
+                  crossAxisSpacing: 4.0,
+                  mainAxisSpacing: 4.0,
                 ),
+                itemCount: totalCells,
+                itemBuilder: (context, index) {
+                  if (index < weekdayOffset) {
+                    return const SizedBox.shrink();
+                  }
+
+                  final day = index - weekdayOffset + 1;
+                  final date = DateTime(_currentMonth.year, _currentMonth.month, day);
+                  final summary = _getCompletedSummaryForDate(date);
+                  final isToday = isCurrentMonth && day == now.day;
+                  final todayStart = DateTime(now.year, now.month, now.day);
+
+                  return BubbleWidget(
+                    color: _getBubbleColor(date, summary, todayStart),
+                    isHighlighted: isToday,
+                    onTap: () => _openQuickAddForDate(date),
+                    label: day.toString(),
+                  );
+                },
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               _monthlyTasksPanel(monthlyTasks),
             ],
           );

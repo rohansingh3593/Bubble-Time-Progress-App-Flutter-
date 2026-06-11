@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
+import '../widgets/productivity_period_summary.dart';
 import '../utils/grid_utils.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
 import '../models/task_model.dart';
+import '../models/productivity_snapshot.dart';
 import 'task_screen.dart';
 
 class YearView extends StatefulWidget {
@@ -107,6 +109,56 @@ class _YearViewState extends State<YearView> {
     }
   }
 
+
+  bool _isCompletedTask(Task task) {
+    return task.done || task.status.trim().toLowerCase() == 'completed';
+  }
+
+  List<DateTime> _daysInCurrentYear() {
+    final daysInYear = DateTime(_currentYear.year + 1, 1, 1).difference(DateTime(_currentYear.year, 1, 1)).inDays;
+    return List.generate(daysInYear, (index) => DateTime(_currentYear.year, 1, index + 1));
+  }
+
+  PeriodProductivityStats _yearlyProductivityStats() {
+    final days = _daysInCurrentYear();
+    final snapshots = days.map((date) => widget.hiveService.calculateProductivitySnapshotForDate(date)).toList();
+    final yearTasks = days.expand((date) => widget.hiveService.getTasksForDate(date)).toList();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final completedTasks = yearTasks.where(_isCompletedTask).length;
+    final pendingTasks = yearTasks.where((task) => !_isCompletedTask(task) && task.status != 'Cancelled').length;
+    final overdueTasks = yearTasks.where((task) {
+      final due = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+      return due.isBefore(today) && !_isCompletedTask(task) && task.status != 'Cancelled';
+    }).length;
+
+    return PeriodProductivityStats(
+      title: '📆 Year Productivity',
+      periodLabel: '${_currentYear.year}',
+      snapshots: snapshots,
+      maximumPoints: days.length * ProductivitySnapshot.maximumPoints.round(),
+      totalDays: days.length,
+      completedTasks: completedTasks,
+      pendingTasks: pendingTasks,
+      overdueTasks: overdueTasks,
+      intervals: _yearlyMonthIntervals(snapshots),
+    );
+  }
+
+  List<ProductivityIntervalSummary> _yearlyMonthIntervals(List<ProductivitySnapshot> snapshots) {
+    const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return List.generate(12, (monthIndex) {
+      final month = monthIndex + 1;
+      final monthSnapshots = snapshots.where((snapshot) => snapshot.date.month == month).toList();
+      final points = monthSnapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.totalPoints);
+      final maxPoints = monthSnapshots.length * ProductivitySnapshot.maximumPoints;
+      return ProductivityIntervalSummary(
+        label: labels[monthIndex],
+        points: points,
+        score: maxPoints == 0 ? 0 : (points / maxPoints * 100).clamp(0.0, 100.0).toDouble(),
+      );
+    });
+  }
 
   Map<String, int> _getCompletedSummaryForDate(DateTime date) {
     final completedTasks = widget.hiveService
@@ -247,20 +299,25 @@ class _YearViewState extends State<YearView> {
         valueListenable: widget.hiveService.getBoxListenable(),
         builder: (context, box, _) {
           final yearlyTasks = _getYearlyRepeatingTasks();
-          return Column(
-            children: [
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final gridDims = calculateGridDimensions(
-                      daysInYear,
-                      constraints.maxWidth,
-                      constraints.maxHeight,
-                      viewType: 'year',
-                    );
+          final yearlyStats = _yearlyProductivityStats();
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final gridDims = calculateGridDimensions(
+                daysInYear,
+                constraints.maxWidth,
+                420,
+                viewType: 'year',
+              );
 
-                    return GridView.builder(
-                      padding: const EdgeInsets.all(16.0),
+              return ListView(
+                padding: const EdgeInsets.all(16.0),
+                children: [
+                  ProductivityPeriodSummaryCard(stats: yearlyStats),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 420,
+                    child: GridView.builder(
+                      physics: const NeverScrollableScrollPhysics(),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: gridDims['columns'],
                         childAspectRatio: 1.0,
@@ -279,12 +336,13 @@ class _YearViewState extends State<YearView> {
                           onTap: () => _showTaskScreen(date),
                         );
                       },
-                    );
-                  },
-                ),
-              ),
-              _yearlyTasksPanel(yearlyTasks),
-            ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _yearlyTasksPanel(yearlyTasks),
+                ],
+              );
+            },
           );
         },
       ),
