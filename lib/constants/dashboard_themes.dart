@@ -1,5 +1,65 @@
 import 'package:flutter/material.dart';
 
+
+enum DashboardPaletteType {
+  seaCalm,
+  emeraldGrey,
+  springEnergy,
+  happyPurple,
+  pastelSky,
+  neonPastel,
+}
+
+extension DashboardPaletteTypeX on DashboardPaletteType {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardPaletteType.seaCalm:
+        return 'Sea Calm';
+      case DashboardPaletteType.emeraldGrey:
+        return 'Emerald Grey';
+      case DashboardPaletteType.springEnergy:
+        return 'Spring Energy';
+      case DashboardPaletteType.happyPurple:
+        return 'Happy Purple';
+      case DashboardPaletteType.pastelSky:
+        return 'Pastel Sky';
+      case DashboardPaletteType.neonPastel:
+        return 'Neon Pastel';
+    }
+  }
+
+  List<Color> get colors {
+    switch (this) {
+      case DashboardPaletteType.seaCalm:
+        return const [Color(0xFF1A312C), Color(0xFF428475), Color(0xFF89D7B7), Color(0xFFFFF4E1)];
+      case DashboardPaletteType.emeraldGrey:
+        return const [Color(0xFFEEEEEE), Color(0xFF6FCF97), Color(0xFF2FA084), Color(0xFF1F6F5F)];
+      case DashboardPaletteType.springEnergy:
+        return const [Color(0xFFF72C5B), Color(0xFFFF748B), Color(0xFFA7D477), Color(0xFFE4F1AC)];
+      case DashboardPaletteType.happyPurple:
+        return const [Color(0xFFFBF5A7), Color(0xFFFF97D0), Color(0xFFFF62BB), Color(0xFFB331F1)];
+      case DashboardPaletteType.pastelSky:
+        return const [Color(0xFF9FA1FF), Color(0xFFB5BAFF), Color(0xFFAEE2FF), Color(0xFFD9F9DF)];
+      case DashboardPaletteType.neonPastel:
+        return const [Color(0xFF45FFCA), Color(0xFFFEFFAC), Color(0xFFFFB6D9), Color(0xFFD67BFF)];
+    }
+  }
+
+  Color get primary => colors[0];
+  Color get secondary => colors[1];
+  Color get accent => colors[2];
+  Color get background => colors[3];
+}
+
+DashboardPaletteType dashboardPaletteTypeFromStorage(String? value) {
+  return DashboardPaletteType.values.firstWhere(
+    (palette) => palette.storageKey == value,
+    orElse: () => DashboardPaletteType.seaCalm,
+  );
+}
+
 enum DashboardThemeType {
   light,
   dark,
@@ -79,7 +139,8 @@ class DashboardThemeStyle {
     required this.animated,
   });
 
-  static DashboardThemeStyle of(DashboardThemeType type) {
+  static DashboardThemeStyle of(DashboardThemeType type, {DashboardPaletteType? palette}) {
+    if (palette != null) return _fromPalette(type, palette);
     switch (type) {
       case DashboardThemeType.light:
         return const DashboardThemeStyle(
@@ -158,4 +219,40 @@ class DashboardThemeStyle {
         );
     }
   }
+
+  static DashboardThemeStyle _fromPalette(DashboardThemeType type, DashboardPaletteType palette) {
+    final colors = palette.colors;
+    final background = _tint(colors[3], Colors.white, 0.28);
+    final surface = _tint(colors[3], Colors.white, 0.58);
+    final elevatedSurface = _tint(colors[2], Colors.white, 0.54);
+    final primary = colors[0];
+    final secondary = colors[1];
+    final accent = colors[2];
+    final textPrimary = _readableTextOn(background);
+    final textMuted = textPrimary == Colors.white ? const Color(0xFFD7E8E2) : Color.lerp(primary, Colors.black54, 0.55)!;
+    final dark = background.computeLuminance() < 0.35;
+    return DashboardThemeStyle(
+      type: type,
+      background: background,
+      surface: surface,
+      elevatedSurface: elevatedSurface,
+      primary: primary,
+      secondary: secondary,
+      accent: accent,
+      textPrimary: textPrimary,
+      textMuted: textMuted,
+      heroGradient: [primary, secondary, accent],
+      dark: dark,
+      animated: true,
+    );
+  }
+
+  static Color _tint(Color color, Color mix, double amount) {
+    return Color.lerp(color, mix, amount) ?? color;
+  }
+
+  static Color _readableTextOn(Color color) {
+    return color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF14211E);
+  }
+
 }

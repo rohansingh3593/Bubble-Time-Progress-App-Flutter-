@@ -34,7 +34,7 @@ class MyApp extends StatelessWidget {
     return ValueListenableBuilder(
       valueListenable: hiveService.getBoxListenable(),
       builder: (context, box, _) {
-        final dashboardStyle = DashboardThemeStyle.of(hiveService.getDashboardTheme());
+        final dashboardStyle = DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
         return MaterialApp(
           title: 'Bubble Time Progress',
           theme: ThemeData(
@@ -59,6 +59,26 @@ class MyApp extends StatelessWidget {
               backgroundColor: dashboardStyle.surface,
               selectedItemColor: dashboardStyle.primary,
               unselectedItemColor: dashboardStyle.textMuted,
+            ),
+            cardTheme: CardThemeData(
+              color: dashboardStyle.surface,
+              surfaceTintColor: dashboardStyle.elevatedSurface,
+            ),
+            progressIndicatorTheme: ProgressIndicatorThemeData(
+              color: dashboardStyle.primary,
+              linearTrackColor: dashboardStyle.elevatedSurface,
+              circularTrackColor: dashboardStyle.elevatedSurface,
+            ),
+            floatingActionButtonTheme: FloatingActionButtonThemeData(
+              backgroundColor: dashboardStyle.primary,
+              foregroundColor: Colors.white,
+            ),
+            chipTheme: ChipThemeData(
+              selectedColor: dashboardStyle.primary.withOpacity(0.18),
+              backgroundColor: dashboardStyle.elevatedSurface,
+              labelStyle: TextStyle(color: dashboardStyle.textPrimary),
+              secondaryLabelStyle: TextStyle(color: dashboardStyle.primary, fontWeight: FontWeight.w800),
+              side: BorderSide(color: dashboardStyle.primary.withOpacity(0.18)),
             ),
             elevatedButtonTheme: ElevatedButtonThemeData(
               style: ElevatedButton.styleFrom(
@@ -118,7 +138,7 @@ class _MainScreenState extends State<MainScreen> {
     return ValueListenableBuilder(
       valueListenable: widget.hiveService.getBoxListenable(),
       builder: (context, box, _) {
-        final dashboardStyle = DashboardThemeStyle.of(widget.hiveService.getDashboardTheme());
+        final dashboardStyle = DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
         return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,

@@ -682,7 +682,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
-  DashboardThemeStyle _dashboardStyle() => DashboardThemeStyle.of(widget.hiveService.getDashboardTheme());
+  DashboardThemeStyle _dashboardStyle() => DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
 
   String _formatShortDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
 
@@ -893,6 +893,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   Widget _buildThemeSelector() {
     final style = _dashboardStyle();
     final selectedTheme = widget.hiveService.getDashboardTheme();
+    final selectedPalette = widget.hiveService.getDashboardPalette();
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 350),
@@ -922,7 +923,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 17),
                 ),
               ),
-              Text(selectedTheme.label, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+              Text('${selectedTheme.label} • ${selectedPalette.label}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 10),
@@ -950,10 +951,56 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               }).toList(),
             ),
           ),
+          const SizedBox(height: 10),
+          Text('Color Palette', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          Text(selectedTheme.description, style: TextStyle(color: style.textMuted, fontSize: 12)),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: DashboardPaletteType.values.map((palette) {
+                final isSelected = palette == selectedPalette;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    selected: isSelected,
+                    label: Text(palette.label),
+                    avatar: _paletteDots(palette, compact: true),
+                    selectedColor: style.primary.withOpacity(style.dark ? 0.30 : 0.18),
+                    backgroundColor: style.elevatedSurface,
+                    labelStyle: TextStyle(
+                      color: isSelected ? style.primary : style.textMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    side: BorderSide(color: isSelected ? style.primary : style.primary.withOpacity(0.16)),
+                    onSelected: (_) => widget.hiveService.setDashboardPalette(palette),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('${selectedTheme.description} • ${selectedPalette.label} palette is applied app-wide.', style: TextStyle(color: style.textMuted, fontSize: 12)),
         ],
       ),
+    );
+  }
+
+  Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
+    final size = compact ? 5.0 : 12.0;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: palette.colors
+          .map((color) => Container(
+                width: size,
+                height: size,
+                margin: const EdgeInsets.only(right: 2),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.black.withOpacity(0.12)),
+                ),
+              ))
+          .toList(),
     );
   }
 

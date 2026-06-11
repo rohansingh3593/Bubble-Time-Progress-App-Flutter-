@@ -23,6 +23,7 @@ class HiveService {
   static const _autoJourneyPrefix = 'auto_journey_';
   static const _schemaVersionKey = '__meta_schema_version__';
   static const _dashboardThemeKey = '__meta_dashboard_theme__';
+  static const _dashboardPaletteKey = '__meta_dashboard_palette__';
   static const int _currentSchemaVersion = 1;
 
   static const List<String> _defaultCategories = [
@@ -379,6 +380,16 @@ class HiveService {
 
   Future<void> setDashboardTheme(DashboardThemeType theme) async {
     await _box.put(_dashboardThemeKey, <String>[theme.storageKey]);
+  }
+
+  DashboardPaletteType getDashboardPalette() {
+    final stored = _box.get(_dashboardPaletteKey);
+    final firstValue = stored == null || stored.isEmpty ? null : stored.first;
+    return dashboardPaletteTypeFromStorage(firstValue is String ? firstValue : null);
+  }
+
+  Future<void> setDashboardPalette(DashboardPaletteType palette) async {
+    await _box.put(_dashboardPaletteKey, <String>[palette.storageKey]);
   }
 
   List<String> getDelegates() {
