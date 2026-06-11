@@ -197,6 +197,161 @@ AppFontWeightChoice appFontWeightFromStorage(String? value) {
   );
 }
 
+enum DashboardLayoutStyle { classic, modern, glass, minimal, cards, compact }
+
+extension DashboardLayoutStyleX on DashboardLayoutStyle {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardLayoutStyle.classic:
+        return 'Classic';
+      case DashboardLayoutStyle.modern:
+        return 'Modern';
+      case DashboardLayoutStyle.glass:
+        return 'Glass';
+      case DashboardLayoutStyle.minimal:
+        return 'Minimal';
+      case DashboardLayoutStyle.cards:
+        return 'Cards';
+      case DashboardLayoutStyle.compact:
+        return 'Compact';
+    }
+  }
+}
+
+DashboardLayoutStyle dashboardLayoutStyleFromStorage(String? value) {
+  return DashboardLayoutStyle.values.firstWhere(
+    (layout) => layout.storageKey == value,
+    orElse: () => DashboardLayoutStyle.modern,
+  );
+}
+
+enum DashboardCardAnimationStyle { fade, slide, scale, bounce, flip, none }
+
+extension DashboardCardAnimationStyleX on DashboardCardAnimationStyle {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardCardAnimationStyle.fade:
+        return 'Fade';
+      case DashboardCardAnimationStyle.slide:
+        return 'Slide';
+      case DashboardCardAnimationStyle.scale:
+        return 'Scale';
+      case DashboardCardAnimationStyle.bounce:
+        return 'Bounce';
+      case DashboardCardAnimationStyle.flip:
+        return 'Flip';
+      case DashboardCardAnimationStyle.none:
+        return 'None';
+    }
+  }
+}
+
+DashboardCardAnimationStyle dashboardCardAnimationStyleFromStorage(String? value) {
+  return DashboardCardAnimationStyle.values.firstWhere(
+    (animation) => animation.storageKey == value,
+    orElse: () => DashboardCardAnimationStyle.fade,
+  );
+}
+
+enum DashboardAnimationSpeed { slow, normal, fast, instant }
+
+extension DashboardAnimationSpeedX on DashboardAnimationSpeed {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardAnimationSpeed.slow:
+        return 'Slow';
+      case DashboardAnimationSpeed.normal:
+        return 'Normal';
+      case DashboardAnimationSpeed.fast:
+        return 'Fast';
+      case DashboardAnimationSpeed.instant:
+        return 'Instant';
+    }
+  }
+
+  Duration get duration {
+    switch (this) {
+      case DashboardAnimationSpeed.slow:
+        return const Duration(milliseconds: 500);
+      case DashboardAnimationSpeed.normal:
+        return const Duration(milliseconds: 350);
+      case DashboardAnimationSpeed.fast:
+        return const Duration(milliseconds: 180);
+      case DashboardAnimationSpeed.instant:
+        return Duration.zero;
+    }
+  }
+}
+
+DashboardAnimationSpeed dashboardAnimationSpeedFromStorage(String? value) {
+  return DashboardAnimationSpeed.values.firstWhere(
+    (speed) => speed.storageKey == value,
+    orElse: () => DashboardAnimationSpeed.normal,
+  );
+}
+
+enum DashboardChartStyle { flat, gradient, glass, minimal, animated }
+
+extension DashboardChartStyleX on DashboardChartStyle {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardChartStyle.flat:
+        return 'Flat';
+      case DashboardChartStyle.gradient:
+        return 'Gradient';
+      case DashboardChartStyle.glass:
+        return 'Glass';
+      case DashboardChartStyle.minimal:
+        return 'Minimal';
+      case DashboardChartStyle.animated:
+        return 'Animated';
+    }
+  }
+}
+
+DashboardChartStyle dashboardChartStyleFromStorage(String? value) {
+  return DashboardChartStyle.values.firstWhere(
+    (chart) => chart.storageKey == value,
+    orElse: () => DashboardChartStyle.gradient,
+  );
+}
+
+enum DashboardIconPack { outlined, filled, rounded, minimal, material }
+
+extension DashboardIconPackX on DashboardIconPack {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardIconPack.outlined:
+        return 'Outlined';
+      case DashboardIconPack.filled:
+        return 'Filled';
+      case DashboardIconPack.rounded:
+        return 'Rounded';
+      case DashboardIconPack.minimal:
+        return 'Minimal';
+      case DashboardIconPack.material:
+        return 'Material';
+    }
+  }
+}
+
+DashboardIconPack dashboardIconPackFromStorage(String? value) {
+  return DashboardIconPack.values.firstWhere(
+    (pack) => pack.storageKey == value,
+    orElse: () => DashboardIconPack.rounded,
+  );
+}
+
 enum DashboardPaletteType {
   seaCalm,
   emeraldGrey,

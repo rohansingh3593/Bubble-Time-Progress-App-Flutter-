@@ -147,8 +147,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             children: [
               _buildDashboardHeader(rankProfile),
               const SizedBox(height: 14),
-              _buildThemeSelector(),
-              const SizedBox(height: 14),
               _buildHeroCard(rankProfile, summary),
               const SizedBox(height: 14),
               _summaryHeader(summary),
@@ -246,6 +244,40 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         hiveService: widget.hiveService,
         onGoToDashboard: widget.onGoToDashboard,
       ),
+    );
+  }
+
+  void _openSettingsPanel() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close settings',
+      barrierColor: Colors.black.withOpacity(0.35),
+      transitionDuration: const Duration(milliseconds: 360),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: Material(
+            color: Colors.transparent,
+            child: FractionallySizedBox(
+              widthFactor: MediaQuery.of(context).size.width < 760 ? 1 : 0.58,
+              heightFactor: 1,
+              child: _DashboardSettingsPanel(
+                hiveService: widget.hiveService,
+                onClose: () => Navigator.of(context).pop(),
+                themeSelectorBuilder: (_) => _buildThemeSelector(),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
     );
   }
 
@@ -878,15 +910,50 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             ],
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: style.surface,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
-          ),
-          child: IconButton(onPressed: _openJournal, icon: Icon(Icons.notifications_none_rounded, color: style.primary)),
+        _headerActionButton(
+          icon: Icons.notifications_none_rounded,
+          tooltip: 'Notifications',
+          style: style,
+          onTap: _openJournal,
+        ),
+        const SizedBox(width: 8),
+        _headerActionButton(
+          icon: Icons.settings_rounded,
+          tooltip: 'Dashboard settings',
+          style: style,
+          onTap: _openSettingsPanel,
         ),
       ],
+    );
+  }
+
+
+  Widget _headerActionButton({
+    required IconData icon,
+    required String tooltip,
+    required DashboardThemeStyle style,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: style.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: style.primary.withOpacity(0.12)),
+              boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
+            ),
+            child: Icon(icon, color: style.primary, size: 22),
+          ),
+        ),
+      ),
     );
   }
 
@@ -3060,4 +3127,291 @@ class _DisabledRoutineTask {
     required this.previousStreak,
     required this.lastUpdated,
   });
+}
+
+class _DashboardSettingsPanel extends StatelessWidget {
+  final HiveService hiveService;
+  final VoidCallback onClose;
+  final WidgetBuilder themeSelectorBuilder;
+
+  const _DashboardSettingsPanel({
+    required this.hiveService,
+    required this.onClose,
+    required this.themeSelectorBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+      valueListenable: hiveService.getBoxListenable(),
+      builder: (context, box, _) {
+        final style = DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
+        final speed = hiveService.getDashboardAnimationSpeed();
+        return AnimatedContainer(
+          duration: speed.duration,
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: style.background,
+            boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 24, offset: Offset(-8, 0))],
+          ),
+          child: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings_rounded, color: style.primary, size: 28),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Dashboard Settings', style: TextStyle(color: style.textPrimary, fontSize: 24, fontWeight: FontWeight.w900)),
+                            Text('Appearance, typography, layout, charts, and motion', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close settings',
+                        onPressed: onClose,
+                        icon: Icon(Icons.close_rounded, color: style.textPrimary),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                    children: [
+                      themeSelectorBuilder(context),
+                      const SizedBox(height: 14),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.dashboard_customize_rounded,
+                        title: 'Dashboard Layout Style',
+                        child: _wrapChoiceChips(
+                          children: DashboardLayoutStyle.values.map((layout) {
+                            final selected = layout == hiveService.getDashboardLayoutStyle();
+                            return _simpleSettingsChip(
+                              style: style,
+                              label: layout.label,
+                              selected: selected,
+                              onTap: () => hiveService.setDashboardLayoutStyle(layout),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.animation_rounded,
+                        title: 'Card Animation Style',
+                        child: _wrapChoiceChips(
+                          children: DashboardCardAnimationStyle.values.map((animation) {
+                            final selected = animation == hiveService.getDashboardCardAnimationStyle();
+                            return _simpleSettingsChip(
+                              style: style,
+                              label: animation.label,
+                              selected: selected,
+                              onTap: () => hiveService.setDashboardCardAnimationStyle(animation),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.speed_rounded,
+                        title: 'UI Animation Speed',
+                        child: _wrapChoiceChips(
+                          children: DashboardAnimationSpeed.values.map((speedOption) {
+                            final selected = speedOption == hiveService.getDashboardAnimationSpeed();
+                            return _simpleSettingsChip(
+                              style: style,
+                              label: speedOption.label,
+                              selected: selected,
+                              onTap: () => hiveService.setDashboardAnimationSpeed(speedOption),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.bar_chart_rounded,
+                        title: 'Chart Style',
+                        child: _wrapChoiceChips(
+                          children: DashboardChartStyle.values.map((chart) {
+                            final selected = chart == hiveService.getDashboardChartStyle();
+                            return _simpleSettingsChip(
+                              style: style,
+                              label: chart.label,
+                              selected: selected,
+                              onTap: () => hiveService.setDashboardChartStyle(chart),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.interests_rounded,
+                        title: 'Icon Pack',
+                        child: _wrapChoiceChips(
+                          children: DashboardIconPack.values.map((pack) {
+                            final selected = pack == hiveService.getDashboardIconPack();
+                            return _simpleSettingsChip(
+                              style: style,
+                              label: pack.label,
+                              selected: selected,
+                              onTap: () => hiveService.setDashboardIconPack(pack),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.brightness_auto_rounded,
+                        title: 'Dynamic Theme',
+                        child: Column(
+                          children: [
+                            _settingsSwitch(
+                              style: style,
+                              title: 'Follow System Theme',
+                              value: hiveService.getFollowSystemTheme(),
+                              onChanged: hiveService.setFollowSystemTheme,
+                            ),
+                            _settingsSwitch(
+                              style: style,
+                              title: 'Auto Day/Night',
+                              value: hiveService.getAutoDayNight(),
+                              onChanged: hiveService.setAutoDayNight,
+                            ),
+                            _settingsSwitch(
+                              style: style,
+                              title: 'Adaptive Colors',
+                              value: hiveService.getAdaptiveColors(),
+                              onChanged: hiveService.setAdaptiveColors,
+                            ),
+                          ],
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.preview_rounded,
+                        title: 'Live Preview',
+                        child: _livePreview(style),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _settingsSection({required DashboardThemeStyle style, required IconData icon, required String title, required Widget child}) {
+    return AnimatedContainer(
+      duration: hiveService.getDashboardAnimationSpeed().duration,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: style.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: style.primary.withOpacity(0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: style.primary, size: 19),
+              const SizedBox(width: 8),
+              Text(title, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _wrapChoiceChips({required List<Widget> children}) {
+    return Wrap(spacing: 8, runSpacing: 8, children: children);
+  }
+
+  Widget _simpleSettingsChip({required DashboardThemeStyle style, required String label, required bool selected, required VoidCallback onTap}) {
+    final color = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.44 : 0.22)! : style.elevatedSurface;
+    final foreground = color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF17211D);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: hiveService.getDashboardAnimationSpeed().duration,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: selected ? foreground.withOpacity(0.7) : style.primary.withOpacity(0.16), width: selected ? 1.4 : 1),
+          ),
+          child: Text(label, style: TextStyle(color: foreground, fontWeight: FontWeight.w800)),
+        ),
+      ),
+    );
+  }
+
+  Widget _settingsSwitch({required DashboardThemeStyle style, required String title, required bool value, required ValueChanged<bool> onChanged}) {
+    return SwitchListTile.adaptive(
+      contentPadding: EdgeInsets.zero,
+      title: Text(title, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
+      value: value,
+      activeColor: style.primary,
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _livePreview(DashboardThemeStyle style) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [style.elevatedSurface, style.surface]),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: style.primary.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Dashboard Preview', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Text('Hello, Rohan', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 18)),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(value: 0.85, minHeight: 10, backgroundColor: style.elevatedSurface, color: style.primary),
+          ),
+          const SizedBox(height: 8),
+          Text('Daily Progress 85%', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: _previewPill(style, 'Today Tasks')),
+              const SizedBox(width: 8),
+              Expanded(child: _previewPill(style, 'Analytics')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewPill(DashboardThemeStyle style, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(color: style.primary.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+      child: Text(label, textAlign: TextAlign.center, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+    );
+  }
 }

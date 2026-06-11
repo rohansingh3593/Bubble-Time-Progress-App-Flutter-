@@ -27,6 +27,14 @@ class HiveService {
   static const _appFontFamilyKey = '__meta_app_font_family__';
   static const _appFontScaleKey = '__meta_app_font_scale__';
   static const _appFontWeightKey = '__meta_app_font_weight__';
+  static const _dashboardLayoutStyleKey = '__meta_dashboard_layout_style__';
+  static const _dashboardCardAnimationKey = '__meta_dashboard_card_animation__';
+  static const _dashboardAnimationSpeedKey = '__meta_dashboard_animation_speed__';
+  static const _dashboardChartStyleKey = '__meta_dashboard_chart_style__';
+  static const _dashboardIconPackKey = '__meta_dashboard_icon_pack__';
+  static const _followSystemThemeKey = '__meta_follow_system_theme__';
+  static const _autoDayNightKey = '__meta_auto_day_night__';
+  static const _adaptiveColorsKey = '__meta_adaptive_colors__';
   static const int _currentSchemaVersion = 1;
 
   static const List<String> _defaultCategories = [
@@ -423,6 +431,80 @@ class HiveService {
 
   Future<void> setAppFontWeight(AppFontWeightChoice weight) async {
     await _box.put(_appFontWeightKey, <String>[weight.storageKey]);
+  }
+
+  DashboardLayoutStyle getDashboardLayoutStyle() {
+    final stored = _box.get(_dashboardLayoutStyleKey);
+    final firstValue = stored == null || stored.isEmpty ? null : stored.first;
+    return dashboardLayoutStyleFromStorage(firstValue is String ? firstValue : null);
+  }
+
+  Future<void> setDashboardLayoutStyle(DashboardLayoutStyle layout) async {
+    await _box.put(_dashboardLayoutStyleKey, <String>[layout.storageKey]);
+  }
+
+  DashboardCardAnimationStyle getDashboardCardAnimationStyle() {
+    final stored = _box.get(_dashboardCardAnimationKey);
+    final firstValue = stored == null || stored.isEmpty ? null : stored.first;
+    return dashboardCardAnimationStyleFromStorage(firstValue is String ? firstValue : null);
+  }
+
+  Future<void> setDashboardCardAnimationStyle(DashboardCardAnimationStyle animation) async {
+    await _box.put(_dashboardCardAnimationKey, <String>[animation.storageKey]);
+  }
+
+  DashboardAnimationSpeed getDashboardAnimationSpeed() {
+    final stored = _box.get(_dashboardAnimationSpeedKey);
+    final firstValue = stored == null || stored.isEmpty ? null : stored.first;
+    return dashboardAnimationSpeedFromStorage(firstValue is String ? firstValue : null);
+  }
+
+  Future<void> setDashboardAnimationSpeed(DashboardAnimationSpeed speed) async {
+    await _box.put(_dashboardAnimationSpeedKey, <String>[speed.storageKey]);
+  }
+
+  DashboardChartStyle getDashboardChartStyle() {
+    final stored = _box.get(_dashboardChartStyleKey);
+    final firstValue = stored == null || stored.isEmpty ? null : stored.first;
+    return dashboardChartStyleFromStorage(firstValue is String ? firstValue : null);
+  }
+
+  Future<void> setDashboardChartStyle(DashboardChartStyle chartStyle) async {
+    await _box.put(_dashboardChartStyleKey, <String>[chartStyle.storageKey]);
+  }
+
+  DashboardIconPack getDashboardIconPack() {
+    final stored = _box.get(_dashboardIconPackKey);
+    final firstValue = stored == null || stored.isEmpty ? null : stored.first;
+    return dashboardIconPackFromStorage(firstValue is String ? firstValue : null);
+  }
+
+  Future<void> setDashboardIconPack(DashboardIconPack iconPack) async {
+    await _box.put(_dashboardIconPackKey, <String>[iconPack.storageKey]);
+  }
+
+  bool _getBoolPreference(String key) {
+    final stored = _box.get(key);
+    if (stored == null || stored.isEmpty) return false;
+    return stored.first == true;
+  }
+
+  bool getFollowSystemTheme() => _getBoolPreference(_followSystemThemeKey);
+
+  Future<void> setFollowSystemTheme(bool value) async {
+    await _box.put(_followSystemThemeKey, <dynamic>[value]);
+  }
+
+  bool getAutoDayNight() => _getBoolPreference(_autoDayNightKey);
+
+  Future<void> setAutoDayNight(bool value) async {
+    await _box.put(_autoDayNightKey, <dynamic>[value]);
+  }
+
+  bool getAdaptiveColors() => _getBoolPreference(_adaptiveColorsKey);
+
+  Future<void> setAdaptiveColors(bool value) async {
+    await _box.put(_adaptiveColorsKey, <dynamic>[value]);
   }
 
   List<String> getDelegates() {
