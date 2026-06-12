@@ -97,118 +97,156 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
   for (final instruction in linkedInstructions) {
     selectedStatuses[instruction.id] = hiveService.instructionEntryForDate(instruction, task.dueDate)?.status ?? InstructionHistoryEntry.statusNotApplicable;
   }
+  var occurrenceStatus = '';
 
   return showDialog<RoutineOccurrenceAction>(
     context: context,
     builder: (context) => StatefulBuilder(
-      builder: (context, setDialogState) => AlertDialog(
-        title: Text('Update ${task.task} Occurrence'),
-        content: SingleChildScrollView(
-          child: SizedBox(
-            width: 520,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  occurrenceUpdated
-                      ? 'This occurrence is already updated.\n\n${_updatedSummary(task)}\n\nRoutine details are locked here. Use Edit Routine Details to change the routine itself.'
-                      : 'Routine details are locked here. Update only the current occurrence, or pause the routine without deleting its history.',
-                ),
-                const SizedBox(height: 14),
-                const Text('Linked Instructions', style: TextStyle(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 8),
-                if (linkedInstructions.isEmpty)
-                  const Text('No instructions are linked to this task yet.', style: TextStyle(color: Colors.black54))
-                else
-                  ...linkedInstructions.map((instruction) {
-                    final selected = selectedStatuses[instruction.id] ?? InstructionHistoryEntry.statusNotApplicable;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Color(instruction.colorValue).withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Color(instruction.colorValue).withOpacity(0.18)),
+      builder: (context, setDialogState) {
+        final taskCompleted = occurrenceStatus == 'completed';
+        final taskMissed = occurrenceStatus == 'missed';
+        final instructionChoicesEnabled = !occurrenceUpdated && taskCompleted;
+        return AlertDialog(
+          title: Text('Update ${task.task} Occurrence'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 520,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    occurrenceUpdated
+                        ? 'This occurrence is already updated.\n\n${_updatedSummary(task)}\n\nRoutine details are locked here. Use Edit Routine Details to change the routine itself.'
+                        : 'Choose the occurrence status first. Linked instruction bonuses can only be updated when the task is completed.',
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Task Status', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        selected: taskCompleted,
+                        label: const Text('Completed'),
+                        onSelected: !task.routineEnabled || occurrenceUpdated
+                            ? null
+                            : (_) => setDialogState(() => occurrenceStatus = 'completed'),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
-                          if (instruction.description.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Text(instruction.description, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                      ChoiceChip(
+                        selected: taskMissed,
+                        label: const Text('Missed'),
+                        onSelected: !task.routineEnabled || occurrenceUpdated
+                            ? null
+                            : (_) => setDialogState(() => occurrenceStatus = 'missed'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Linked Instructions', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 6),
+                  if (linkedInstructions.isNotEmpty && !taskCompleted && !occurrenceUpdated)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        'Complete the task first to update linked instructions.',
+                        style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  if (linkedInstructions.isEmpty)
+                    const Text('No instructions are linked to this task yet.', style: TextStyle(color: Colors.black54))
+                  else
+                    ...linkedInstructions.map((instruction) {
+                      final selected = taskMissed
+                          ? InstructionHistoryEntry.statusMissed
+                          : selectedStatuses[instruction.id] ?? InstructionHistoryEntry.statusNotApplicable;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Color(instruction.colorValue).withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Color(instruction.colorValue).withOpacity(0.18)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+                            if (instruction.description.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(instruction.description, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                              ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              children: [
+                                _instructionStatusChoice(
+                                  label: 'Followed +${instruction.bonusPoints}',
+                                  value: InstructionHistoryEntry.statusFollowed,
+                                  selected: selected,
+                                  enabled: instructionChoicesEnabled,
+                                  onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusFollowed),
+                                ),
+                                _instructionStatusChoice(
+                                  label: 'Missed',
+                                  value: InstructionHistoryEntry.statusMissed,
+                                  selected: selected,
+                                  enabled: instructionChoicesEnabled,
+                                  onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusMissed),
+                                ),
+                                _instructionStatusChoice(
+                                  label: 'N/A',
+                                  value: InstructionHistoryEntry.statusNotApplicable,
+                                  selected: selected,
+                                  enabled: instructionChoicesEnabled,
+                                  onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusNotApplicable),
+                                ),
+                              ],
                             ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 6,
-                            children: [
-                              _instructionStatusChoice(
-                                label: 'Followed +${instruction.bonusPoints}',
-                                value: InstructionHistoryEntry.statusFollowed,
-                                selected: selected,
-                                enabled: !occurrenceUpdated,
-                                onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusFollowed),
-                              ),
-                              _instructionStatusChoice(
-                                label: 'Missed',
-                                value: InstructionHistoryEntry.statusMissed,
-                                selected: selected,
-                                enabled: !occurrenceUpdated,
-                                onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusMissed),
-                              ),
-                              _instructionStatusChoice(
-                                label: 'N/A',
-                                value: InstructionHistoryEntry.statusNotApplicable,
-                                selected: selected,
-                                enabled: !occurrenceUpdated,
-                                onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusNotApplicable),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-              ],
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.disableRoutine),
-            icon: const Icon(Icons.pause_circle_outline),
-            label: const Text('Disable Routine'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.close),
-            child: const Text('Close'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.editDetails),
-            child: const Text('Edit Routine Details'),
-          ),
-          TextButton(
-            onPressed: !task.routineEnabled || occurrenceUpdated
-                ? null
-                : () async {
-                    await _saveLinkedInstructionStatuses(hiveService, task, linkedInstructions, selectedStatuses);
-                    if (context.mounted) Navigator.of(context).pop(RoutineOccurrenceAction.missOccurrence);
-                  },
-            child: const Text('Miss This Occurrence'),
-          ),
-          ElevatedButton(
-            onPressed: !task.routineEnabled || occurrenceUpdated
-                ? null
-                : () async {
-                    await _saveLinkedInstructionStatuses(hiveService, task, linkedInstructions, selectedStatuses);
-                    if (context.mounted) Navigator.of(context).pop(RoutineOccurrenceAction.completeOccurrence);
-                  },
-            child: const Text('Save & Complete Occurrence'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.disableRoutine),
+              icon: const Icon(Icons.pause_circle_outline),
+              label: const Text('Disable Routine'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.close),
+              child: const Text('Close'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.editDetails),
+              child: const Text('Edit Routine Details'),
+            ),
+            ElevatedButton(
+              onPressed: !task.routineEnabled || occurrenceUpdated || occurrenceStatus.isEmpty
+                  ? null
+                  : () async {
+                      final completed = occurrenceStatus == 'completed';
+                      await _saveLinkedInstructionStatuses(
+                        hiveService,
+                        task,
+                        linkedInstructions,
+                        selectedStatuses,
+                        occurrenceCompleted: completed,
+                      );
+                      if (context.mounted) {
+                        Navigator.of(context).pop(completed ? RoutineOccurrenceAction.completeOccurrence : RoutineOccurrenceAction.missOccurrence);
+                      }
+                    },
+              child: const Text('Save Occurrence'),
+            ),
+          ],
+        );
+      },
     ),
   );
 }
@@ -240,15 +278,18 @@ Future<void> _saveLinkedInstructionStatuses(
   HiveService hiveService,
   Task task,
   List<InstructionRule> instructions,
-  Map<String, String> selectedStatuses,
-) async {
+  Map<String, String> selectedStatuses, {
+  required bool occurrenceCompleted,
+}) async {
   for (final instruction in instructions) {
-    final status = selectedStatuses[instruction.id] ?? InstructionHistoryEntry.statusNotApplicable;
+    final status = occurrenceCompleted
+        ? selectedStatuses[instruction.id] ?? InstructionHistoryEntry.statusNotApplicable
+        : InstructionHistoryEntry.statusMissed;
     await hiveService.updateInstructionStatus(
       instruction,
       task.dueDate,
       status,
-      note: 'Task occurrence: ${task.task} • ${routineOccurrenceLabel(task)}',
+      note: 'Task occurrence: ${task.task} • ${routineOccurrenceLabel(task)} • ${occurrenceCompleted ? 'completed' : 'missed'}',
     );
   }
 }

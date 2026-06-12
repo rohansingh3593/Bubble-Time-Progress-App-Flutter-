@@ -115,7 +115,15 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
               title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
               subtitle: Text(entry == null ? 'Pending for current period' : 'Already updated: ${entry.status}'),
             ),
-            if (entry == null && instruction.enabled) ...[
+            if (instruction.linkedTasks.isNotEmpty || instruction.linkedPhase.trim().isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  'This instruction is linked to a task. Update it from the task occurrence screen.',
+                  style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54),
+                ),
+              )
+            else if (entry == null && instruction.enabled) ...[
               ListTile(leading: const Icon(Icons.check_circle_outline, color: Colors.green), title: const Text('Followed'), onTap: () => Navigator.pop(context, 'followed')),
               ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
             ] else
