@@ -984,46 +984,85 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _buildDashboardHeader(RankProfile profile) {
     final style = _dashboardStyle();
-    return Row(
+    final avatar = ProfileAvatar(
+      profile: widget.hiveService.getUserProfile(),
+      radius: 22,
+      accentColor: style.primary,
+      showGlow: false,
+      onTap: _openProductivityTimeline,
+    );
+    final greeting = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ProfileAvatar(
-          profile: widget.hiveService.getUserProfile(),
-          radius: 22,
-          accentColor: style.primary,
-          showGlow: false,
-          onTap: _openProductivityTimeline,
+        Text(
+          'Hello, ${profile.username}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: style.textPrimary),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
+        const SizedBox(height: 2),
+        Text('Focus. Plan. Achieve.', style: TextStyle(color: style.textMuted)),
+      ],
+    );
+    final actions = <Widget>[
+      _headerActionButton(
+        icon: Icons.notifications_none_rounded,
+        tooltip: 'Notifications',
+        style: style,
+        onTap: _openJournal,
+      ),
+      _instructionHeaderButton(style),
+      _goalHeaderButton(style),
+      _rewardMoneyBadge(style),
+      _headerActionButton(
+        icon: Icons.settings_rounded,
+        tooltip: 'Dashboard settings',
+        style: style,
+        onTap: _openSettingsPanel,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 620) {
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Hello, ${profile.username}', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: style.textPrimary)),
-              const SizedBox(height: 2),
-              Text('Focus. Plan. Achieve.', style: TextStyle(color: style.textMuted)),
+              Row(
+                children: [
+                  avatar,
+                  const SizedBox(width: 12),
+                  Expanded(child: greeting),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (var index = 0; index < actions.length; index++) ...[
+                      if (index > 0) const SizedBox(width: 8),
+                      actions[index],
+                    ],
+                  ],
+                ),
+              ),
             ],
-          ),
-        ),
-        _headerActionButton(
-          icon: Icons.notifications_none_rounded,
-          tooltip: 'Notifications',
-          style: style,
-          onTap: _openJournal,
-        ),
-        const SizedBox(width: 8),
-        _instructionHeaderButton(style),
-        const SizedBox(width: 8),
-        _goalHeaderButton(style),
-        const SizedBox(width: 8),
-        _rewardMoneyBadge(style),
-        const SizedBox(width: 8),
-        _headerActionButton(
-          icon: Icons.settings_rounded,
-          tooltip: 'Dashboard settings',
-          style: style,
-          onTap: _openSettingsPanel,
-        ),
-      ],
+          );
+        }
+
+        return Row(
+          children: [
+            avatar,
+            const SizedBox(width: 12),
+            Expanded(child: greeting),
+            for (var index = 0; index < actions.length; index++) ...[
+              if (index > 0) const SizedBox(width: 8),
+              actions[index],
+            ],
+          ],
+        );
+      },
     );
   }
 
