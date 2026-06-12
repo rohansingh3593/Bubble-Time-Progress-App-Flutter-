@@ -18,6 +18,10 @@ class HiveService {
   static const _usernameKey = '__meta_username__';
   static const _userProfileKey = '__meta_user_profile__';
   static const _journalPrefix = '__journal__';
+  static const _dailyJournalTaskName = 'Daily Journal';
+  static const _dailyJournalCategory = 'Journal';
+  static const _dailyJournalDescription =
+      'Built-in System Task • Completed by saving a journal entry';
   static const _journeyPrefix = '__journey__';
   static const _productivityPrefix = '__productivity_snapshot__';
   static const _autoJourneyPrefix = 'auto_journey_';
@@ -43,6 +47,7 @@ class HiveService {
     'Study',
     'Health',
     'Finance',
+    _dailyJournalCategory,
   ];
   late Box<List> _box;
 
@@ -185,11 +190,66 @@ class HiveService {
     return date.toIso8601String().split('T').first;
   }
 
-  List<Task> getTasksForDate(DateTime date) {
+  List<Task> _storedTasksForDate(DateTime date) {
     final key = _formatKey(date);
     final rawList = _box.get(key);
-    if (rawList == null) return [];
-    return rawList.cast<Task>().toList();
+    if (rawList == null) return <Task>[];
+    return rawList.cast<Task>().where((task) => !_isDailyJournalTask(task)).toList();
+  }
+
+  List<Task> getTasksForDate(DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    return [
+      ..._storedTasksForDate(day),
+      _dailyJournalTaskForDate(day),
+    ];
+  }
+
+  Task _dailyJournalTaskForDate(DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final journal = getJournalEntryForDate(day);
+    final completed = journal != null;
+    final missed = !completed && day.isBefore(todayOnly);
+
+    return Task(
+      task: _dailyJournalTaskName,
+      done: completed,
+      description: completed
+          ? 'Built-in System Task • Journal saved successfully'
+          : _dailyJournalDescription,
+      dueDate: day,
+      priority: 'Important',
+      status: completed ? 'Completed' : missed ? 'Missed' : 'Not Completed',
+      category: _dailyJournalCategory,
+      repeatTask: true,
+      repeatFrequency: 'Daily',
+      urgent: false,
+      important: true,
+      estimatedMinutes: 15,
+      colorValue: 0xFF7E57C2,
+      routineEnabled: true,
+    );
+  }
+
+  bool _isDailyJournalTask(Task task) {
+    return task.task.trim().toLowerCase() == _dailyJournalTaskName.toLowerCase() &&
+        task.category.trim().toLowerCase() == _dailyJournalCategory.toLowerCase();
+  }
+
+  bool isDailyJournalTask(Task task) => _isDailyJournalTask(task);
+
+  Future<void> _putTasksForKey(
+    String key,
+    List<Task> tasks, {
+    bool dedupeRecurring = true,
+  }) async {
+    final filtered = tasks.where((task) => !_isDailyJournalTask(task)).toList();
+    await _box.put(
+      key,
+      dedupeRecurring ? _dedupeRecurringTasksForDate(filtered) : filtered,
+    );
   }
 
 
@@ -321,13 +381,15 @@ class HiveService {
   }
 
   Future<void> saveJournalEntry(JournalEntry entry) async {
-    await _box.put(_journalKey(entry.date), entry.toStorageList());
-    await _syncAutoJourneyForDate(entry.date);
+    final day = DateTime(entry.date.year, entry.date.month, entry.date.day);
+    await _box.put(_journalKey(day), entry.toStorageList());
+    await recalculateProductivitySnapshotForDate(day);
   }
 
   Future<void> deleteJournalEntry(DateTime date) async {
-    await _box.delete(_journalKey(date));
-    await _syncAutoJourneyForDate(date);
+    final day = DateTime(date.year, date.month, date.day);
+    await _box.delete(_journalKey(day));
+    await recalculateProductivitySnapshotForDate(day);
   }
 
   List<JournalEntry> getAllJournalEntries() {
@@ -524,10 +586,10 @@ class HiveService {
 
   Future<void> addTask(DateTime date, Task task) async {
     final key = _formatKey(date);
-    final tasks = getTasksForDate(date);
+    final tasks = _storedTasksForDate(date);
     final normalizedTask = _withNormalizedTaskName(task);
     tasks.add(normalizedTask);
-    await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+    await _putTasksForKey(key, tasks);
     await recalculateProductivitySnapshotForDate(date);
   }
 
@@ -540,11 +602,11 @@ class HiveService {
     }
 
     final key = _formatKey(date);
-    final tasks = getTasksForDate(date);
+    final tasks = _storedTasksForDate(date);
     if (index < 0 || index >= tasks.length) return;
 
     tasks[index] = normalizedTask;
-    await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+    await _putTasksForKey(key, tasks);
     await recalculateProductivitySnapshotForDate(date);
 
     await _handleRecurringIfNeeded(updated: normalizedTask);
@@ -552,16 +614,16 @@ class HiveService {
 
   Future<void> deleteTask(DateTime date, int index) async {
     final key = _formatKey(date);
-    final tasks = getTasksForDate(date);
+    final tasks = _storedTasksForDate(date);
     if (index < 0 || index >= tasks.length) return;
     tasks.removeAt(index);
-    await _box.put(key, tasks);
+    await _putTasksForKey(key, tasks, dedupeRecurring: false);
     await recalculateProductivitySnapshotForDate(date);
   }
 
   Future<void> toggleTaskStatus(DateTime date, int index) async {
     final key = _formatKey(date);
-    final tasks = getTasksForDate(date);
+    final tasks = _storedTasksForDate(date);
     if (index < 0 || index >= tasks.length) return;
 
     final currentTask = tasks[index];
@@ -572,7 +634,7 @@ class HiveService {
     );
 
     tasks[index] = updatedTask;
-    await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+    await _putTasksForKey(key, tasks);
     await recalculateProductivitySnapshotForDate(date);
 
     await _handleRecurringIfNeeded(updated: updatedTask);
@@ -589,7 +651,7 @@ class HiveService {
     if (nextDueDate == null) return;
 
     final nextKey = _formatKey(nextDueDate);
-    final nextDateTasks = getTasksForDate(nextDueDate);
+    final nextDateTasks = _storedTasksForDate(nextDueDate);
 
     final nextOccurrence = updated.copyWith(
       dueDate: nextDueDate,
@@ -607,7 +669,7 @@ class HiveService {
       nextDateTasks.add(nextOccurrence);
     }
 
-    await _box.put(nextKey, _dedupeRecurringTasksForDate(nextDateTasks));
+    await _putTasksForKey(nextKey, nextDateTasks);
   }
 
   bool _isTerminalStatus(String status) {
@@ -665,7 +727,7 @@ class HiveService {
     final occurrenceDate = _currentOccurrenceDate(normalizedTask.repeatFrequency, now);
     final normalizedUpdated = normalizedTask.copyWith(dueDate: occurrenceDate, repeatTask: true);
     final key = _formatKey(occurrenceDate);
-    final tasks = getTasksForDate(occurrenceDate);
+    final tasks = _storedTasksForDate(occurrenceDate);
 
     final existingIndex = tasks.indexWhere((task) => _isSameRecurringTaskIdentity(task, normalizedUpdated));
     if (existingIndex >= 0) {
@@ -674,7 +736,7 @@ class HiveService {
       tasks.add(normalizedUpdated);
     }
 
-    await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+    await _putTasksForKey(key, tasks);
     await recalculateProductivitySnapshotForDate(occurrenceDate);
     await _handleRecurringIfNeeded(updated: normalizedUpdated);
     return true;
@@ -697,7 +759,7 @@ class HiveService {
         final candidate = tasks[i];
         if (identical(candidate, original) || _matchesTaskIdentity(candidate, original)) {
           tasks[i] = normalizedUpdated;
-          await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+          await _putTasksForKey(key, tasks);
           final changedDate = DateTime.parse(key);
           await recalculateProductivitySnapshotForDate(changedDate);
           await _handleRecurringIfNeeded(updated: normalizedUpdated);
@@ -722,7 +784,7 @@ class HiveService {
         final candidate = tasks[i];
         if (identical(candidate, original) || _matchesTaskIdentity(candidate, original)) {
           tasks.removeAt(i);
-          await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+          await _putTasksForKey(key, tasks);
           final changedDate = DateTime.parse(key);
           await recalculateProductivitySnapshotForDate(changedDate);
           return true;
@@ -764,7 +826,7 @@ class HiveService {
       }
 
       if (listChanged) {
-        await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+        await _putTasksForKey(key, tasks);
         changedDates.add(DateTime.parse(key));
       }
     }
@@ -803,7 +865,7 @@ class HiveService {
       }
 
       if (listChanged) {
-        await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+        await _putTasksForKey(key, tasks);
         changedDates.add(DateTime.parse(key));
       }
     }
@@ -822,7 +884,7 @@ class HiveService {
   Future<void> _ensureCurrentRecurringOccurrenceEnabled(Task original) async {
     final occurrenceDate = _currentOccurrenceDate(original.repeatFrequency, DateTime.now());
     final key = _formatKey(occurrenceDate);
-    final tasks = getTasksForDate(occurrenceDate);
+    final tasks = _storedTasksForDate(occurrenceDate);
     final occurrence = _withNormalizedTaskName(
       original.copyWith(
         dueDate: occurrenceDate,
@@ -840,7 +902,7 @@ class HiveService {
       tasks.add(occurrence);
     }
 
-    await _box.put(key, _dedupeRecurringTasksForDate(tasks));
+    await _putTasksForKey(key, tasks);
     await recalculateProductivitySnapshotForDate(occurrenceDate);
   }
 
@@ -948,7 +1010,7 @@ class HiveService {
         completedTasks++;
         completedTaskNames.add(task.task);
         if (task.repeatTask) {
-          routineCompletions++;
+          if (!_isDailyJournalTask(task)) routineCompletions++;
           final streak = _routineCompletionStreakForDate(task, day);
           taskBonusPoints = _streakBonusForLength(streak);
           if (taskBonusPoints > 0) {
@@ -1082,14 +1144,24 @@ class HiveService {
         .toList();
     final photoCount = manualEntries.where((entry) => entry.hasImage).length;
     final lifetime = getLifetimeProductivityStats();
-    final lines = <String>['${_isSameDate(day, DateTime.now()) ? 'Today' : 'Day'} • ${_humanDate(day)}'];
+    final lines = <String>[
+      '${_isSameDate(day, DateTime.now()) ? 'Today' : 'Day'} • ${_humanDate(day)}',
+    ];
 
     for (final task in tasks) {
       final status = task.status.trim().toLowerCase();
       final minutes = taskRecordedMinutesForDay(task);
       if (_isCompletedTask(task) && minutes > 0) {
-        lines.add('${task.repeatTask ? '✅ Routine' : '✅ Task'} ${task.task} completed • +$minutes min');
-      } else if (task.repeatTask && (status == 'missed' || status == 'overdue' || status == 'cancelled')) {
+        if (_isDailyJournalTask(task)) {
+          lines.add('📔 Daily Journal completed • Reflection saved successfully • +$minutes min');
+        } else {
+          lines.add(
+            '${task.repeatTask ? '✅ Routine' : '✅ Task'} ${task.task} completed • +$minutes min',
+          );
+        }
+      } else if (task.repeatTask &&
+          !_isDailyJournalTask(task) &&
+          (status == 'missed' || status == 'overdue' || status == 'cancelled')) {
         lines.add("❌ ${task.task} ${status == 'cancelled' ? 'cancelled' : status}");
       }
 
@@ -1098,8 +1170,12 @@ class HiveService {
       }
     }
 
-    final disabledRoutines = tasks.where((task) => task.repeatTask && !task.routineEnabled).length;
-    final enabledRoutines = tasks.where((task) => task.repeatTask && task.routineEnabled).length;
+    final disabledRoutines = tasks
+        .where((task) => task.repeatTask && !_isDailyJournalTask(task) && !task.routineEnabled)
+        .length;
+    final enabledRoutines = tasks
+        .where((task) => task.repeatTask && !_isDailyJournalTask(task) && task.routineEnabled)
+        .length;
     if (disabledRoutines > 0) lines.add('⏸️ $disabledRoutines routine${disabledRoutines == 1 ? '' : 's'} disabled');
     if (enabledRoutines > 0) lines.add('🔁 $enabledRoutines routine${enabledRoutines == 1 ? '' : 's'} enabled');
 
@@ -1119,7 +1195,9 @@ class HiveService {
     }
     if (photoCount > 0) lines.add('📷 $photoCount photo${photoCount == 1 ? '' : 's'} attached');
 
-    final hasActivity = snapshot.totalPoints > 0 || tasks.isNotEmpty || journal != null || manualEntries.isNotEmpty;
+    final hasTaskActivity = tasks.any((task) => !_isDailyJournalTask(task) || _isCompletedTask(task));
+    final hasActivity =
+        snapshot.totalPoints > 0 || hasTaskActivity || journal != null || manualEntries.isNotEmpty;
     final key = _journeyKey(_autoJourneyId(day));
     if (!hasActivity) {
       await _box.delete(key);
@@ -1186,8 +1264,21 @@ class HiveService {
       final tasks = _box.get(key);
       if (tasks == null) continue;
 
-      result[DateTime(parsedDate.year, parsedDate.month, parsedDate.day)] =
-          _dedupeRecurringTasksForDate(tasks.cast<Task>().toList());
+      final day = DateTime(parsedDate.year, parsedDate.month, parsedDate.day);
+      result[day] = [
+        ..._dedupeRecurringTasksForDate(
+          tasks.cast<Task>().where((task) => !_isDailyJournalTask(task)).toList(),
+        ),
+        _dailyJournalTaskForDate(day),
+      ];
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    result.putIfAbsent(today, () => <Task>[_dailyJournalTaskForDate(today)]);
+    for (final journal in getAllJournalEntries()) {
+      final day = DateTime(journal.date.year, journal.date.month, journal.date.day);
+      result.putIfAbsent(day, () => <Task>[_dailyJournalTaskForDate(day)]);
     }
 
     return result;

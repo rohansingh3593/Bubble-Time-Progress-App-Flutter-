@@ -80,8 +80,10 @@ class _JournalViewState extends State<JournalView> {
   }
 
   Future<void> _saveEntry(List<Task> tasksForDay) async {
-    final completed = tasksForDay.where(_isCompleted).length;
     final total = tasksForDay.where((task) => task.status != 'Cancelled').length;
+    final completed = tasksForDay
+        .where((task) => _isCompleted(task) || widget.hiveService.isDailyJournalTask(task))
+        .length;
     final score = total == 0 ? 0 : ((completed / total) * 100).round();
 
     await widget.hiveService.saveJournalEntry(
