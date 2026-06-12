@@ -101,7 +101,7 @@ class _MonthViewState extends State<MonthView> {
 
   Future<void> _editTask(Task task) async {
     if (isRoutineTask(task)) {
-      final action = await showRoutineOccurrenceDialog(context: context, task: task);
+      final action = await showRoutineOccurrenceDialog(context: context, task: task, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {

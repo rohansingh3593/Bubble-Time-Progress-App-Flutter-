@@ -1,6 +1,7 @@
 class InstructionHistoryEntry {
   static const String statusFollowed = 'Followed';
   static const String statusMissed = 'Missed';
+  static const String statusNotApplicable = 'Not Applicable';
 
   final DateTime date;
   final String status;
@@ -18,6 +19,7 @@ class InstructionHistoryEntry {
 
   bool get followed => status == statusFollowed;
   bool get missed => status == statusMissed;
+  bool get notApplicable => status == statusNotApplicable;
 
   List<dynamic> toStorageList() => [
         date.toIso8601String(),

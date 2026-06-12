@@ -77,7 +77,7 @@ class _DayViewState extends State<DayView> {
 
   Future<void> _editTask(Task task, {int? index}) async {
     if (isRoutineTask(task)) {
-      final action = await showRoutineOccurrenceDialog(context: context, task: task);
+      final action = await showRoutineOccurrenceDialog(context: context, task: task, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {

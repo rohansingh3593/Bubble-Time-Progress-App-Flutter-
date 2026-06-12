@@ -43,7 +43,7 @@ class _TaskScreenState extends State<TaskScreen> {
     final currentTask = tasks[index];
 
     if (isRoutineTask(currentTask)) {
-      final action = await showRoutineOccurrenceDialog(context: context, task: currentTask);
+      final action = await showRoutineOccurrenceDialog(context: context, task: currentTask, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {
