@@ -308,10 +308,10 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
         },
       ),
     );
-    nameController.dispose();
-    descriptionController.dispose();
-    bonusController.dispose();
-    xpController.dispose();
+    // Do not dispose these local dialog controllers here: Flutter can still rebuild
+    // the closing dialog route for its exit animation after showDialog completes.
+    // Disposing immediately caused "TextEditingController was used after being
+    // disposed" crashes while the Add/Edit Instruction dialog was closing.
     if (saved != null) await widget.hiveService.saveInstruction(saved);
   }
 
@@ -413,7 +413,8 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
         },
       ),
     );
-    searchController.dispose();
+    // The selector dialog may rebuild briefly during route teardown, so avoid
+    // disposing the controller synchronously while its TextField can still detach.
     return result;
   }
 
