@@ -140,21 +140,73 @@ class _InstructionStreakPanel extends StatelessWidget {
                   : entry?.missed == true
                       ? Colors.red
                       : Color(instruction.colorValue);
+              final bubbleDates = _instructionBubbleDates(today);
               return Container(
-                margin: const EdgeInsets.only(bottom: 8),
+                margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: color.withOpacity(0.10), borderRadius: BorderRadius.circular(16)),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.rule_folder_outlined, color: color),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary))),
-                    Text('${hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+                    Row(
+                      children: [
+                        Icon(Icons.rule_folder_outlined, color: color),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary))),
+                        Text('${hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: bubbleDates.map((date) {
+                          final dateEntry = hiveService.instructionEntryForDate(instruction, date);
+                          return _InstructionDateBubble(date: date, completed: dateEntry?.followed == true);
+                        }).toList(),
+                      ),
+                    ),
                   ],
                 ),
               );
             }),
         ],
+      ),
+    );
+  }
+}
+
+
+List<DateTime> _instructionBubbleDates(DateTime today) {
+  final normalizedToday = DateTime(today.year, today.month, today.day);
+  return List<DateTime>.generate(14, (index) => normalizedToday.subtract(Duration(days: 13 - index)));
+}
+
+class _InstructionDateBubble extends StatelessWidget {
+  final DateTime date;
+  final bool completed;
+
+  const _InstructionDateBubble({required this.date, required this.completed});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = completed ? Colors.green : Colors.red;
+    final label = completed ? 'Completed' : 'Missed';
+    return Tooltip(
+      message: '${date.day}/${date.month}/${date.year} • $label',
+      child: Container(
+        width: 28,
+        height: 28,
+        margin: const EdgeInsets.only(right: 6),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color.withOpacity(0.16),
+          border: Border.all(color: color.withOpacity(0.55), width: 1.2),
+          boxShadow: [
+            BoxShadow(color: color.withOpacity(0.12), blurRadius: 8, offset: const Offset(0, 3)),
+          ],
+        ),
+        child: Icon(completed ? Icons.check_rounded : Icons.close_rounded, size: 16, color: color),
       ),
     );
   }
