@@ -166,7 +166,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 14),
               _buildDisabledRoutineBoard(disabledRoutineTasks),
               const SizedBox(height: 14),
-              _todaysProductivitySection(todayProductivityStats),
+              _todaysProductivitySection(todayProductivityStats, todayTaskRows),
               const SizedBox(height: 14),
               _todayTasksSection(todayTaskRows),
               const SizedBox(height: 12),
@@ -351,6 +351,164 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       ),
     );
   }
+
+  Future<void> _editTaskDetails(Task task) async {
+    if (isDailyJournalSystemTask(task)) {
+      _openJournalForTask(task);
+      return;
+    }
+
+    final updated = await showTaskFormDialog(
+      context,
+      date: task.dueDate,
+      initialTask: task,
+      title: isRoutineTask(task) ? 'Edit Routine Details' : 'Update Task',
+      actionLabel: isRoutineTask(task) ? 'Save Routine' : 'Save Task',
+      onDelete: isRoutineTask(task) ? null : () => widget.hiveService.deleteTaskByReference(task),
+    );
+
+    if (updated == null) return;
+    if (isRoutineTask(task)) {
+      await widget.hiveService.updateRecurringTaskSeriesByReference(task, updated.copyWith(repeatTask: true));
+    } else {
+      await widget.hiveService.updateTaskByReference(task, updated);
+    }
+  }
+
+  Future<void> _openTodayTaskQuickOccurrence(_DashboardTodayTask row) async {
+    final task = row.task;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Have you done this task today?', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Text(task.task, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                title: const Text('Complete'),
+                onTap: () => Navigator.pop(context, 'complete'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
+                title: const Text('Missed'),
+                onTap: () => Navigator.pop(context, 'missed'),
+              ),
+              if (isRoutineTask(task))
+                ListTile(
+                  leading: const Icon(Icons.pause_circle_outline),
+                  title: const Text('Disable Routine'),
+                  onTap: () => Navigator.pop(context, 'disable'),
+                ),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: const Text('Close'),
+                onTap: () => Navigator.pop(context, 'close'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    switch (action) {
+      case 'complete':
+        await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed'));
+        break;
+      case 'missed':
+        await widget.hiveService.updateTaskByReference(task, task.copyWith(done: false, status: 'Missed'));
+        break;
+      case 'disable':
+        await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
+        break;
+    }
+  }
+
+  void _showTaskListSheet(String title, List<Task> tasks) {
+    final style = _dashboardStyle();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.62,
+          minChildSize: 0.35,
+          maxChildSize: 0.9,
+          builder: (context, scrollController) => Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(color: style.textPrimary, fontSize: 20, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 8),
+                Text('${tasks.length} task${tasks.length == 1 ? '' : 's'}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: tasks.isEmpty
+                      ? const Center(child: Text('No tasks found for this filter.'))
+                      : ListView.separated(
+                          controller: scrollController,
+                          itemBuilder: (context, index) {
+                            final task = tasks[index];
+                            return ListTile(
+                              leading: CircleAvatar(backgroundColor: Color(task.colorValue).withOpacity(0.14), child: Icon(_isCompletedTask(task) ? Icons.check : Icons.task_alt, color: Color(task.colorValue))),
+                              title: Text(task.task, style: const TextStyle(fontWeight: FontWeight.w800)),
+                              subtitle: Text('${task.priority} • ${task.status} • ${_formatDueLabel(task)}'),
+                              trailing: Icon(_isCompletedTask(task) ? Icons.check_circle_outline : Icons.chevron_right, color: _isCompletedTask(task) ? Colors.green : style.primary),
+                              onTap: () {
+                                Navigator.pop(context);
+                                _editTaskDetails(task);
+                              },
+                            );
+                          },
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemCount: tasks.length,
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Task> _todayTasksForFilter(List<_DashboardTodayTask> rows, String filter) {
+    switch (filter) {
+      case 'completed':
+        return rows.where((row) => row.group == _TodayTaskGroup.completed).map((row) => row.task).toList();
+      case 'pending':
+        return rows.where((row) => row.group == _TodayTaskGroup.pending).map((row) => row.task).toList();
+      case 'overdue':
+        return rows.where((row) => row.group == _TodayTaskGroup.overdue).map((row) => row.task).toList();
+      default:
+        return rows.map((row) => row.task).toList();
+    }
+  }
+
+  List<Task> _analyticsTasksForFilter(List<Task> tasks, String filter) {
+    final today = _dateOnly(DateTime.now());
+    switch (filter) {
+      case 'completed':
+        return tasks.where(_isCompletedTask).toList();
+      case 'pending':
+        return tasks.where(_isPendingTask).toList();
+      case 'overdue':
+        return tasks.where((task) => _dateOnly(task.dueDate).isBefore(today) && _isPendingTask(task)).toList();
+      default:
+        return tasks;
+    }
+  }
+
 
   Future<void> _editTask(Task task) async {
     if (isRoutineTask(task)) {
@@ -1068,65 +1226,21 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
   Widget _instructionHeaderButton(DashboardThemeStyle style) {
-    return Tooltip(
-      message: 'Instruction dashboard',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: _openInstructionDashboard,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-            decoration: BoxDecoration(
-              color: style.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: style.primary.withOpacity(0.14)),
-              boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.rule_folder_outlined, color: style.primary, size: 18),
-                const SizedBox(width: 6),
-                Text('Instructions', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return _headerActionButton(
+      icon: Icons.menu_book_rounded,
+      tooltip: 'Instruction dashboard',
+      style: style,
+      onTap: _openInstructionDashboard,
     );
   }
 
 
   Widget _goalHeaderButton(DashboardThemeStyle style) {
-    return Tooltip(
-      message: 'Goal dashboard',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: _openGoalDashboard,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-            decoration: BoxDecoration(
-              color: style.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: style.primary.withOpacity(0.14)),
-              boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.flag_circle_outlined, color: style.primary, size: 18),
-                const SizedBox(width: 6),
-                Text('Goals', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return _headerActionButton(
+      icon: Icons.flag_circle_outlined,
+      tooltip: 'Goal dashboard',
+      style: style,
+      onTap: _openGoalDashboard,
     );
   }
 
@@ -1944,7 +2058,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final taskColor = Color(task.colorValue);
           return InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () => _editTask(task),
+            onTap: () => _editTaskDetails(task),
             child: Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(10),
@@ -2312,10 +2426,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _analyticsSummaryPill('Total Tasks', tasks.length, Icons.analytics_outlined),
-                  _analyticsSummaryPill('Completed', completed, Icons.check_circle_outline),
-                  _analyticsSummaryPill('Pending', pending, Icons.timelapse_outlined),
-                  _analyticsSummaryPill('Overdue', overdue, Icons.warning_amber_rounded),
+                  _analyticsSummaryPill('Total Tasks', tasks.length, Icons.analytics_outlined, onTap: () => _showTaskListSheet('All non-routine tasks', _analyticsTasksForFilter(tasks, 'all'))),
+                  _analyticsSummaryPill('Completed', completed, Icons.check_circle_outline, onTap: () => _showTaskListSheet('Completed non-routine tasks', _analyticsTasksForFilter(tasks, 'completed'))),
+                  _analyticsSummaryPill('Pending', pending, Icons.timelapse_outlined, onTap: () => _showTaskListSheet('Pending non-routine tasks', _analyticsTasksForFilter(tasks, 'pending'))),
+                  _analyticsSummaryPill('Overdue', overdue, Icons.warning_amber_rounded, onTap: () => _showTaskListSheet('Overdue non-routine tasks', _analyticsTasksForFilter(tasks, 'overdue'))),
                 ],
               ),
             ),
@@ -2377,10 +2491,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Widget _analyticsSummaryPill(String label, int value, IconData icon) {
+  Widget _analyticsSummaryPill(String label, int value, IconData icon, {VoidCallback? onTap}) {
     final style = _dashboardStyle();
-    return Container(
-      width: 150,
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        width: 150,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: style.elevatedSurface.withOpacity(style.dark ? 0.72 : 0.56),
@@ -2408,6 +2525,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -2681,7 +2799,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Widget _todaysProductivitySection(_TodayProductivityStats stats) {
+  Widget _todaysProductivitySection(_TodayProductivityStats stats, List<_DashboardTodayTask> todayRows) {
     final style = _dashboardStyle();
     final badge = _productivityBadge(stats.completionRate);
     const completedColor = Color(0xFF2ECC71);
@@ -2775,11 +2893,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _todayProductivityStat('Today\'s Tasks', stats.total),
-                        _todayProductivityStat('Completed', stats.completed),
-                        _todayProductivityStat('Pending', stats.pending),
-                        _todayProductivityStat('Overdue', stats.overdue),
-                        _todayProductivityStat('Completion Rate', stats.completionRate, suffix: '%'),
+                        _todayProductivityStat('Total Tasks', stats.total, onTap: () => _showTaskListSheet("All today's tasks", _todayTasksForFilter(todayRows, 'all'))),
+                        _todayProductivityStat('Completed', stats.completed, onTap: () => _showTaskListSheet("Completed today", _todayTasksForFilter(todayRows, 'completed'))),
+                        _todayProductivityStat('Pending', stats.pending, onTap: () => _showTaskListSheet("Pending today", _todayTasksForFilter(todayRows, 'pending'))),
+                        _todayProductivityStat('Overdue', stats.overdue, onTap: () => _showTaskListSheet("Overdue today", _todayTasksForFilter(todayRows, 'overdue'))),
+                        _todayProductivityStat('Completion Rate', stats.completionRate, suffix: '%', onTap: () => _showTaskListSheet("All today's tasks", _todayTasksForFilter(todayRows, 'all'))),
                       ],
                     ),
                   ],
@@ -2815,10 +2933,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Widget _todayProductivityStat(String label, int value, {String suffix = ''}) {
+  Widget _todayProductivityStat(String label, int value, {String suffix = '', VoidCallback? onTap}) {
     final style = _dashboardStyle();
-    return Container(
-      width: 150,
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        width: 150,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: style.elevatedSurface.withOpacity(style.dark ? 0.72 : 0.52),
@@ -2838,6 +2959,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -2908,7 +3030,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       rows.add(
         ListTile(
           dense: true,
-          onTap: () => _editTask(task),
+          onTap: () => _openTodayTaskQuickOccurrence(row),
           title: Text(task.task, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w700)),
           subtitle: Text('${task.priority} • ${row.displayStatus} • ${_formatDueLabel(task)}', style: TextStyle(color: style.textMuted)),
           trailing: Icon(
