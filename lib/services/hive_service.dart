@@ -22,10 +22,11 @@ class HiveService {
   static const _dailyJournalCategory = 'Journal';
   static const _dailyJournalDescription =
       'Built-in System Task • Completed by saving a journal entry';
-  static const _scheduledTimeMarker = '⏰ Scheduled:';
-  static const _timingBonusWindowMinutes = 15;
-  static const _onTimeTimingBonusPoints = 20;
-  static const _earlyTimingBonusPoints = 10;
+  static const _legacyScheduledTimeMarker = '⏰ Scheduled:';
+  static const _scheduleStartMarker = '⏰ Schedule Start:';
+  static const _scheduleEndMarker = '⏰ Schedule End:';
+  static const _scheduleBonusMarker = '⏰ Schedule Bonus:';
+  static const _defaultScheduleBonusPoints = 20;
   static const _journeyPrefix = '__journey__';
   static const _productivityPrefix = '__productivity_snapshot__';
   static const _autoJourneyPrefix = 'auto_journey_';
@@ -221,8 +222,8 @@ class HiveService {
       task: _dailyJournalTaskName,
       done: completed,
       description: completed
-          ? 'Built-in System Task • Journal saved successfully\n$_scheduledTimeMarker 21:45'
-          : '$_dailyJournalDescription\n$_scheduledTimeMarker 21:45',
+          ? 'Built-in System Task • Journal saved successfully'
+          : _dailyJournalDescription,
       dueDate: journal?.date ?? day,
       priority: 'Important',
       status: completed ? 'Completed' : missed ? 'Missed' : 'Not Completed',
@@ -1037,7 +1038,7 @@ class HiveService {
             reason = '$streak-day streak milestone';
           }
 
-          final timingBonus = _routineTimingBonusForTask(task, streak);
+          final timingBonus = _routineTimingBonusForTask(task);
           taskTimingBonusPoints = timingBonus.points;
           taskTimingXpBonus = timingBonus.xp;
           if (taskTimingBonusPoints > 0) {
@@ -1121,62 +1122,84 @@ class HiveService {
   }
 
 
-  _RoutineTimingBonus _routineTimingBonusForTask(Task task, int streakLength) {
-    final scheduled = _scheduledMinutesForTask(task);
-    if (scheduled == null || !_isCompletedTask(task)) return const _RoutineTimingBonus.none();
+  _RoutineTimingBonus _routineTimingBonusForTask(Task task) {
+    final schedule = _routineScheduleForTask(task);
+    if (schedule == null || !_isCompletedTask(task)) return const _RoutineTimingBonus.none();
 
-    final completed = (task.dueDate.hour * 60) + task.dueDate.minute;
-    final windowStart = scheduled - _timingBonusWindowMinutes;
-    final windowEnd = scheduled + _timingBonusWindowMinutes;
-    var points = 0;
-    var xp = 0;
-    var label = 'Late completion • no timing bonus';
-
-    if (completed >= windowStart && completed <= windowEnd) {
-      points = _onTimeTimingBonusPoints;
-      xp = 5;
-      label = 'On time within ±$_timingBonusWindowMinutes min window';
-    } else if (completed < windowStart) {
-      points = _earlyTimingBonusPoints;
-      xp = 2;
-      label = 'Early completion before scheduled window';
+    var completed = (task.dueDate.hour * 60) + task.dueDate.minute;
+    final start = schedule.startMinutes;
+    var end = schedule.endMinutes;
+    if (end < start) {
+      end += 24 * 60;
+      if (completed < start) completed += 24 * 60;
     }
 
-    final streakExtra = _timingStreakBonusForLength(streakLength);
-    if (streakExtra > 0 && points > 0) {
-      points += streakExtra;
-      label = '$label • $streakLength-day on-time streak extra +$streakExtra';
+    if (completed < start || completed > end) {
+      return const _RoutineTimingBonus.none();
     }
 
-    return _RoutineTimingBonus(points: points, xp: xp, reason: label);
+    return _RoutineTimingBonus(
+      points: schedule.bonusPoints,
+      xp: (schedule.bonusPoints / 4).round(),
+      reason: 'On time within ${_formatScheduleMinutes(schedule.startMinutes)}–${_formatScheduleMinutes(schedule.endMinutes)} window',
+    );
   }
 
-  int? _scheduledMinutesForTask(Task task) {
+  _RoutineSchedule? _routineScheduleForTask(Task task) {
+    int? start;
+    int? end;
+    int? bonus;
+    int? legacy;
+
     for (final line in task.description.split('\n')) {
       final trimmed = line.trim();
-      if (!trimmed.startsWith(_scheduledTimeMarker)) continue;
-      final raw = trimmed.substring(_scheduledTimeMarker.length).trim();
-      final parts = raw.split(':');
-      if (parts.length != 2) return null;
-      final hour = int.tryParse(parts[0]);
-      final minute = int.tryParse(parts[1]);
-      if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-        return null;
+      if (trimmed.startsWith(_scheduleStartMarker)) {
+        start = _parseScheduleMinutes(trimmed.substring(_scheduleStartMarker.length).trim());
+      } else if (trimmed.startsWith(_scheduleEndMarker)) {
+        end = _parseScheduleMinutes(trimmed.substring(_scheduleEndMarker.length).trim());
+      } else if (trimmed.startsWith(_scheduleBonusMarker)) {
+        bonus = int.tryParse(
+          trimmed.substring(_scheduleBonusMarker.length).replaceAll('points', '').trim(),
+        );
+      } else if (trimmed.startsWith(_legacyScheduledTimeMarker)) {
+        legacy = _parseScheduleMinutes(trimmed.substring(_legacyScheduledTimeMarker.length).trim());
       }
-      return (hour * 60) + minute;
     }
-    return null;
+
+    if (start == null && end == null && legacy != null) {
+      start = (legacy - 15) % (24 * 60);
+      if (start < 0) start += 24 * 60;
+      end = (legacy + 15) % (24 * 60);
+    }
+
+    if (start == null || end == null) return null;
+    return _RoutineSchedule(
+      startMinutes: start,
+      endMinutes: end,
+      bonusPoints: bonus ?? _defaultScheduleBonusPoints,
+    );
   }
 
-  int _timingStreakBonusForLength(int streakLength) {
-    const bonuses = {
-      7: 10,
-      30: 30,
-      100: 100,
-      365: 500,
-    };
-    return bonuses[streakLength] ?? 0;
+  int? _parseScheduleMinutes(String raw) {
+    final parts = raw.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return null;
+    }
+    return (hour * 60) + minute;
   }
+
+  String _formatScheduleMinutes(int minutes) {
+    final normalized = minutes % (24 * 60);
+    final hour = normalized ~/ 60;
+    final minute = normalized % 60;
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+  }
+
 
   int _streakBonusForLength(int streakLength) {
     const bonuses = {
@@ -1385,6 +1408,18 @@ class HiveService {
   ValueListenable<Box<List>> getBoxListenable() {
     return _box.listenable();
   }
+}
+
+class _RoutineSchedule {
+  final int startMinutes;
+  final int endMinutes;
+  final int bonusPoints;
+
+  const _RoutineSchedule({
+    required this.startMinutes,
+    required this.endMinutes,
+    required this.bonusPoints,
+  });
 }
 
 class _RoutineTimingBonus {

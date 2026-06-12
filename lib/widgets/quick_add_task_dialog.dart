@@ -20,7 +20,12 @@ const List<String> _statusOptions = [
 ];
 const List<String> _repeatFrequencyOptions = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
 const List<String> _projectPhaseStatusOptions = ['Not Started', 'In Progress', 'Completed', 'Cancelled'];
-const String _scheduledTimeMarker = '⏰ Scheduled:';
+const String _legacyScheduledTimeMarker = '⏰ Scheduled:';
+const String _scheduleStartMarker = '⏰ Schedule Start:';
+const String _scheduleEndMarker = '⏰ Schedule End:';
+const String _scheduleBonusMarker = '⏰ Schedule Bonus:';
+const int _defaultScheduleBonusPoints = 20;
+const List<int> _scheduleBonusOptions = [5, 10, 20, 30, 50, 75, 100];
 
 const Map<String, int> _taskColorOptions = {
   'Yellow': 0xFFFFC107,
@@ -43,20 +48,20 @@ Future<Task?> showTaskFormDialog(
 }) async {
   final isEditing = initialTask != null;
   final initialDescription = initialTask?.description ?? '';
-  final initialScheduledTime = _parseScheduledTime(initialDescription);
+  final initialSchedule = _parseSchedule(initialDescription);
   final nameController = TextEditingController(text: initialTask?.task ?? '');
   final descriptionController = TextEditingController(
-    text: _stripScheduledTime(initialDescription),
+    text: _stripSchedule(initialDescription),
   );
   final hiveService = HiveService.instance;
   final categories = hiveService.getCategories().toList();
   final delegates = hiveService.getDelegates().toList();
 
   DateTime dueDate = DateTime((initialTask?.dueDate ?? date).year, (initialTask?.dueDate ?? date).month, (initialTask?.dueDate ?? date).day);
-  TimeOfDay? scheduledTime = initialScheduledTime ??
-      (initialTask?.repeatTask == true && initialTask?.hourSlot != null
-          ? TimeOfDay(hour: initialTask!.hourSlot!, minute: 0)
-          : null);
+  TimeOfDay? scheduleStart = initialSchedule.start;
+  TimeOfDay? scheduleEnd = initialSchedule.end;
+  bool scheduleEnabled = initialSchedule.enabled;
+  int scheduleBonusPoints = initialSchedule.bonusPoints ?? _defaultScheduleBonusPoints;
   int? hourSlot = initialTask?.hourSlot ?? initialHourSlot;
 
   String selectedPriority = initialTask?.priority ?? 'Medium';
@@ -170,35 +175,71 @@ Future<Task?> showTaskFormDialog(
                         ),
                         const SizedBox(height: 12),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('⏰ Schedule Time Bonus', style: TextStyle(fontWeight: FontWeight.w700)),
+                                subtitle: Text(scheduleEnabled ? 'Bonus is awarded only between start and end time' : 'None • normal points only'),
+                                value: scheduleEnabled,
+                                onChanged: (value) => setDialogState(() {
+                                  scheduleEnabled = value;
+                                  if (value) {
+                                    scheduleStart ??= const TimeOfDay(hour: 6, minute: 0);
+                                    scheduleEnd ??= _addMinutes(scheduleStart!, 30);
+                                  }
+                                }),
+                              ),
+                              if (scheduleEnabled) ...[
+                                const SizedBox(height: 8),
+                                Row(
                                   children: [
-                                    const Text('⏰ Scheduled Time (Optional)', style: TextStyle(fontWeight: FontWeight.w700)),
-                                    const SizedBox(height: 2),
-                                    Text(scheduledTime == null ? 'None • no timing bonus' : '${scheduledTime!.format(context)} • ±15 min bonus window'),
+                                    Expanded(child: Text('Start Time: ${scheduleStart?.format(context) ?? 'Optional'}')),
+                                    TextButton(
+                                      onPressed: () async {
+                                        final picked = await showTimePicker(
+                                          context: context,
+                                          initialTime: scheduleStart ?? const TimeOfDay(hour: 6, minute: 0),
+                                        );
+                                        if (picked != null) {
+                                          setDialogState(() {
+                                            scheduleStart = picked;
+                                            scheduleEnd ??= _addMinutes(picked, 30);
+                                          });
+                                        }
+                                      },
+                                      child: const Text('Select'),
+                                    ),
                                   ],
                                 ),
-                              ),
-                              if (scheduledTime != null)
-                                TextButton(
-                                  onPressed: () => setDialogState(() => scheduledTime = null),
-                                  child: const Text('None'),
+                                Row(
+                                  children: [
+                                    Expanded(child: Text('End Time: ${scheduleEnd?.format(context) ?? 'Optional'}')),
+                                    TextButton(
+                                      onPressed: () async {
+                                        final picked = await showTimePicker(
+                                          context: context,
+                                          initialTime: scheduleEnd ?? _addMinutes(scheduleStart ?? const TimeOfDay(hour: 6, minute: 0), 30),
+                                        );
+                                        if (picked != null) setDialogState(() => scheduleEnd = picked);
+                                      },
+                                      child: const Text('Select'),
+                                    ),
+                                  ],
                                 ),
-                              TextButton(
-                                onPressed: () async {
-                                  final picked = await showTimePicker(
-                                    context: context,
-                                    initialTime: scheduledTime ?? const TimeOfDay(hour: 6, minute: 0),
-                                  );
-                                  if (picked != null) setDialogState(() => scheduledTime = picked);
-                                },
-                                child: const Text('Select'),
-                              ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<int>(
+                                  value: scheduleBonusPoints,
+                                  decoration: InputDecoration(labelText: 'Bonus Points', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                                  items: _scheduleBonusOptions.map((points) => DropdownMenuItem<int>(value: points, child: Text('+$points points'))).toList(),
+                                  onChanged: (value) {
+                                    if (value != null) setDialogState(() => scheduleBonusPoints = value);
+                                  },
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -459,20 +500,32 @@ Future<Task?> showTaskFormDialog(
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task name is required')));
                   return;
                 }
+                if (repeatTask && scheduleEnabled && (scheduleStart == null || scheduleEnd == null)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Select both start and end time for schedule bonus')),
+                  );
+                  return;
+                }
                 final mergedDescription = !repeatTask
                     ? _ProjectPhaseDraft.mergeIntoDescription(descriptionController.text.trim(), projectPhases)
-                    : _mergeScheduledTime(descriptionController.text.trim(), scheduledTime);
+                    : _mergeSchedule(
+                        descriptionController.text.trim(),
+                        enabled: scheduleEnabled,
+                        start: scheduleStart,
+                        end: scheduleEnd,
+                        bonusPoints: scheduleBonusPoints,
+                      );
                 final inferredStatus = repeatTask
                     ? 'Not Updated'
                     : _ProjectPhaseDraft.inferTaskStatus(projectPhases, selectedStatus);
 
-                final taskDueDate = repeatTask && scheduledTime != null
+                final taskDueDate = repeatTask && scheduleEnabled && scheduleStart != null
                     ? DateTime(
                         dueDate.year,
                         dueDate.month,
                         dueDate.day,
-                        scheduledTime!.hour,
-                        scheduledTime!.minute,
+                        scheduleStart!.hour,
+                        scheduleStart!.minute,
                       )
                     : dueDate;
 
@@ -490,7 +543,7 @@ Future<Task?> showTaskFormDialog(
                   urgent: selectedUrgent,
                   important: selectedImportant,
                   estimatedMinutes: repeatTask ? selectedRoutineMinutes : _ProjectPhaseDraft.totalMinutes(projectPhases),
-                  hourSlot: repeatTask ? scheduledTime?.hour : hourSlot,
+                  hourSlot: repeatTask && scheduleEnabled ? scheduleStart?.hour : hourSlot,
                   colorValue: selectedColorValue,
                   routineEnabled: repeatTask ? routineEnabled : true,
                 ));
@@ -512,38 +565,107 @@ Future<Task?> showTaskFormDialog(
 }
 
 
-TimeOfDay? _parseScheduledTime(String description) {
-  for (final line in description.split('\n')) {
-    final trimmed = line.trim();
-    if (!trimmed.startsWith(_scheduledTimeMarker)) continue;
-    final raw = trimmed.substring(_scheduledTimeMarker.length).trim();
-    final parts = raw.split(':');
-    if (parts.length != 2) return null;
-    final hour = int.tryParse(parts[0]);
-    final minute = int.tryParse(parts[1]);
-    if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-      return null;
-    }
-    return TimeOfDay(hour: hour, minute: minute);
-  }
-  return null;
+class _ScheduleDraft {
+  final bool enabled;
+  final TimeOfDay? start;
+  final TimeOfDay? end;
+  final int? bonusPoints;
+
+  const _ScheduleDraft({
+    required this.enabled,
+    this.start,
+    this.end,
+    this.bonusPoints,
+  });
+
+  const _ScheduleDraft.none()
+      : enabled = false,
+        start = null,
+        end = null,
+        bonusPoints = null;
 }
 
-String _stripScheduledTime(String description) {
+_ScheduleDraft _parseSchedule(String description) {
+  TimeOfDay? start;
+  TimeOfDay? end;
+  int? bonus;
+  TimeOfDay? legacy;
+
+  for (final line in description.split('\n')) {
+    final trimmed = line.trim();
+    if (trimmed.startsWith(_scheduleStartMarker)) {
+      start = _parseTimeOfDay(trimmed.substring(_scheduleStartMarker.length).trim());
+    } else if (trimmed.startsWith(_scheduleEndMarker)) {
+      end = _parseTimeOfDay(trimmed.substring(_scheduleEndMarker.length).trim());
+    } else if (trimmed.startsWith(_scheduleBonusMarker)) {
+      bonus = int.tryParse(trimmed.substring(_scheduleBonusMarker.length).replaceAll('points', '').trim());
+    } else if (trimmed.startsWith(_legacyScheduledTimeMarker)) {
+      legacy = _parseTimeOfDay(trimmed.substring(_legacyScheduledTimeMarker.length).trim());
+    }
+  }
+
+  if (start == null && end == null && legacy != null) {
+    start = _addMinutes(legacy, -15);
+    end = _addMinutes(legacy, 15);
+  }
+
+  final enabled = start != null && end != null;
+  return enabled
+      ? _ScheduleDraft(enabled: true, start: start, end: end, bonusPoints: bonus ?? _defaultScheduleBonusPoints)
+      : const _ScheduleDraft.none();
+}
+
+TimeOfDay? _parseTimeOfDay(String raw) {
+  final parts = raw.split(':');
+  if (parts.length != 2) return null;
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return TimeOfDay(hour: hour, minute: minute);
+}
+
+String _stripSchedule(String description) {
   return description
       .split('\n')
-      .where((line) => !line.trim().startsWith(_scheduledTimeMarker))
+      .where((line) {
+        final trimmed = line.trim();
+        return !trimmed.startsWith(_legacyScheduledTimeMarker) &&
+            !trimmed.startsWith(_scheduleStartMarker) &&
+            !trimmed.startsWith(_scheduleEndMarker) &&
+            !trimmed.startsWith(_scheduleBonusMarker);
+      })
       .join('\n')
       .trim();
 }
 
-String _mergeScheduledTime(String description, TimeOfDay? scheduledTime) {
-  final cleaned = _stripScheduledTime(description);
-  if (scheduledTime == null) return cleaned;
-  final encoded = '${scheduledTime.hour.toString().padLeft(2, '0')}:${scheduledTime.minute.toString().padLeft(2, '0')}';
-  final markerLine = '$_scheduledTimeMarker $encoded';
-  return cleaned.isEmpty ? markerLine : '$cleaned\n$markerLine';
+String _mergeSchedule(
+  String description, {
+  required bool enabled,
+  required TimeOfDay? start,
+  required TimeOfDay? end,
+  required int bonusPoints,
+}) {
+  final cleaned = _stripSchedule(description);
+  if (!enabled || start == null || end == null) return cleaned;
+  final lines = <String>[
+    if (cleaned.isNotEmpty) cleaned,
+    '$_scheduleStartMarker ${_encodeTimeOfDay(start)}',
+    '$_scheduleEndMarker ${_encodeTimeOfDay(end)}',
+    '$_scheduleBonusMarker $bonusPoints',
+  ];
+  return lines.join('\n');
 }
+
+String _encodeTimeOfDay(TimeOfDay time) {
+  return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+}
+
+TimeOfDay _addMinutes(TimeOfDay time, int minutes) {
+  final total = ((time.hour * 60) + time.minute + minutes) % (24 * 60);
+  final normalized = total < 0 ? total + (24 * 60) : total;
+  return TimeOfDay(hour: normalized ~/ 60, minute: normalized % 60);
+}
+
 
 String _formatHour(int hour) {
   if (hour == 0) return '12 AM';
