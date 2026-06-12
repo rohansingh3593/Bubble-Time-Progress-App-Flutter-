@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../constants/colors.dart';
 import '../models/productivity_snapshot.dart';
+import '../models/reward_money.dart';
 import '../models/rank_profile.dart';
 import '../models/user_profile.dart';
 import '../services/hive_service.dart';
@@ -21,6 +24,22 @@ class ProductivityTimelineView extends StatefulWidget {
 
 class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
   String _range = 'Last 30 Days';
+  Timer? _rewardReminderTimer;
+  int _rewardReminderIndex = 0;
+  DateTime? _rewardReminderSnoozedUntil;
+
+  @override
+  void initState() {
+    super.initState();
+    _rewardReminderTimer = Timer.periodic(const Duration(minutes: 30), (_) => _showRewardGoalReminder());
+  }
+
+  @override
+  void dispose() {
+    _rewardReminderTimer?.cancel();
+    super.dispose();
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +63,8 @@ class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
             children: [
               _LifetimePerformanceCard(username: username, stats: stats, userProfile: userProfile, hiveService: widget.hiveService),
+              const SizedBox(height: 16),
+              _RewardMoneyCard(hiveService: widget.hiveService),
               const SizedBox(height: 16),
               _PhotoGalleryCard(userProfile: userProfile, hiveService: widget.hiveService),
               const SizedBox(height: 16),
@@ -70,6 +91,44 @@ class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
             ],
           );
         },
+      ),
+    );
+  }
+
+
+  void _showRewardGoalReminder() {
+    if (!mounted) return;
+    final snoozedUntil = _rewardReminderSnoozedUntil;
+    if (snoozedUntil != null && DateTime.now().isBefore(snoozedUntil)) return;
+    final activeGoals = widget.hiveService.getRewardGoals().where((goal) => !goal.isCompleted).toList();
+    if (activeGoals.isEmpty) return;
+    final goal = activeGoals[_rewardReminderIndex % activeGoals.length];
+    _rewardReminderIndex++;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('🎯 Your Goal: ${goal.name}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Saved: ${_formatRupees(goal.savedAmountRupees)} / ${_formatRupees(goal.targetAmountRupees)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: goal.progress, minHeight: 10),
+            const SizedBox(height: 12),
+            const Text('Keep going. Complete one more task and move closer to your reward.', style: TextStyle(fontWeight: FontWeight.w700)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _rewardReminderSnoozedUntil = DateTime.now().add(const Duration(hours: 1));
+              Navigator.pop(context);
+            },
+            child: const Text('Snooze 1 hour'),
+          ),
+          ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('Dismiss')),
+        ],
       ),
     );
   }
@@ -420,6 +479,367 @@ class _LifetimePerformanceCard extends StatelessWidget {
   }
 
 }
+
+class _RewardMoneyCard extends StatelessWidget {
+  final HiveService hiveService;
+
+  const _RewardMoneyCard({required this.hiveService});
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = hiveService.getRewardMoneySummary();
+    final goals = summary.goals;
+    final history = summary.ledger.take(5).toList();
+
+    return _TimelineSection(
+      title: '💰 Offline Reward Money',
+      trailing: Text('10 points = ₹1', style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.w900)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _RewardStat(label: 'Total Points', value: _formatInt(summary.totalPoints)),
+              _RewardStat(label: 'Reward Money Earned', value: _formatRupees(summary.earnedRupees)),
+              _RewardStat(label: 'Available Balance', value: _formatRupees(summary.availableRupees), color: Colors.green.shade700),
+              _RewardStat(label: 'Withdrawn / Used', value: _formatRupees(summary.usedRupees), color: Colors.deepOrange.shade700),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _showWithdrawDialog(context, summary),
+                  icon: const Icon(Icons.payments_outlined),
+                  label: const Text('Withdraw / Use'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showGoalDialog(context),
+                  icon: const Icon(Icons.flag_outlined),
+                  label: const Text('Add Goal'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text('Reward Goals', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          const SizedBox(height: 8),
+          if (goals.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.black12)),
+              child: const Text('Create a personal reward goal, then fund it from your offline balance.', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+            )
+          else
+            ...goals.map((goal) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _RewardGoalTile(
+                    goal: goal,
+                    availableBalance: summary.availableRupees,
+                    onFund: () => _showFundGoalDialog(context, goal),
+                    onEdit: () => _showGoalDialog(context, goal),
+                  ),
+                )),
+          const SizedBox(height: 10),
+          const Text('Money History', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          const SizedBox(height: 8),
+          if (history.isEmpty)
+            const Text('No withdrawals or goal funding yet. Earn points, then use them for your personal goals.', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54))
+          else
+            ...history.map((entry) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: entry.type == RewardLedgerEntry.typeGoalFunding ? Colors.blue.shade50 : Colors.orange.shade50,
+                    child: Icon(entry.type == RewardLedgerEntry.typeGoalFunding ? Icons.flag_outlined : Icons.receipt_long_outlined, color: AppColors.primary),
+                  ),
+                  title: Text('${_formatRupees(entry.amountRupees)} ${entry.type == RewardLedgerEntry.typeGoalFunding ? 'added to ${entry.goalName}' : 'withdrawn'}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                  subtitle: Text('${_formatDate(entry.date)} • ${entry.reason}${entry.note.isEmpty ? '' : ' • ${entry.note}'}\nBalance left: ${_formatRupees(entry.balanceAfter)}'),
+                )),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showWithdrawDialog(BuildContext context, RewardMoneySummary summary) async {
+    final amountController = TextEditingController();
+    final reasonController = TextEditingController();
+    final goalController = TextEditingController();
+    final noteController = TextEditingController();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Withdraw / Use Reward Money'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Available: ${_formatRupees(summary.availableRupees)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+              ),
+              TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Amount (₹)')),
+              TextField(controller: reasonController, decoration: const InputDecoration(labelText: 'Reason')),
+              TextField(controller: goalController, decoration: const InputDecoration(labelText: 'Goal Linked (Optional)')),
+              TextField(controller: noteController, maxLines: 2, decoration: const InputDecoration(labelText: 'Note')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save Withdrawal')),
+        ],
+      ),
+    );
+    final amount = int.tryParse(amountController.text.trim()) ?? 0;
+    final reason = reasonController.text.trim();
+    final goalName = goalController.text.trim();
+    final note = noteController.text.trim();
+    amountController.dispose();
+    reasonController.dispose();
+    goalController.dispose();
+    noteController.dispose();
+    if (saved != true) return;
+    try {
+      await hiveService.withdrawRewardMoney(amountRupees: amount, reason: reason, goalName: goalName, note: note);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reward withdrawal saved')));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+    }
+  }
+
+  Future<void> _showFundGoalDialog(BuildContext context, RewardGoal goal) async {
+    final summary = hiveService.getRewardMoneySummary();
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add Money to ${goal.name}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Available: ${_formatRupees(summary.availableRupees)} • Remaining: ${_formatRupees(goal.remainingAmountRupees)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+            TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Amount (₹)')),
+            TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note (Optional)')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Add Money')),
+        ],
+      ),
+    );
+    final amount = int.tryParse(amountController.text.trim()) ?? 0;
+    final note = noteController.text.trim();
+    amountController.dispose();
+    noteController.dispose();
+    if (saved != true) return;
+    try {
+      await hiveService.fundRewardGoal(goal: goal, amountRupees: amount, note: note);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Goal funding saved')));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+    }
+  }
+
+  Future<void> _showGoalDialog(BuildContext context, [RewardGoal? goal]) async {
+    final nameController = TextEditingController(text: goal?.name ?? '');
+    final targetController = TextEditingController(text: goal == null ? '' : '${goal.targetAmountRupees}');
+    final descriptionController = TextEditingController(text: goal?.description ?? '');
+    final deadlineController = TextEditingController(text: goal?.deadline == null ? '' : _formatIsoDate(goal!.deadline!));
+    var priority = goal?.priority ?? 'Medium';
+    var imagePath = goal?.imagePath ?? '';
+    final saved = await showDialog<RewardGoal>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(goal == null ? 'Create Reward Goal' : 'Edit Reward Goal'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Goal Name')),
+                TextField(controller: targetController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target Amount (₹)')),
+                TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+                TextField(controller: deadlineController, decoration: const InputDecoration(labelText: 'Deadline (YYYY-MM-DD, Optional)')),
+                DropdownButtonFormField<String>(
+                  value: priority,
+                  decoration: const InputDecoration(labelText: 'Priority'),
+                  items: const ['Low', 'Medium', 'High'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
+                  onChanged: (value) => setDialogState(() => priority = value ?? priority),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final path = await _pickGoalImage(context, ImageSource.gallery);
+                        if (path != null) setDialogState(() => imagePath = path);
+                      },
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Choose from Gallery'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final path = await _pickGoalImage(context, ImageSource.camera);
+                        if (path != null) setDialogState(() => imagePath = path);
+                      },
+                      icon: const Icon(Icons.photo_camera_outlined),
+                      label: const Text('Take Photo'),
+                    ),
+                    if (imagePath.isNotEmpty)
+                      TextButton.icon(onPressed: () => setDialogState(() => imagePath = ''), icon: const Icon(Icons.delete_outline), label: const Text('Remove Image')),
+                  ],
+                ),
+                if (imagePath.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.file(File(imagePath), height: 120, width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Text('Image preview unavailable')),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                final target = int.tryParse(targetController.text.trim()) ?? 0;
+                Navigator.pop(
+                  context,
+                  RewardGoal(
+                    id: goal?.id ?? 'goal_${DateTime.now().microsecondsSinceEpoch}',
+                    name: nameController.text.trim().isEmpty ? 'Reward Goal' : nameController.text.trim(),
+                    targetAmountRupees: target,
+                    savedAmountRupees: goal?.savedAmountRupees ?? 0,
+                    imagePath: imagePath,
+                    description: descriptionController.text.trim(),
+                    deadline: DateTime.tryParse(deadlineController.text.trim()),
+                    priority: priority,
+                    createdAt: goal?.createdAt ?? DateTime.now(),
+                  ),
+                );
+              },
+              child: const Text('Save Goal'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameController.dispose();
+    targetController.dispose();
+    descriptionController.dispose();
+    deadlineController.dispose();
+    if (saved != null) await hiveService.saveRewardGoal(saved);
+  }
+
+  Future<String?> _pickGoalImage(BuildContext context, ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(source: source, maxWidth: 1400, maxHeight: 1400, imageQuality: 88);
+      return image?.path;
+    } catch (error) {
+      if (!context.mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open image picker: $error')));
+      return null;
+    }
+  }
+}
+
+class _RewardStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? color;
+
+  const _RewardStat({required this.label, required this.value, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 156,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.black12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text(value, style: TextStyle(color: color ?? AppColors.textPrimary, fontWeight: FontWeight.w900, fontSize: 18)),
+        ],
+      ),
+    );
+  }
+}
+
+class _RewardGoalTile extends StatelessWidget {
+  final RewardGoal goal;
+  final int availableBalance;
+  final VoidCallback onFund;
+  final VoidCallback onEdit;
+
+  const _RewardGoalTile({required this.goal, required this.availableBalance, required this.onFund, required this.onEdit});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.primary.withOpacity(0.14))),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: goal.imagePath.isEmpty
+                ? Container(width: 58, height: 58, color: AppColors.surface, child: const Icon(Icons.flag_outlined, color: AppColors.primary))
+                : Image.file(File(goal.imagePath), width: 58, height: 58, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 58, height: 58, color: AppColors.surface, child: const Icon(Icons.flag_outlined))),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(goal.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                const SizedBox(height: 4),
+                Text('${_formatRupees(goal.savedAmountRupees)} / ${_formatRupees(goal.targetAmountRupees)} • Remaining ${_formatRupees(goal.remainingAmountRupees)}', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(value: goal.progress, minHeight: 8, backgroundColor: Colors.black12, color: goal.isCompleted ? Colors.green : AppColors.primary),
+                ),
+                const SizedBox(height: 6),
+                Text('${(goal.progress * 100).round()}% completed • ${goal.priority} priority', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.black45)),
+              ],
+            ),
+          ),
+          Column(
+            children: [
+              TextButton(onPressed: onEdit, child: const Text('Edit')),
+              ElevatedButton(onPressed: availableBalance > 0 && !goal.isCompleted ? onFund : null, child: const Text('Add ₹')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatRupees(int value) => '₹${_formatInt(value)}';
 
 class _PhotoGalleryCard extends StatelessWidget {
   final UserProfile userProfile;
@@ -982,5 +1402,7 @@ String _formatHours(double hours) {
 
 String _monthName(int month) {
   const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return names[(month - 1).clamp(0, 11)];
+  return names[(month - 1).clamp(0, 11).toInt()];
 }
+
+String _formatIsoDate(DateTime date) => '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';

@@ -3,6 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/productivity_snapshot.dart';
+import '../models/reward_money.dart';
 import '../models/task_model.dart';
 import '../models/user_profile.dart';
 import '../constants/dashboard_themes.dart';
@@ -29,6 +30,8 @@ class HiveService {
   static const _defaultScheduleBonusPoints = 20;
   static const _journeyPrefix = '__journey__';
   static const _productivityPrefix = '__productivity_snapshot__';
+  static const _rewardLedgerPrefix = '__reward_ledger__';
+  static const _rewardGoalPrefix = '__reward_goal__';
   static const _autoJourneyPrefix = 'auto_journey_';
   static const _schemaVersionKey = '__meta_schema_version__';
   static const _dashboardThemeKey = '__meta_dashboard_theme__';
@@ -976,6 +979,122 @@ class HiveService {
 
   LifetimeProductivityStats getLifetimeProductivityStats() {
     return LifetimeProductivityStats.fromSnapshots(getProductivitySnapshots());
+  }
+
+
+  String _rewardLedgerKey(String id) => '$_rewardLedgerPrefix$id';
+  String _rewardGoalKey(String id) => '$_rewardGoalPrefix$id';
+
+  List<RewardLedgerEntry> getRewardLedgerEntries() {
+    final entries = <RewardLedgerEntry>[];
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(_rewardLedgerPrefix)) continue;
+      final raw = _box.get(key);
+      if (raw == null) continue;
+      entries.add(RewardLedgerEntry.fromStorageList(raw.cast<dynamic>()));
+    }
+    entries.sort((a, b) => b.date.compareTo(a.date));
+    return entries;
+  }
+
+  List<RewardGoal> getRewardGoals() {
+    final goals = <RewardGoal>[];
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(_rewardGoalPrefix)) continue;
+      final raw = _box.get(key);
+      if (raw == null) continue;
+      goals.add(RewardGoal.fromStorageList(raw.cast<dynamic>()));
+    }
+    goals.sort((a, b) {
+      if (a.isCompleted != b.isCompleted) return a.isCompleted ? 1 : -1;
+      return a.createdAt.compareTo(b.createdAt);
+    });
+    return goals;
+  }
+
+  RewardMoneySummary getRewardMoneySummary() {
+    final totalPoints = getLifetimeProductivityStats().totalPoints;
+    final earnedRupees = totalPoints ~/ rewardPointsPerRupee;
+    final ledger = getRewardLedgerEntries();
+    final withdrawn = ledger
+        .where((entry) => entry.type == RewardLedgerEntry.typeWithdrawal)
+        .fold<int>(0, (sum, entry) => sum + entry.amountRupees);
+    final goalFunded = ledger
+        .where((entry) => entry.type == RewardLedgerEntry.typeGoalFunding)
+        .fold<int>(0, (sum, entry) => sum + entry.amountRupees);
+    return RewardMoneySummary(
+      totalPoints: totalPoints,
+      earnedRupees: earnedRupees,
+      withdrawnRupees: withdrawn,
+      goalFundedRupees: goalFunded,
+      ledger: ledger,
+      goals: getRewardGoals(),
+    );
+  }
+
+  Future<void> saveRewardGoal(RewardGoal goal) async {
+    await _box.put(_rewardGoalKey(goal.id), goal.toStorageList());
+  }
+
+  Future<void> deleteRewardGoal(String id) async {
+    await _box.delete(_rewardGoalKey(id));
+  }
+
+  Future<void> withdrawRewardMoney({
+    required int amountRupees,
+    required String reason,
+    String goalId = '',
+    String goalName = '',
+    String note = '',
+    DateTime? date,
+  }) async {
+    final cleanAmount = amountRupees.clamp(0, 1 << 31).toInt();
+    if (cleanAmount <= 0) return;
+    final summary = getRewardMoneySummary();
+    if (cleanAmount > summary.availableRupees) {
+      throw ArgumentError('Not enough reward balance available.');
+    }
+    final entry = RewardLedgerEntry(
+      id: 'reward_${DateTime.now().microsecondsSinceEpoch}',
+      date: date ?? DateTime.now(),
+      type: RewardLedgerEntry.typeWithdrawal,
+      amountRupees: cleanAmount,
+      reason: reason.trim().isEmpty ? 'Reward used' : reason.trim(),
+      goalId: goalId,
+      goalName: goalName,
+      note: note.trim(),
+      balanceAfter: summary.availableRupees - cleanAmount,
+    );
+    await _box.put(_rewardLedgerKey(entry.id), entry.toStorageList());
+  }
+
+  Future<void> fundRewardGoal({
+    required RewardGoal goal,
+    required int amountRupees,
+    String note = '',
+  }) async {
+    final cleanAmount = amountRupees.clamp(0, 1 << 31).toInt();
+    if (cleanAmount <= 0) return;
+    final summary = getRewardMoneySummary();
+    if (cleanAmount > summary.availableRupees) {
+      throw ArgumentError('Not enough reward balance available.');
+    }
+    final amountToApply = cleanAmount.clamp(0, goal.remainingAmountRupees).toInt();
+    if (amountToApply <= 0) return;
+    final updatedGoal = goal.copyWith(savedAmountRupees: goal.savedAmountRupees + amountToApply);
+    final entry = RewardLedgerEntry(
+      id: 'reward_${DateTime.now().microsecondsSinceEpoch}',
+      date: DateTime.now(),
+      type: RewardLedgerEntry.typeGoalFunding,
+      amountRupees: amountToApply,
+      reason: 'Added to reward goal',
+      goalId: goal.id,
+      goalName: goal.name,
+      note: note.trim(),
+      balanceAfter: summary.availableRupees - amountToApply,
+    );
+    await _box.put(_rewardGoalKey(updatedGoal.id), updatedGoal.toStorageList());
+    await _box.put(_rewardLedgerKey(entry.id), entry.toStorageList());
   }
 
   Future<void> refreshProductivitySnapshotsFromTasks() async {
