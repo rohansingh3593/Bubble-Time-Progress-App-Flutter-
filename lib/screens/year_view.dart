@@ -9,6 +9,7 @@ import '../constants/colors.dart';
 import '../models/task_model.dart';
 import '../models/productivity_snapshot.dart';
 import 'task_screen.dart';
+import 'journal_view.dart';
 
 class YearView extends StatefulWidget {
   final HiveService hiveService;
@@ -81,12 +82,22 @@ class _YearViewState extends State<YearView> {
 
 
 
+
+  void _openJournalForTask(Task task) {
+    Navigator.of(context).push(
+      JournalView.route(hiveService: widget.hiveService, initialDate: task.dueDate),
+    );
+  }
+
   Future<void> _editTask(Task task) async {
     if (isRoutineTask(task)) {
       final action = await showRoutineOccurrenceDialog(context: context, task: task);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {
+        case RoutineOccurrenceAction.openJournal:
+          _openJournalForTask(task);
+          return;
         case RoutineOccurrenceAction.disableRoutine:
           await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
           return;

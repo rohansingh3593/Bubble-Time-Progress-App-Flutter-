@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/task_model.dart';
 
 enum RoutineOccurrenceAction {
+  openJournal,
   disableRoutine,
   close,
   editDetails,
@@ -24,6 +25,11 @@ String normalizedRoutineFrequency(Task task) {
 }
 
 bool isRoutineTask(Task task) => task.repeatTask && normalizedRoutineFrequency(task).isNotEmpty;
+
+bool isDailyJournalSystemTask(Task task) {
+  return task.task.trim().toLowerCase() == 'daily journal' &&
+      task.category.trim().toLowerCase() == 'journal';
+}
 
 String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
 
@@ -77,6 +83,10 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
   required BuildContext context,
   required Task task,
 }) {
+  if (isDailyJournalSystemTask(task)) {
+    return _showDailyJournalDialog(context: context, task: task);
+  }
+
   final occurrenceUpdated = isRoutineOccurrenceUpdated(task);
 
   return showDialog<RoutineOccurrenceAction>(
@@ -113,6 +123,45 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
               ? null
               : () => Navigator.of(context).pop(RoutineOccurrenceAction.completeOccurrence),
           child: const Text('Complete This Occurrence'),
+        ),
+      ],
+    ),
+  );
+}
+
+
+Future<RoutineOccurrenceAction?> _showDailyJournalDialog({
+  required BuildContext context,
+  required Task task,
+}) {
+  final completed = task.done || _normalizedStatus(task) == 'completed';
+  final missed = _normalizedStatus(task) == 'missed';
+  final status = completed
+      ? 'Completed ✅'
+      : missed
+          ? 'Missed ❌'
+          : 'Pending';
+  final completedTime = completed ? _timeLabel(task) : null;
+  final guidance = completed
+      ? 'Your reflection is saved${completedTime == null ? '.' : ' at $completedTime.'}\n\nYou can view or edit the journal entry without earning duplicate points.'
+      : missed
+          ? 'No journal was written for this day. Open Journal to review your history.'
+          : 'Complete this task by writing and saving today’s reflection.';
+
+  return showDialog<RoutineOccurrenceAction>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('📔 Daily Journal'),
+      content: Text('Status: $status\n\n$guidance'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.close),
+          child: const Text('Close'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.openJournal),
+          icon: const Icon(Icons.menu_book_rounded),
+          label: Text(completed ? 'View / Edit Journal' : 'Open Journal'),
         ),
       ],
     ),

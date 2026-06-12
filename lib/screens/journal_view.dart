@@ -10,14 +10,20 @@ import '../widgets/rank_profile_card.dart';
 class JournalView extends StatefulWidget {
   final HiveService hiveService;
   final VoidCallback? onGoToDashboard;
+  final DateTime? initialDate;
 
-  const JournalView({super.key, required this.hiveService, this.onGoToDashboard});
+  const JournalView({super.key, required this.hiveService, this.onGoToDashboard, this.initialDate});
 
-  static Route<void> route({required HiveService hiveService, VoidCallback? onGoToDashboard}) {
+  static Route<void> route({
+    required HiveService hiveService,
+    VoidCallback? onGoToDashboard,
+    DateTime? initialDate,
+  }) {
     return PageRouteBuilder<void>(
       pageBuilder: (context, animation, secondaryAnimation) => JournalView(
         hiveService: hiveService,
         onGoToDashboard: onGoToDashboard,
+        initialDate: initialDate,
       ),
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
@@ -55,8 +61,8 @@ class _JournalViewState extends State<JournalView> {
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _selectedDate = DateTime(now.year, now.month, now.day);
+    final initial = widget.initialDate ?? DateTime.now();
+    _selectedDate = DateTime(initial.year, initial.month, initial.day);
     _loadEntryForSelectedDate();
   }
 
@@ -86,9 +92,19 @@ class _JournalViewState extends State<JournalView> {
         .length;
     final score = total == 0 ? 0 : ((completed / total) * 100).round();
 
+    final savedAt = DateTime.now();
     await widget.hiveService.saveJournalEntry(
       JournalEntry(
-        date: _selectedDate,
+        date: DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          savedAt.hour,
+          savedAt.minute,
+          savedAt.second,
+          savedAt.millisecond,
+          savedAt.microsecond,
+        ),
         mood: _selectedMood,
         reflection: _reflectionController.text.trim(),
         completedTasks: completed,

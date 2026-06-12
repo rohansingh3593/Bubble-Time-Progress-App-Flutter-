@@ -6,6 +6,7 @@ import '../services/hive_service.dart';
 import '../models/task_model.dart';
 import '../constants/colors.dart';
 import '../utils/task_time_utils.dart';
+import 'journal_view.dart';
 
 class DayView extends StatefulWidget {
   final HiveService hiveService;
@@ -67,12 +68,22 @@ class _DayViewState extends State<DayView> {
   }
 
 
+
+  void _openJournalForTask(Task task) {
+    Navigator.of(context).push(
+      JournalView.route(hiveService: widget.hiveService, initialDate: task.dueDate),
+    );
+  }
+
   Future<void> _editTask(Task task, {int? index}) async {
     if (isRoutineTask(task)) {
       final action = await showRoutineOccurrenceDialog(context: context, task: task);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {
+        case RoutineOccurrenceAction.openJournal:
+          _openJournalForTask(task);
+          return;
         case RoutineOccurrenceAction.disableRoutine:
           await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
           return;

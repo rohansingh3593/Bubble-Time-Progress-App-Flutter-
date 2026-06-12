@@ -4,6 +4,7 @@ import '../services/hive_service.dart';
 import '../models/task_model.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
+import 'journal_view.dart';
 
 class TaskScreen extends StatefulWidget {
   final DateTime date;
@@ -29,6 +30,13 @@ class _TaskScreenState extends State<TaskScreen> {
 
   /// Edits task with full form and saves updates.
 
+
+  void _openJournalForTask(Task task) {
+    Navigator.of(context).push(
+      JournalView.route(hiveService: widget.hiveService, initialDate: task.dueDate),
+    );
+  }
+
   Future<void> _editTask(int index) async {
     final tasks = widget.hiveService.getTasksForDate(widget.date);
     if (index < 0 || index >= tasks.length) return;
@@ -39,6 +47,9 @@ class _TaskScreenState extends State<TaskScreen> {
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {
+        case RoutineOccurrenceAction.openJournal:
+          _openJournalForTask(currentTask);
+          return;
         case RoutineOccurrenceAction.disableRoutine:
           await widget.hiveService.setRecurringTaskEnabledByReference(currentTask, false);
           return;
@@ -226,6 +237,12 @@ class _TaskScreenState extends State<TaskScreen> {
                                       icon: const Icon(Icons.delete, color: Colors.red),
                                       onPressed: () => _deleteTask(index),
                                       tooltip: 'Delete task',
+                                    )
+                                  else if (isDailyJournalSystemTask(task))
+                                    IconButton(
+                                      icon: Icon(Icons.menu_book_rounded, color: taskColor),
+                                      onPressed: () => _openJournalForTask(task),
+                                      tooltip: 'Open journal',
                                     )
                                   else
                                     IconButton(

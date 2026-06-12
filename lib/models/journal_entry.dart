@@ -36,7 +36,7 @@ class JournalEntry {
     return JournalEntry(
       mood: values.isNotEmpty ? '${values[0]}' : 'Neutral',
       reflection: values.length > 1 ? '${values[1]}' : '',
-      date: _dateOnly(parsedDate ?? fallbackDate),
+      date: parsedDate ?? _dateOnly(fallbackDate),
       completedTasks: _readInt(values, 3),
       totalTasks: _readInt(values, 4),
       productivityScore: _readInt(values, 5),

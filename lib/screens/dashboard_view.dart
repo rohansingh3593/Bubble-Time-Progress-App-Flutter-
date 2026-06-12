@@ -311,12 +311,26 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }
   }
 
+
+  void _openJournalForTask(Task task) {
+    Navigator.of(context).push(
+      JournalView.route(
+        hiveService: widget.hiveService,
+        onGoToDashboard: widget.onGoToDashboard,
+        initialDate: task.dueDate,
+      ),
+    );
+  }
+
   Future<void> _editTask(Task task) async {
     if (isRoutineTask(task)) {
       final action = await showRoutineOccurrenceDialog(context: context, task: task);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {
+        case RoutineOccurrenceAction.openJournal:
+          _openJournalForTask(task);
+          return;
         case RoutineOccurrenceAction.disableRoutine:
           await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
           return;

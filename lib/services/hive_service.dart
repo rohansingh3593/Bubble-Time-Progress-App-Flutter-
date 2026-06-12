@@ -219,7 +219,7 @@ class HiveService {
       description: completed
           ? 'Built-in System Task • Journal saved successfully'
           : _dailyJournalDescription,
-      dueDate: day,
+      dueDate: journal?.date ?? day,
       priority: 'Important',
       status: completed ? 'Completed' : missed ? 'Missed' : 'Not Completed',
       category: _dailyJournalCategory,
