@@ -711,7 +711,7 @@ class _RewardMoneyCard extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 10),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      child: Image.file(File(imagePath), height: 120, width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Text('Image preview unavailable')),
+                      child: SizedBox(width: 360, height: 120, child: Image.file(File(imagePath), width: 360, height: 120, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Center(child: Text('Image preview unavailable')))),
                     ),
                   ),
               ],
