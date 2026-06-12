@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
+import '../utils/task_time_utils.dart';
 
 const List<String> _priorityOptions = [
   'Low',
@@ -19,6 +20,12 @@ const List<String> _statusOptions = [
 ];
 const List<String> _repeatFrequencyOptions = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
 const List<String> _projectPhaseStatusOptions = ['Not Started', 'In Progress', 'Completed', 'Cancelled'];
+const String _legacyScheduledTimeMarker = '⏰ Scheduled:';
+const String _scheduleStartMarker = '⏰ Schedule Start:';
+const String _scheduleEndMarker = '⏰ Schedule End:';
+const String _scheduleBonusMarker = '⏰ Schedule Bonus:';
+const int _defaultScheduleBonusPoints = 20;
+const List<int> _scheduleBonusOptions = [5, 10, 20, 30, 50, 75, 100];
 
 const Map<String, int> _taskColorOptions = {
   'Yellow': 0xFFFFC107,
@@ -40,13 +47,21 @@ Future<Task?> showTaskFormDialog(
   Future<void> Function()? onDelete,
 }) async {
   final isEditing = initialTask != null;
+  final initialDescription = initialTask?.description ?? '';
+  final initialSchedule = _parseSchedule(initialDescription);
   final nameController = TextEditingController(text: initialTask?.task ?? '');
-  final descriptionController = TextEditingController(text: initialTask?.description ?? '');
+  final descriptionController = TextEditingController(
+    text: _stripSchedule(initialDescription),
+  );
   final hiveService = HiveService.instance;
   final categories = hiveService.getCategories().toList();
   final delegates = hiveService.getDelegates().toList();
 
   DateTime dueDate = DateTime((initialTask?.dueDate ?? date).year, (initialTask?.dueDate ?? date).month, (initialTask?.dueDate ?? date).day);
+  TimeOfDay? scheduleStart = initialSchedule.start;
+  TimeOfDay? scheduleEnd = initialSchedule.end;
+  bool scheduleEnabled = initialSchedule.enabled;
+  int scheduleBonusPoints = initialSchedule.bonusPoints ?? _defaultScheduleBonusPoints;
   int? hourSlot = initialTask?.hourSlot ?? initialHourSlot;
 
   String selectedPriority = initialTask?.priority ?? 'Medium';
@@ -59,6 +74,7 @@ Future<Task?> showTaskFormDialog(
   bool selectedImportant = initialTask?.important ?? false;
   bool routineEnabled = initialTask?.routineEnabled ?? true;
   int selectedColorValue = initialTask?.colorValue ?? _taskColorOptions['Blue']!;
+  int selectedRoutineMinutes = normalizeTaskDuration(initialTask?.estimatedMinutes);
   final projectPhases = _ProjectPhaseDraft.parseFromDescription(initialTask?.description ?? '');
   void syncStatusForTaskType() {
     if (repeatTask) {
@@ -104,8 +120,7 @@ Future<Task?> showTaskFormDialog(
                     setDialogState(() {
                       repeatTask = value;
                       if (!repeatTask) repeatFrequency = 'Daily';
-                      if (repeatTask && repeatFrequency == 'Daily') {
-                        hourSlot = null;
+                      if (repeatTask) {
                         selectedDelegate = null;
                       }
                       syncStatusForTaskType();
@@ -122,7 +137,7 @@ Future<Task?> showTaskFormDialog(
                       children: [
                         const Text('Repeat Frequency', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
-                        ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() { repeatFrequency = value; if (repeatFrequency == 'Daily') { hourSlot = null; selectedDelegate = null; } }); })),
+                        ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() { repeatFrequency = value; selectedDelegate = null; }); })),
                         const SizedBox(height: 8),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
@@ -149,18 +164,97 @@ Future<Task?> showTaskFormDialog(
                             );
                           }).toList(),
                         ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int>(
+                          value: selectedRoutineMinutes,
+                          decoration: InputDecoration(labelText: 'Routine Time', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                          items: taskDurationOptions.map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
+                          onChanged: (value) {
+                            if (value != null) setDialogState(() => selectedRoutineMinutes = value);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('⏰ Schedule Time Bonus', style: TextStyle(fontWeight: FontWeight.w700)),
+                                subtitle: Text(scheduleEnabled ? 'Bonus is awarded only between start and end time' : 'None • normal points only'),
+                                value: scheduleEnabled,
+                                onChanged: (value) => setDialogState(() {
+                                  scheduleEnabled = value;
+                                  if (value) {
+                                    scheduleStart ??= const TimeOfDay(hour: 6, minute: 0);
+                                    scheduleEnd ??= _addMinutes(scheduleStart!, 30);
+                                  }
+                                }),
+                              ),
+                              if (scheduleEnabled) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(child: Text('Start Time: ${scheduleStart?.format(context) ?? 'Optional'}')),
+                                    TextButton(
+                                      onPressed: () async {
+                                        final picked = await showTimePicker(
+                                          context: context,
+                                          initialTime: scheduleStart ?? const TimeOfDay(hour: 6, minute: 0),
+                                        );
+                                        if (picked != null) {
+                                          setDialogState(() {
+                                            scheduleStart = picked;
+                                            scheduleEnd ??= _addMinutes(picked, 30);
+                                          });
+                                        }
+                                      },
+                                      child: const Text('Select'),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  children: [
+                                    Expanded(child: Text('End Time: ${scheduleEnd?.format(context) ?? 'Optional'}')),
+                                    TextButton(
+                                      onPressed: () async {
+                                        final picked = await showTimePicker(
+                                          context: context,
+                                          initialTime: scheduleEnd ?? _addMinutes(scheduleStart ?? const TimeOfDay(hour: 6, minute: 0), 30),
+                                        );
+                                        if (picked != null) setDialogState(() => scheduleEnd = picked);
+                                      },
+                                      child: const Text('Select'),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<int>(
+                                  value: scheduleBonusPoints,
+                                  decoration: InputDecoration(labelText: 'Bonus Points', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                                  items: _scheduleBonusOptions.map((points) => DropdownMenuItem<int>(value: points, child: Text('+$points points'))).toList(),
+                                  onChanged: (value) {
+                                    if (value != null) setDialogState(() => scheduleBonusPoints = value);
+                                  },
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 const SizedBox(height: 12),
-                if (hourSlot != null && !(repeatTask && repeatFrequency == 'Daily'))
+                if (hourSlot != null && !repeatTask)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
                     child: Text('Time Slot: ${_formatHour(hourSlot!)}'),
                   ),
-                if (hourSlot != null && !(repeatTask && repeatFrequency == 'Daily')) const SizedBox(height: 12),
+                if (hourSlot != null && !repeatTask) const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
@@ -257,8 +351,89 @@ Future<Task?> showTaskFormDialog(
                                 decoration: InputDecoration(labelText: 'Phase Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
                                 items: _projectPhaseStatusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
                                 onChanged: (value) {
-                                  if (value != null) setDialogState(() => phase.status = value);
+                                  if (value != null) {
+                                    setDialogState(() {
+                                      phase.status = value;
+                                      if (value == 'Completed') {
+                                        phase.completedAt ??= DateTime.now();
+                                        phase.actualMinutes ??= phase.durationMinutes;
+                                      }
+                                    });
+                                  }
                                 },
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: SwitchListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text('Urgent'),
+                                      value: phase.urgent,
+                                      onChanged: (value) => setDialogState(() => phase.urgent = value),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: SwitchListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text('Important'),
+                                      value: phase.important,
+                                      onChanged: (value) => setDialogState(() => phase.important = value),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<int>(
+                                value: phase.durationMinutes,
+                                decoration: InputDecoration(labelText: 'Estimated Time', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                                items: taskDurationOptions.map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
+                                onChanged: (value) {
+                                  if (value != null) setDialogState(() => phase.durationMinutes = value);
+                                },
+                              ),
+                              if (phase.status == 'Completed') ...[
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<int>(
+                                  value: phase.actualMinutes ?? phase.durationMinutes,
+                                  decoration: InputDecoration(labelText: 'Actual Time Taken', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                                  items: taskDurationOptions.map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
+                                  onChanged: (value) {
+                                    if (value != null) setDialogState(() => phase.actualMinutes = value);
+                                  },
+                                ),
+                                const SizedBox(height: 6),
+                                Text('Completed: ${_formatPhaseCompletedAt(phase.completedAt)}'),
+                              ],
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: index == 0 ? null : () => setDialogState(() {
+                                      final item = projectPhases.removeAt(index);
+                                      projectPhases.insert(index - 1, item);
+                                    }),
+                                    icon: const Icon(Icons.arrow_upward, size: 16),
+                                    label: const Text('Up'),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: index >= projectPhases.length - 1 ? null : () => setDialogState(() {
+                                      final item = projectPhases.removeAt(index);
+                                      projectPhases.insert(index + 1, item);
+                                    }),
+                                    icon: const Icon(Icons.arrow_downward, size: 16),
+                                    label: const Text('Down'),
+                                  ),
+                                  const Spacer(),
+                                  TextButton.icon(
+                                    onPressed: projectPhases.length <= 1 ? null : () => setDialogState(() {
+                                      final removed = projectPhases.removeAt(index);
+                                      removed.dispose();
+                                    }),
+                                    icon: const Icon(Icons.delete_outline, size: 16),
+                                    label: const Text('Delete'),
+                                  ),
+                                ],
                               ),
                             ]),
                           );
@@ -304,11 +479,17 @@ Future<Task?> showTaskFormDialog(
                     if (value == null) return;
                     if (value == '__add_category__') {
                       final controller = TextEditingController();
-                      final added = await showDialog<String>(context: context, builder: (context) => AlertDialog(title: const Text('Add Category'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Category name')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save'))]));
-                      if (added != null && added.isNotEmpty) {
-                        await hiveService.addCategory(added);
-                        if (!categories.contains(added)) categories.add(added);
-                        setDialogState(() => selectedCategory = added);
+                      try {
+                        final added = await showDialog<String>(context: context, builder: (context) => AlertDialog(title: const Text('Add Category'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Category name')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save'))]));
+                        if (!context.mounted) return;
+                        if (added != null && added.isNotEmpty) {
+                          await hiveService.addCategory(added);
+                          if (!context.mounted) return;
+                          if (!categories.contains(added)) categories.add(added);
+                          setDialogState(() => selectedCategory = added);
+                        }
+                      } finally {
+                        controller.dispose();
                       }
                     } else {
                       setDialogState(() => selectedCategory = value);
@@ -327,11 +508,17 @@ Future<Task?> showTaskFormDialog(
                         setDialogState(() => selectedDelegate = null);
                       } else if (value == '__add_delegate__') {
                         final controller = TextEditingController();
-                        final added = await showDialog<String>(context: context, builder: (context) => AlertDialog(title: const Text('Add Delegate'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Person name')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save'))]));
-                        if (added != null && added.isNotEmpty) {
-                          await hiveService.addDelegate(added);
-                          if (!delegates.contains(added)) delegates.add(added);
-                          setDialogState(() => selectedDelegate = added);
+                        try {
+                          final added = await showDialog<String>(context: context, builder: (context) => AlertDialog(title: const Text('Add Delegate'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Person name')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save'))]));
+                          if (!context.mounted) return;
+                          if (added != null && added.isNotEmpty) {
+                            await hiveService.addDelegate(added);
+                            if (!context.mounted) return;
+                            if (!delegates.contains(added)) delegates.add(added);
+                            setDialogState(() => selectedDelegate = added);
+                          }
+                        } finally {
+                          controller.dispose();
                         }
                       } else {
                         setDialogState(() => selectedDelegate = value);
@@ -385,25 +572,50 @@ Future<Task?> showTaskFormDialog(
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task name is required')));
                   return;
                 }
+                if (repeatTask && scheduleEnabled && (scheduleStart == null || scheduleEnd == null)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Select both start and end time for schedule bonus')),
+                  );
+                  return;
+                }
                 final mergedDescription = !repeatTask
                     ? _ProjectPhaseDraft.mergeIntoDescription(descriptionController.text.trim(), projectPhases)
-                    : descriptionController.text.trim();
+                    : _mergeSchedule(
+                        descriptionController.text.trim(),
+                        enabled: scheduleEnabled,
+                        start: scheduleStart,
+                        end: scheduleEnd,
+                        bonusPoints: scheduleBonusPoints,
+                      );
+                final inferredStatus = repeatTask
+                    ? 'Not Updated'
+                    : _ProjectPhaseDraft.inferTaskStatus(projectPhases, selectedStatus);
+
+                final taskDueDate = repeatTask && scheduleEnabled && scheduleStart != null
+                    ? DateTime(
+                        dueDate.year,
+                        dueDate.month,
+                        dueDate.day,
+                        scheduleStart!.hour,
+                        scheduleStart!.minute,
+                      )
+                    : dueDate;
 
                 Navigator.of(context).pop(Task(
                   task: name,
                   description: mergedDescription,
-                  dueDate: dueDate,
+                  dueDate: taskDueDate,
                   priority: repeatTask ? 'Medium' : selectedPriority,
-                  status: repeatTask ? 'Not Updated' : selectedStatus,
+                  status: inferredStatus,
                   category: selectedCategory,
                   delegatedTo: repeatTask ? null : selectedDelegate,
-                  done: repeatTask ? false : selectedStatus == 'Completed',
+                  done: !repeatTask && inferredStatus == 'Completed',
                   repeatTask: repeatTask,
                   repeatFrequency: repeatTask ? repeatFrequency : null,
                   urgent: selectedUrgent,
                   important: selectedImportant,
-                  estimatedMinutes: 0,
-                  hourSlot: repeatTask && repeatFrequency == 'Daily' ? null : hourSlot,
+                  estimatedMinutes: repeatTask ? selectedRoutineMinutes : _ProjectPhaseDraft.totalMinutes(projectPhases),
+                  hourSlot: repeatTask && scheduleEnabled ? scheduleStart?.hour : hourSlot,
                   colorValue: selectedColorValue,
                   routineEnabled: repeatTask ? routineEnabled : true,
                 ));
@@ -415,10 +627,117 @@ Future<Task?> showTaskFormDialog(
       ),
     );
   } finally {
+    await Future<void>.delayed(const Duration(milliseconds: 350));
     nameController.dispose();
     descriptionController.dispose();
+    for (final phase in projectPhases) {
+      phase.dispose();
+    }
   }
 }
+
+
+class _ScheduleDraft {
+  final bool enabled;
+  final TimeOfDay? start;
+  final TimeOfDay? end;
+  final int? bonusPoints;
+
+  const _ScheduleDraft({
+    required this.enabled,
+    this.start,
+    this.end,
+    this.bonusPoints,
+  });
+
+  const _ScheduleDraft.none()
+      : enabled = false,
+        start = null,
+        end = null,
+        bonusPoints = null;
+}
+
+_ScheduleDraft _parseSchedule(String description) {
+  TimeOfDay? start;
+  TimeOfDay? end;
+  int? bonus;
+  TimeOfDay? legacy;
+
+  for (final line in description.split('\n')) {
+    final trimmed = line.trim();
+    if (trimmed.startsWith(_scheduleStartMarker)) {
+      start = _parseTimeOfDay(trimmed.substring(_scheduleStartMarker.length).trim());
+    } else if (trimmed.startsWith(_scheduleEndMarker)) {
+      end = _parseTimeOfDay(trimmed.substring(_scheduleEndMarker.length).trim());
+    } else if (trimmed.startsWith(_scheduleBonusMarker)) {
+      bonus = int.tryParse(trimmed.substring(_scheduleBonusMarker.length).replaceAll('points', '').trim());
+    } else if (trimmed.startsWith(_legacyScheduledTimeMarker)) {
+      legacy = _parseTimeOfDay(trimmed.substring(_legacyScheduledTimeMarker.length).trim());
+    }
+  }
+
+  if (start == null && end == null && legacy != null) {
+    start = _addMinutes(legacy, -15);
+    end = _addMinutes(legacy, 15);
+  }
+
+  final enabled = start != null && end != null;
+  return enabled
+      ? _ScheduleDraft(enabled: true, start: start, end: end, bonusPoints: bonus ?? _defaultScheduleBonusPoints)
+      : const _ScheduleDraft.none();
+}
+
+TimeOfDay? _parseTimeOfDay(String raw) {
+  final parts = raw.split(':');
+  if (parts.length != 2) return null;
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return TimeOfDay(hour: hour, minute: minute);
+}
+
+String _stripSchedule(String description) {
+  return description
+      .split('\n')
+      .where((line) {
+        final trimmed = line.trim();
+        return !trimmed.startsWith(_legacyScheduledTimeMarker) &&
+            !trimmed.startsWith(_scheduleStartMarker) &&
+            !trimmed.startsWith(_scheduleEndMarker) &&
+            !trimmed.startsWith(_scheduleBonusMarker);
+      })
+      .join('\n')
+      .trim();
+}
+
+String _mergeSchedule(
+  String description, {
+  required bool enabled,
+  required TimeOfDay? start,
+  required TimeOfDay? end,
+  required int bonusPoints,
+}) {
+  final cleaned = _stripSchedule(description);
+  if (!enabled || start == null || end == null) return cleaned;
+  final lines = <String>[
+    if (cleaned.isNotEmpty) cleaned,
+    '$_scheduleStartMarker ${_encodeTimeOfDay(start)}',
+    '$_scheduleEndMarker ${_encodeTimeOfDay(end)}',
+    '$_scheduleBonusMarker $bonusPoints',
+  ];
+  return lines.join('\n');
+}
+
+String _encodeTimeOfDay(TimeOfDay time) {
+  return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+}
+
+TimeOfDay _addMinutes(TimeOfDay time, int minutes) {
+  final total = ((time.hour * 60) + time.minute + minutes) % (24 * 60);
+  final normalized = total < 0 ? total + (24 * 60) : total;
+  return TimeOfDay(hour: normalized ~/ 60, minute: normalized % 60);
+}
+
 
 String _formatHour(int hour) {
   if (hour == 0) return '12 AM';
@@ -442,29 +761,53 @@ Future<bool> showQuickAddTaskDialog(
   return false;
 }
 
+
+String _formatPhaseCompletedAt(DateTime? completedAt) {
+  if (completedAt == null) return 'Saved when you save this task';
+  final hour = completedAt.hour;
+  final minute = completedAt.minute.toString().padLeft(2, '0');
+  final period = hour >= 12 ? 'PM' : 'AM';
+  final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+  return '${completedAt.month}/${completedAt.day}/${completedAt.year} • $displayHour:$minute $period';
+}
+
 class _ProjectPhaseDraft {
   String status;
+  int durationMinutes;
+  bool urgent;
+  bool important;
+  int? actualMinutes;
+  DateTime? completedAt;
   final TextEditingController nameController;
   final TextEditingController descriptionController;
 
   _ProjectPhaseDraft({
     required this.status,
+    required this.durationMinutes,
     required this.nameController,
     required this.descriptionController,
+    this.urgent = false,
+    this.important = false,
+    this.actualMinutes,
+    this.completedAt,
   });
+
+  void dispose() {
+    nameController.dispose();
+    descriptionController.dispose();
+  }
 
   factory _ProjectPhaseDraft.empty() => _ProjectPhaseDraft(
         status: 'Not Started',
+        durationMinutes: defaultTaskDurationMinutes,
         nameController: TextEditingController(),
         descriptionController: TextEditingController(),
       );
 
-  static const _marker = '---PHASES---';
-
   static List<_ProjectPhaseDraft> parseFromDescription(String description) {
-    final markerIndex = description.indexOf(_marker);
+    final markerIndex = description.indexOf(taskPhaseMarker);
     if (markerIndex == -1) return [_ProjectPhaseDraft.empty()];
-    final phaseChunk = description.substring(markerIndex + _marker.length).trim();
+    final phaseChunk = description.substring(markerIndex + taskPhaseMarker.length).trim();
     final lines = phaseChunk.split('\n').where((line) => line.trim().isNotEmpty);
     final phases = <_ProjectPhaseDraft>[];
     for (final line in lines) {
@@ -473,6 +816,11 @@ class _ProjectPhaseDraft {
       phases.add(
         _ProjectPhaseDraft(
           status: parts[2].trim().isEmpty ? 'Not Started' : parts[2].trim(),
+          durationMinutes: _parseDuration(parts.length > 3 ? parts[3] : null),
+          urgent: _parseBool(parts.length > 4 ? parts[4] : null),
+          important: _parseBool(parts.length > 5 ? parts[5] : null),
+          actualMinutes: parts.length > 6 ? _parseOptionalDuration(parts[6]) : null,
+          completedAt: parts.length > 7 ? DateTime.tryParse(parts[7].trim()) : null,
           nameController: TextEditingController(text: parts[0].trim()),
           descriptionController: TextEditingController(text: parts[1].trim()),
         ),
@@ -482,12 +830,61 @@ class _ProjectPhaseDraft {
   }
 
   static String mergeIntoDescription(String baseDescription, List<_ProjectPhaseDraft> phases) {
-    final cleanBase = baseDescription.split(_marker).first.trim();
+    final cleanBase = baseDescription.split(taskPhaseMarker).first.trim();
     final serializedPhases = phases
         .where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty)
-        .map((phase) => '${phase.nameController.text.trim()} | ${phase.descriptionController.text.trim()} | ${phase.status}')
+        .map((phase) {
+          final completedAt = phase.status == 'Completed' ? (phase.completedAt ?? DateTime.now()) : null;
+          return serializeTaskPhase(
+            name: phase.nameController.text,
+            description: phase.descriptionController.text,
+            status: phase.status,
+            minutes: phase.durationMinutes,
+            urgent: phase.urgent,
+            important: phase.important,
+            actualMinutes: phase.status == 'Completed' ? (phase.actualMinutes ?? phase.durationMinutes) : null,
+            completedAt: completedAt,
+          );
+        })
         .join('\n');
     if (serializedPhases.isEmpty) return cleanBase;
-    return '$cleanBase\n\n$_marker\n$serializedPhases'.trim();
+    return '$cleanBase\n\n$taskPhaseMarker\n$serializedPhases'.trim();
+  }
+
+  static String inferTaskStatus(List<_ProjectPhaseDraft> phases, String fallbackStatus) {
+    final active = phases
+        .where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty)
+        .toList();
+    if (active.isEmpty) return fallbackStatus;
+
+    final statuses = active.map((phase) => phase.status.trim().toLowerCase()).toList();
+    if (statuses.every((status) => status == 'completed')) return 'Completed';
+    if (statuses.every((status) => status == 'cancelled')) return 'Cancelled';
+    if (statuses.any((status) => status == 'completed' || status == 'in progress')) {
+      return 'In Progress';
+    }
+    return fallbackStatus;
+  }
+
+  static int totalMinutes(List<_ProjectPhaseDraft> phases) {
+    final activePhases = phases.where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty).toList();
+    final source = activePhases.isEmpty ? phases : activePhases;
+    return source.fold<int>(0, (sum, phase) => sum + normalizeTaskDuration(phase.durationMinutes));
+  }
+
+  static bool _parseBool(String? rawValue) {
+    final normalized = (rawValue ?? '').trim().toLowerCase();
+    return normalized == 'true' || normalized == 'yes' || normalized == '1';
+  }
+
+  static int _parseDuration(String? rawValue) {
+    final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
+    return normalizeTaskDuration(parsed);
+  }
+
+  static int? _parseOptionalDuration(String? rawValue) {
+    final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
+    if (parsed == null) return null;
+    return normalizeTaskDuration(parsed);
   }
 }

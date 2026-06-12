@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
+import '../widgets/routine_occurrence_dialog.dart';
+import '../widgets/productivity_period_summary.dart';
 import '../utils/grid_utils.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
 import '../models/task_model.dart';
+import '../models/productivity_snapshot.dart';
 import 'task_screen.dart';
+import 'journal_view.dart';
 
 class YearView extends StatefulWidget {
   final HiveService hiveService;
@@ -18,12 +22,45 @@ class YearView extends StatefulWidget {
 
 class _YearViewState extends State<YearView> {
   late DateTime _currentYear;
+  final ScrollController _yearSelectorController = ScrollController();
   bool _showYearlyTasks = true;
 
   @override
   void initState() {
     super.initState();
     _currentYear = DateTime.now();
+    _centerSelectedYearAfterLayout();
+  }
+
+  @override
+  void dispose() {
+    _yearSelectorController.dispose();
+    super.dispose();
+  }
+
+  List<int> _selectorYears() {
+    final selectedYear = _currentYear.year;
+    return List.generate(9, (index) => selectedYear - 4 + index);
+  }
+
+  void _centerSelectedYearAfterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_yearSelectorController.hasClients) return;
+      final selectedIndex = _selectorYears().indexOf(_currentYear.year);
+      final target = (selectedIndex * 96.0) - (MediaQuery.of(context).size.width / 2) + 72;
+      _yearSelectorController.animateTo(
+        target.clamp(0.0, _yearSelectorController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  void _selectYear(int year) {
+    setState(() {
+      _currentYear = DateTime(year);
+    });
+    _centerSelectedYearAfterLayout();
   }
 
   void _showTaskScreen(DateTime date) {
@@ -45,110 +82,56 @@ class _YearViewState extends State<YearView> {
 
 
 
-  String _normalizedRepeatFrequency(Task task) {
-    final normalized = task.repeatFrequency?.trim().toLowerCase();
-    switch (normalized) {
-      case 'daily':
-      case 'weekly':
-      case 'monthly':
-      case 'yearly':
-        return normalized!;
-      default:
-        return '';
-    }
-  }
 
-  bool _isRecurringTask(Task task) => task.repeatTask && _normalizedRepeatFrequency(task).isNotEmpty;
-
-
-  String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
-
-  bool _isOccurrenceLocked(Task task) {
-    final status = _normalizedStatus(task);
-    return task.done || status == 'completed' || status == 'cancelled' || status == 'missed' || status == 'overdue';
-  }
-
-  String _occurrenceLabel(Task task) {
-    switch (_normalizedRepeatFrequency(task)) {
-      case 'daily':
-        return 'today';
-      case 'weekly':
-        return 'this week';
-      case 'monthly':
-        return 'this month';
-      case 'yearly':
-        return 'this year';
-      default:
-        return 'this period';
-    }
-  }
-
-  Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
-    Future<void> toggleRoutine(BuildContext dialogContext) async {
-      await widget.hiveService.setRecurringTaskEnabledByReference(task, !task.routineEnabled);
-      if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-    }
-
-    Widget toggleButton(BuildContext dialogContext) {
-      return TextButton.icon(
-        onPressed: () => toggleRoutine(dialogContext),
-        icon: Icon(task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
-        label: Text(task.routineEnabled ? 'Disable Routine' : 'Enable Routine'),
-      );
-    }
-
-    if (_isOccurrenceLocked(task)) {
-      final period = _occurrenceLabel(task);
-      final statusLabel = task.done || _normalizedStatus(task) == 'completed' ? 'completed' : task.status.toLowerCase();
-      return showDialog<Task>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Already updated'),
-          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence. You can still enable or disable this routine without deleting its history.'),
-          actions: [
-            toggleButton(context),
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-          ],
-        ),
-      );
-    }
-
-    return showDialog<Task>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Update ${task.task} occurrence'),
-        content: const Text('Routine details are locked here. Update only the current occurrence, or pause the routine without deleting its history.'),
-        actions: [
-          toggleButton(context),
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
-          TextButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed'))
-                : null,
-            child: const Text('Miss This Occurrence'),
-          ),
-          ElevatedButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed'))
-                : null,
-            child: const Text('Complete This Occurrence'),
-          ),
-        ],
-      ),
+  void _openJournalForTask(Task task) {
+    Navigator.of(context).push(
+      JournalView.route(hiveService: widget.hiveService, initialDate: task.dueDate),
     );
   }
 
   Future<void> _editTask(Task task) async {
-    final updated = _isRecurringTask(task)
-        ? await _showRecurringStatusUpdateDialog(task)
-        : await showTaskFormDialog(
+    if (isRoutineTask(task)) {
+      final action = await showRoutineOccurrenceDialog(context: context, task: task);
+      if (action == null || action == RoutineOccurrenceAction.close) return;
+
+      switch (action) {
+        case RoutineOccurrenceAction.openJournal:
+          _openJournalForTask(task);
+          return;
+        case RoutineOccurrenceAction.disableRoutine:
+          await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
+          return;
+        case RoutineOccurrenceAction.editDetails:
+          final edited = await showTaskFormDialog(
             context,
             date: task.dueDate,
             initialTask: task,
-            title: 'Update Task',
-            actionLabel: 'Save Task',
-            onDelete: () => widget.hiveService.deleteTaskByReference(task),
+            title: 'Edit Routine Details',
+            actionLabel: 'Save Routine',
           );
+          if (edited != null) {
+            await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+          }
+          return;
+        case RoutineOccurrenceAction.missOccurrence:
+          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: false, status: 'Missed'));
+          return;
+        case RoutineOccurrenceAction.completeOccurrence:
+          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed'));
+          return;
+        case RoutineOccurrenceAction.close:
+          return;
+      }
+    }
+
+    final updated = await showTaskFormDialog(
+      context,
+      date: task.dueDate,
+      initialTask: task,
+      title: 'Update Task',
+      actionLabel: 'Save Task',
+      onDelete: () => widget.hiveService.deleteTaskByReference(task),
+    );
 
     if (updated != null) {
       await widget.hiveService.updateTaskByReference(task, updated);
@@ -170,6 +153,56 @@ class _YearViewState extends State<YearView> {
     }
   }
 
+
+  bool _isCompletedTask(Task task) {
+    return task.done || task.status.trim().toLowerCase() == 'completed';
+  }
+
+  List<DateTime> _daysInCurrentYear() {
+    final daysInYear = DateTime(_currentYear.year + 1, 1, 1).difference(DateTime(_currentYear.year, 1, 1)).inDays;
+    return List.generate(daysInYear, (index) => DateTime(_currentYear.year, 1, index + 1));
+  }
+
+  PeriodProductivityStats _yearlyProductivityStats() {
+    final days = _daysInCurrentYear();
+    final snapshots = days.map((date) => widget.hiveService.calculateProductivitySnapshotForDate(date)).toList();
+    final yearTasks = days.expand((date) => widget.hiveService.getTasksForDate(date)).toList();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final completedTasks = yearTasks.where(_isCompletedTask).length;
+    final pendingTasks = yearTasks.where((task) => !_isCompletedTask(task) && task.status != 'Cancelled').length;
+    final overdueTasks = yearTasks.where((task) {
+      final due = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+      return due.isBefore(today) && !_isCompletedTask(task) && task.status != 'Cancelled';
+    }).length;
+
+    return PeriodProductivityStats(
+      title: '📆 Year Productivity',
+      periodLabel: '${_currentYear.year}',
+      snapshots: snapshots,
+      maximumPoints: days.length * ProductivitySnapshot.maximumPoints.round(),
+      totalDays: days.length,
+      completedTasks: completedTasks,
+      pendingTasks: pendingTasks,
+      overdueTasks: overdueTasks,
+      intervals: _yearlyMonthIntervals(snapshots),
+    );
+  }
+
+  List<ProductivityIntervalSummary> _yearlyMonthIntervals(List<ProductivitySnapshot> snapshots) {
+    const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return List.generate(12, (monthIndex) {
+      final month = monthIndex + 1;
+      final monthSnapshots = snapshots.where((snapshot) => snapshot.date.month == month).toList();
+      final points = monthSnapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.totalPoints);
+      final maxPoints = monthSnapshots.length * ProductivitySnapshot.maximumPoints;
+      return ProductivityIntervalSummary(
+        label: labels[monthIndex],
+        points: points,
+        score: maxPoints == 0 ? 0 : (points / maxPoints * 100).clamp(0.0, 100.0).toDouble(),
+      );
+    });
+  }
 
   Map<String, int> _getCompletedSummaryForDate(DateTime date) {
     final completedTasks = widget.hiveService
@@ -258,6 +291,38 @@ class _YearViewState extends State<YearView> {
     );
   }
 
+  Widget _yearBubbleSelector() {
+    final years = _selectorYears();
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F4EC),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.primary.withOpacity(0.12)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, 7))],
+      ),
+      child: SingleChildScrollView(
+        controller: _yearSelectorController,
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Row(
+          children: years.map((year) {
+            final selected = year == _currentYear.year;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              child: _PeriodSelectorPill(
+                label: '$year',
+                selected: selected,
+                onTap: () => _selectYear(year),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -271,59 +336,32 @@ class _YearViewState extends State<YearView> {
       appBar: AppBar(
         title: Text('${_currentYear.year} Progress'),
         automaticallyImplyLeading: false,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(52.0),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.chevron_left, size: 18),
-                    label: const Text('Prev Year'),
-                    onPressed: () {
-                      setState(() {
-                        _currentYear = DateTime(_currentYear.year - 1);
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.chevron_right, size: 18),
-                    label: const Text('Next Year'),
-                    onPressed: () {
-                      setState(() {
-                        _currentYear = DateTime(_currentYear.year + 1);
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
         builder: (context, box, _) {
           final yearlyTasks = _getYearlyRepeatingTasks();
-          return Column(
-            children: [
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final gridDims = calculateGridDimensions(
-                      daysInYear,
-                      constraints.maxWidth,
-                      constraints.maxHeight,
-                      viewType: 'year',
-                    );
+          final yearlyStats = _yearlyProductivityStats();
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final gridDims = calculateGridDimensions(
+                daysInYear,
+                constraints.maxWidth,
+                420,
+                viewType: 'year',
+              );
 
-                    return GridView.builder(
-                      padding: const EdgeInsets.all(16.0),
+              return ListView(
+                padding: const EdgeInsets.all(16.0),
+                children: [
+                  _yearBubbleSelector(),
+                  const SizedBox(height: 16),
+                  ProductivityPeriodSummaryCard(stats: yearlyStats),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 420,
+                    child: GridView.builder(
+                      physics: const NeverScrollableScrollPhysics(),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: gridDims['columns'],
                         childAspectRatio: 1.0,
@@ -342,12 +380,13 @@ class _YearViewState extends State<YearView> {
                           onTap: () => _showTaskScreen(date),
                         );
                       },
-                    );
-                  },
-                ),
-              ),
-              _yearlyTasksPanel(yearlyTasks),
-            ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _yearlyTasksPanel(yearlyTasks),
+                ],
+              );
+            },
           );
         },
       ),
@@ -360,6 +399,61 @@ class _YearViewState extends State<YearView> {
               child: const Icon(Icons.add),
             )
           : null,
+    );
+  }
+}
+
+class _PeriodSelectorPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PeriodSelectorPill({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutBack,
+      scale: selected ? 1.08 : 1.0,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            constraints: const BoxConstraints(minWidth: 80, minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primary : Colors.white,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: selected ? AppColors.primaryDark : AppColors.primary.withOpacity(0.18), width: selected ? 1.8 : 1),
+              boxShadow: selected
+                  ? [BoxShadow(color: AppColors.primary.withOpacity(0.34), blurRadius: 16, offset: const Offset(0, 7))]
+                  : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 4))],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? Colors.white : AppColors.textPrimary,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
+                  ),
+                ),
+                if (selected) ...[
+                  const SizedBox(width: 7),
+                  Container(width: 7, height: 7, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

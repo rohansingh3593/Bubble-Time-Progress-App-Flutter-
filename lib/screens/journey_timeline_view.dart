@@ -5,6 +5,7 @@ import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
+import '../widgets/profile_avatar.dart';
 
 class JourneyTimelineView extends StatelessWidget {
   final HiveService hiveService;
@@ -47,7 +48,7 @@ class JourneyTimelineView extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
             children: [
-              _JourneyHero(onAdd: () => _showEntryDialog(context, allTasks)),
+              _JourneyHero(onAdd: () => _showEntryDialog(context, allTasks), hiveService: hiveService),
               const SizedBox(height: 14),
               if (dailyJourneys.isEmpty)
                 const _EmptyJourneyState()
@@ -147,7 +148,11 @@ class _DailyJourney {
     }
 
     final journeys = dates.map((date) {
-      final entries = manualByDate[date] ?? const <JourneyEntry>[];
+      final entries = (manualByDate[date] ?? const <JourneyEntry>[]).toList()
+        ..sort((a, b) {
+          if (a.isAutoDailySummary != b.isAutoDailySummary) return a.isAutoDailySummary ? -1 : 1;
+          return b.date.compareTo(a.date);
+        });
       return _DailyJourney(
         date: date,
         tasks: tasksByDate[date] ?? const <Task>[],
@@ -336,8 +341,9 @@ class _TaskWrap extends StatelessWidget {
 
 class _JourneyHero extends StatelessWidget {
   final VoidCallback onAdd;
+  final HiveService hiveService;
 
-  const _JourneyHero({required this.onAdd});
+  const _JourneyHero({required this.onAdd, required this.hiveService});
 
   @override
   Widget build(BuildContext context) {
@@ -361,11 +367,11 @@ class _JourneyHero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.auto_stories, color: Colors.white),
-              SizedBox(width: 8),
-              Expanded(
+              ProfileAvatar(profile: hiveService.getUserProfile(), radius: 24, accentColor: AppColors.accent, showGlow: false),
+              const SizedBox(width: 10),
+              const Expanded(
                 child: Text(
                   'Personal Journey Timeline',
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20),
@@ -441,11 +447,12 @@ class _JourneyEntryCard extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Delete entry',
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                onPressed: onDelete,
-              ),
+              if (!entry.isAutoDailySummary)
+                IconButton(
+                  tooltip: 'Delete entry',
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  onPressed: onDelete,
+                ),
             ],
           ),
           if (entry.description.trim().isNotEmpty) ...[
@@ -473,11 +480,39 @@ class _JourneyEntryCard extends StatelessWidget {
         return Icons.emoji_events;
       case 'Routine update':
         return Icons.repeat;
+      case 'Daily auto update':
+        return Icons.auto_graph;
       case 'Milestone':
         return Icons.flag;
       default:
         return Icons.edit_note;
     }
+  }
+}
+
+class _RelatedTaskDropdownItem extends StatelessWidget {
+  final Task task;
+  final bool compact;
+
+  const _RelatedTaskDropdownItem({required this.task, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: compact ? double.infinity : 260,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: Color(task.colorValue), shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Flexible(child: Text(task.task, overflow: TextOverflow.ellipsis, maxLines: 1)),
+        ],
+      ),
+    );
   }
 }
 
@@ -638,22 +673,21 @@ class _JourneyEntryDialogState extends State<_JourneyEntryDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<Task?>(
               value: _relatedTask,
+              isExpanded: true,
               decoration: InputDecoration(
                 labelText: 'Related habit/task',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
               ),
+              selectedItemBuilder: (context) => [
+                const Text('No related task', overflow: TextOverflow.ellipsis),
+                ...taskOptions.map((task) => _RelatedTaskDropdownItem(task: task, compact: true)),
+              ],
               items: [
                 const DropdownMenuItem<Task?>(value: null, child: Text('No related task')),
                 ...taskOptions.map(
                   (task) => DropdownMenuItem<Task?>(
                     value: task,
-                    child: Row(
-                      children: [
-                        Container(width: 10, height: 10, decoration: BoxDecoration(color: Color(task.colorValue), shape: BoxShape.circle)),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(task.task, overflow: TextOverflow.ellipsis)),
-                      ],
-                    ),
+                    child: _RelatedTaskDropdownItem(task: task),
                   ),
                 ),
               ],

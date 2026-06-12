@@ -69,6 +69,7 @@ class StreakView extends StatelessWidget {
                   onTap: () => Navigator.of(context).push(
                     JournalView.route(hiveService: hiveService, onGoToDashboard: onGoToDashboard),
                   ),
+                  userProfile: hiveService.getUserProfile(),
                   onJourneyTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => JourneyTimelineView(hiveService: hiveService),
@@ -1662,7 +1663,7 @@ class _HabitTracker {
     final isDaily = _normalizedRepeatFrequency(repeatFrequency) == 'daily';
 
     if (task == null) {
-      if (isDaily && !day.isBefore(firstTrackedDate) && !day.isAfter(today)) {
+      if (isDaily && !day.isBefore(firstTrackedDate) && day.isBefore(today)) {
         return _HabitDayStatus.missed;
       }
       return _HabitDayStatus.none;
@@ -1671,7 +1672,7 @@ class _HabitTracker {
     if (_isTaskCompleted(task)) return _HabitDayStatus.completed;
     if (_isTaskCancelled(task)) return _HabitDayStatus.cancelled;
     if (_isTaskMissed(task)) return _HabitDayStatus.missed;
-    if (isDaily && !day.isAfter(today)) return _HabitDayStatus.missed;
+    if (isDaily && day.isBefore(today)) return _HabitDayStatus.missed;
     return _HabitDayStatus.none;
   }
 
@@ -1732,8 +1733,14 @@ class _HabitTracker {
   static int _calculateDailyHabitStreak(Map<DateTime, Task> tasksByDate, DateTime today) {
     var cursor = _dateOnly(today);
     var streak = 0;
+    final todayTask = tasksByDate[cursor];
 
-    if (!_isTaskCompleted(tasksByDate[cursor])) return 0;
+    if (!_isTaskCompleted(todayTask)) {
+      if (todayTask != null && (_isTaskCancelled(todayTask) || _isTaskMissed(todayTask))) {
+        return 0;
+      }
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
 
     while (_isTaskCompleted(tasksByDate[cursor])) {
       streak++;

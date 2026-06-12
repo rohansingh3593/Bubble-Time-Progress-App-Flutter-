@@ -10,14 +10,20 @@ import '../widgets/rank_profile_card.dart';
 class JournalView extends StatefulWidget {
   final HiveService hiveService;
   final VoidCallback? onGoToDashboard;
+  final DateTime? initialDate;
 
-  const JournalView({super.key, required this.hiveService, this.onGoToDashboard});
+  const JournalView({super.key, required this.hiveService, this.onGoToDashboard, this.initialDate});
 
-  static Route<void> route({required HiveService hiveService, VoidCallback? onGoToDashboard}) {
+  static Route<void> route({
+    required HiveService hiveService,
+    VoidCallback? onGoToDashboard,
+    DateTime? initialDate,
+  }) {
     return PageRouteBuilder<void>(
       pageBuilder: (context, animation, secondaryAnimation) => JournalView(
         hiveService: hiveService,
         onGoToDashboard: onGoToDashboard,
+        initialDate: initialDate,
       ),
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
@@ -55,8 +61,8 @@ class _JournalViewState extends State<JournalView> {
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _selectedDate = DateTime(now.year, now.month, now.day);
+    final initial = widget.initialDate ?? DateTime.now();
+    _selectedDate = DateTime(initial.year, initial.month, initial.day);
     _loadEntryForSelectedDate();
   }
 
@@ -80,13 +86,25 @@ class _JournalViewState extends State<JournalView> {
   }
 
   Future<void> _saveEntry(List<Task> tasksForDay) async {
-    final completed = tasksForDay.where(_isCompleted).length;
     final total = tasksForDay.where((task) => task.status != 'Cancelled').length;
+    final completed = tasksForDay
+        .where((task) => _isCompleted(task) || widget.hiveService.isDailyJournalTask(task))
+        .length;
     final score = total == 0 ? 0 : ((completed / total) * 100).round();
 
+    final savedAt = DateTime.now();
     await widget.hiveService.saveJournalEntry(
       JournalEntry(
-        date: _selectedDate,
+        date: DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          savedAt.hour,
+          savedAt.minute,
+          savedAt.second,
+          savedAt.millisecond,
+          savedAt.microsecond,
+        ),
         mood: _selectedMood,
         reflection: _reflectionController.text.trim(),
         completedTasks: completed,
@@ -163,6 +181,7 @@ class _JournalViewState extends State<JournalView> {
                 profile: rankProfile,
                 onUsernameChanged: widget.hiveService.setUsername,
                 compact: true,
+                userProfile: widget.hiveService.getUserProfile(),
               ),
               const SizedBox(height: 14),
               _DateHeader(
