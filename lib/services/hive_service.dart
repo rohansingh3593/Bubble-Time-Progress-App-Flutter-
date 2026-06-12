@@ -1006,7 +1006,7 @@ class HiveService {
       goals.add(RewardGoal.fromStorageList(raw.cast<dynamic>()));
     }
     goals.sort((a, b) {
-      if (a.isCompleted != b.isCompleted) return a.isCompleted ? 1 : -1;
+      if (a.isAchieved != b.isAchieved) return a.isAchieved ? 1 : -1;
       return a.createdAt.compareTo(b.createdAt);
     });
     return goals;
@@ -1033,11 +1033,36 @@ class HiveService {
   }
 
   Future<void> saveRewardGoal(RewardGoal goal) async {
-    await _box.put(_rewardGoalKey(goal.id), goal.toStorageList());
+    final existingRaw = _box.get(_rewardGoalKey(goal.id));
+    final existing = existingRaw == null ? null : RewardGoal.fromStorageList(existingRaw.cast<dynamic>());
+    var updated = _normalizeRewardGoal(goal);
+    final history = [...updated.history];
+    if (existing == null) {
+      history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Goal created', note: updated.name));
+    } else {
+      if (existing.imagePath != updated.imagePath) {
+        history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Goal image updated'));
+      }
+      if (existing.effectiveStatus != updated.effectiveStatus) {
+        history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Status changed', note: updated.effectiveStatus));
+      }
+      if (!existing.isAchieved && updated.isAchieved) {
+        history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: '🎉 Goal achieved', note: updated.name));
+      }
+    }
+    updated = updated.copyWith(history: history);
+    await _box.put(_rewardGoalKey(updated.id), updated.toStorageList());
   }
 
   Future<void> deleteRewardGoal(String id) async {
     await _box.delete(_rewardGoalKey(id));
+  }
+
+  RewardGoal _normalizeRewardGoal(RewardGoal goal) {
+    if (goal.targetAmountRupees > 0 && goal.savedAmountRupees >= goal.targetAmountRupees) {
+      return goal.copyWith(status: RewardGoal.statusAchieved);
+    }
+    return goal;
   }
 
   Future<void> withdrawRewardMoney({
@@ -1081,7 +1106,25 @@ class HiveService {
     }
     final amountToApply = cleanAmount.clamp(0, goal.remainingAmountRupees).toInt();
     if (amountToApply <= 0) return;
-    final updatedGoal = goal.copyWith(savedAmountRupees: goal.savedAmountRupees + amountToApply);
+    final newSavedAmount = goal.savedAmountRupees + amountToApply;
+    final history = [
+      ...goal.history,
+      RewardGoalHistoryEntry(
+        date: DateTime.now(),
+        title: '+ ₹$amountToApply added from reward balance',
+        amountRupees: amountToApply,
+        note: note.trim(),
+      ),
+      if (goal.targetAmountRupees > 0 && newSavedAmount >= goal.targetAmountRupees && !goal.isAchieved)
+        RewardGoalHistoryEntry(date: DateTime.now(), title: '🎉 Goal achieved', note: goal.name),
+    ];
+    final updatedGoal = _normalizeRewardGoal(
+      goal.copyWith(
+        savedAmountRupees: newSavedAmount,
+        status: goal.targetAmountRupees > 0 && newSavedAmount >= goal.targetAmountRupees ? RewardGoal.statusAchieved : goal.status,
+        history: history,
+      ),
+    );
     final entry = RewardLedgerEntry(
       id: 'reward_${DateTime.now().microsecondsSinceEpoch}',
       date: DateTime.now(),

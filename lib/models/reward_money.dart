@@ -54,7 +54,42 @@ class RewardLedgerEntry {
   }
 }
 
+class RewardGoalHistoryEntry {
+  final DateTime date;
+  final String title;
+  final String note;
+  final int amountRupees;
+
+  const RewardGoalHistoryEntry({
+    required this.date,
+    required this.title,
+    this.note = '',
+    this.amountRupees = 0,
+  });
+
+  List<dynamic> toStorageList() => [
+        date.toIso8601String(),
+        title,
+        note,
+        amountRupees,
+      ];
+
+  factory RewardGoalHistoryEntry.fromStorageList(List<dynamic> raw) {
+    return RewardGoalHistoryEntry(
+      date: raw.isNotEmpty ? DateTime.tryParse('${raw[0]}') ?? DateTime.now() : DateTime.now(),
+      title: raw.length > 1 ? '${raw[1]}' : 'Goal updated',
+      note: raw.length > 2 ? '${raw[2]}' : '',
+      amountRupees: _readInt(raw, 3),
+    );
+  }
+}
+
 class RewardGoal {
+  static const String statusInProgress = 'In Progress';
+  static const String statusAchieved = 'Achieved';
+  static const String statusPaused = 'Paused';
+  static const String statusCancelled = 'Cancelled';
+
   final String id;
   final String name;
   final int targetAmountRupees;
@@ -64,6 +99,9 @@ class RewardGoal {
   final DateTime? deadline;
   final String priority;
   final DateTime createdAt;
+  final String category;
+  final String status;
+  final List<RewardGoalHistoryEntry> history;
 
   const RewardGoal({
     required this.id,
@@ -75,11 +113,16 @@ class RewardGoal {
     this.deadline,
     this.priority = 'Medium',
     required this.createdAt,
+    this.category = 'Personal',
+    this.status = statusInProgress,
+    this.history = const [],
   });
 
   int get remainingAmountRupees => (targetAmountRupees - savedAmountRupees).clamp(0, targetAmountRupees).toInt();
   double get progress => targetAmountRupees <= 0 ? 0 : (savedAmountRupees / targetAmountRupees).clamp(0, 1).toDouble();
   bool get isCompleted => targetAmountRupees > 0 && savedAmountRupees >= targetAmountRupees;
+  bool get isAchieved => status == statusAchieved || isCompleted;
+  String get effectiveStatus => isAchieved ? statusAchieved : status;
 
   RewardGoal copyWith({
     String? name,
@@ -90,6 +133,9 @@ class RewardGoal {
     DateTime? deadline,
     bool clearDeadline = false,
     String? priority,
+    String? category,
+    String? status,
+    List<RewardGoalHistoryEntry>? history,
   }) {
     return RewardGoal(
       id: id,
@@ -101,6 +147,9 @@ class RewardGoal {
       deadline: clearDeadline ? null : (deadline ?? this.deadline),
       priority: priority ?? this.priority,
       createdAt: createdAt,
+      category: category ?? this.category,
+      status: status ?? this.status,
+      history: history ?? this.history,
     );
   }
 
@@ -114,9 +163,20 @@ class RewardGoal {
         deadline?.toIso8601String() ?? '',
         priority,
         createdAt.toIso8601String(),
+        category,
+        effectiveStatus,
+        history.map((entry) => entry.toStorageList()).toList(),
       ];
 
   factory RewardGoal.fromStorageList(List<dynamic> raw) {
+    final parsedHistory = <RewardGoalHistoryEntry>[];
+    if (raw.length > 11 && raw[11] is Iterable) {
+      for (final entry in raw[11] as Iterable) {
+        if (entry is List) {
+          parsedHistory.add(RewardGoalHistoryEntry.fromStorageList(entry.cast<dynamic>()));
+        }
+      }
+    }
     return RewardGoal(
       id: raw.isNotEmpty ? '${raw[0]}' : 'goal_${DateTime.now().microsecondsSinceEpoch}',
       name: raw.length > 1 ? '${raw[1]}' : 'Reward Goal',
@@ -127,6 +187,9 @@ class RewardGoal {
       deadline: raw.length > 6 && '${raw[6]}'.trim().isNotEmpty ? DateTime.tryParse('${raw[6]}') : null,
       priority: raw.length > 7 ? '${raw[7]}' : 'Medium',
       createdAt: raw.length > 8 ? DateTime.tryParse('${raw[8]}') ?? DateTime.now() : DateTime.now(),
+      category: raw.length > 9 ? '${raw[9]}' : 'Personal',
+      status: raw.length > 10 ? '${raw[10]}' : statusInProgress,
+      history: parsedHistory,
     );
   }
 }

@@ -12,6 +12,7 @@ import '../utils/task_time_utils.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
+import 'goal_dashboard_view.dart';
 import 'reward_money_history_view.dart';
 import 'journal_view.dart';
 import 'journey_timeline_view.dart';
@@ -290,6 +291,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
+
+
+  void _openGoalDashboard() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => GoalDashboardView(hiveService: widget.hiveService),
+      ),
+    );
+  }
 
   void _openRewardMoneyHistory() {
     Navigator.of(context).push(
@@ -947,6 +957,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           onTap: _openJournal,
         ),
         const SizedBox(width: 8),
+        _goalHeaderButton(style),
+        const SizedBox(width: 8),
         _rewardMoneyBadge(style),
         const SizedBox(width: 8),
         _headerActionButton(
@@ -956,6 +968,38 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           onTap: _openSettingsPanel,
         ),
       ],
+    );
+  }
+
+
+  Widget _goalHeaderButton(DashboardThemeStyle style) {
+    return Tooltip(
+      message: 'Goal dashboard',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: _openGoalDashboard,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            decoration: BoxDecoration(
+              color: style.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: style.primary.withOpacity(0.14)),
+              boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.flag_circle_outlined, color: style.primary, size: 18),
+                const SizedBox(width: 6),
+                Text('Goals', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
