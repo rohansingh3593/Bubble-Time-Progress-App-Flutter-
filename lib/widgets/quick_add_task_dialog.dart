@@ -363,25 +363,16 @@ Future<Task?> showTaskFormDialog(
                                 },
                               ),
                               const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: SwitchListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      title: const Text('Urgent'),
-                                      value: phase.urgent,
-                                      onChanged: (value) => setDialogState(() => phase.urgent = value),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: SwitchListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      title: const Text('Important'),
-                                      value: phase.important,
-                                      onChanged: (value) => setDialogState(() => phase.important = value),
-                                    ),
-                                  ),
-                                ],
+                              _PhaseBooleanPicker(
+                                label: 'Urgent *',
+                                value: phase.urgent,
+                                onChanged: (value) => setDialogState(() => phase.urgent = value),
+                              ),
+                              const SizedBox(height: 8),
+                              _PhaseBooleanPicker(
+                                label: 'Important *',
+                                value: phase.important,
+                                onChanged: (value) => setDialogState(() => phase.important = value),
                               ),
                               const SizedBox(height: 8),
                               DropdownButtonFormField<int>(
@@ -761,6 +752,62 @@ Future<bool> showQuickAddTaskDialog(
   return false;
 }
 
+
+
+class _PhaseBooleanPicker extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _PhaseBooleanPicker({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F4FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Row(
+            children: [
+              Expanded(
+                child: RadioListTile<bool>(
+                  value: true,
+                  groupValue: value,
+                  title: const Text('Yes'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (next) => onChanged(next ?? false),
+                ),
+              ),
+              Expanded(
+                child: RadioListTile<bool>(
+                  value: false,
+                  groupValue: value,
+                  title: const Text('No'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (next) => onChanged(next ?? false),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 String _formatPhaseCompletedAt(DateTime? completedAt) {
   if (completedAt == null) return 'Saved when you save this task';
