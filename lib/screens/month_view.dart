@@ -19,12 +19,46 @@ class MonthView extends StatefulWidget {
 
 class _MonthViewState extends State<MonthView> {
   late DateTime _currentMonth;
+  final ScrollController _monthSelectorController = ScrollController();
   bool _showMonthlyTasks = true;
 
   @override
   void initState() {
     super.initState();
     _currentMonth = DateTime.now();
+    _centerSelectedMonthAfterLayout();
+  }
+
+  @override
+  void dispose() {
+    _monthSelectorController.dispose();
+    super.dispose();
+  }
+
+  void _centerSelectedMonthAfterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_monthSelectorController.hasClients) return;
+      final target = ((_currentMonth.month - 1) * 92.0) - (MediaQuery.of(context).size.width / 2) + 70;
+      _monthSelectorController.animateTo(
+        target.clamp(0.0, _monthSelectorController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  void _selectMonth(int month) {
+    setState(() {
+      _currentMonth = DateTime(_currentMonth.year, month);
+    });
+    _centerSelectedMonthAfterLayout();
+  }
+
+  void _changeSelectorYear(int delta) {
+    setState(() {
+      _currentMonth = DateTime(_currentMonth.year + delta, _currentMonth.month);
+    });
+    _centerSelectedMonthAfterLayout();
   }
 
   Color _getBubbleColor(DateTime date, Map<String, int> summary, DateTime today) {
@@ -255,6 +289,62 @@ class _MonthViewState extends State<MonthView> {
     );
   }
 
+  Widget _monthBubbleSelector() {
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F4EC),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.primary.withOpacity(0.12)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, 7))],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  tooltip: 'Previous year',
+                  onPressed: () => _changeSelectorYear(-1),
+                  icon: const Icon(Icons.chevron_left_rounded),
+                ),
+                Text('${_currentMonth.year}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: AppColors.textPrimary)),
+                IconButton(
+                  tooltip: 'Next year',
+                  onPressed: () => _changeSelectorYear(1),
+                  icon: const Icon(Icons.chevron_right_rounded),
+                ),
+              ],
+            ),
+          ),
+          SingleChildScrollView(
+            controller: _monthSelectorController,
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: List.generate(12, (index) {
+                final month = index + 1;
+                final selected = month == _currentMonth.month;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: _PeriodSelectorPill(
+                    label: monthLabels[index],
+                    selected: selected,
+                    onTap: () => _selectMonth(month),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -265,28 +355,8 @@ class _MonthViewState extends State<MonthView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.chevron_left),
-              onPressed: () {
-                setState(() {
-                  _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1);
-                });
-              },
-            ),
-            Text('${_getMonthName(_currentMonth.month)} ${_currentMonth.year}'),
-            IconButton(
-              icon: const Icon(Icons.chevron_right),
-              onPressed: () {
-                setState(() {
-                  _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1);
-                });
-              },
-            ),
-          ],
-        ),
+        title: Text('${_getMonthName(_currentMonth.month)} ${_currentMonth.year} Progress'),
+        automaticallyImplyLeading: false,
       ),
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
@@ -296,7 +366,7 @@ class _MonthViewState extends State<MonthView> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _monthlyTasksPanel(monthlyTasks),
+              _monthBubbleSelector(),
               const SizedBox(height: 16),
               ProductivityPeriodSummaryCard(stats: monthlyStats),
               const SizedBox(height: 16),
@@ -340,6 +410,8 @@ class _MonthViewState extends State<MonthView> {
                   );
                 },
               ),
+              const SizedBox(height: 16),
+              _monthlyTasksPanel(monthlyTasks),
             ],
           );
         },
@@ -363,5 +435,60 @@ class _MonthViewState extends State<MonthView> {
       'July', 'August', 'September', 'October', 'November', 'December'
     ];
     return months[month - 1];
+  }
+}
+
+class _PeriodSelectorPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PeriodSelectorPill({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutBack,
+      scale: selected ? 1.08 : 1.0,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            constraints: const BoxConstraints(minWidth: 72, minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primary : Colors.white,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: selected ? AppColors.primaryDark : AppColors.primary.withOpacity(0.18), width: selected ? 1.8 : 1),
+              boxShadow: selected
+                  ? [BoxShadow(color: AppColors.primary.withOpacity(0.34), blurRadius: 16, offset: const Offset(0, 7))]
+                  : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 4))],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? Colors.white : AppColors.textPrimary,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
+                  ),
+                ),
+                if (selected) ...[
+                  const SizedBox(width: 7),
+                  Container(width: 7, height: 7, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

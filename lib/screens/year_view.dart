@@ -21,12 +21,45 @@ class YearView extends StatefulWidget {
 
 class _YearViewState extends State<YearView> {
   late DateTime _currentYear;
+  final ScrollController _yearSelectorController = ScrollController();
   bool _showYearlyTasks = true;
 
   @override
   void initState() {
     super.initState();
     _currentYear = DateTime.now();
+    _centerSelectedYearAfterLayout();
+  }
+
+  @override
+  void dispose() {
+    _yearSelectorController.dispose();
+    super.dispose();
+  }
+
+  List<int> _selectorYears() {
+    final selectedYear = _currentYear.year;
+    return List.generate(9, (index) => selectedYear - 4 + index);
+  }
+
+  void _centerSelectedYearAfterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_yearSelectorController.hasClients) return;
+      final selectedIndex = _selectorYears().indexOf(_currentYear.year);
+      final target = (selectedIndex * 96.0) - (MediaQuery.of(context).size.width / 2) + 72;
+      _yearSelectorController.animateTo(
+        target.clamp(0.0, _yearSelectorController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  void _selectYear(int year) {
+    setState(() {
+      _currentYear = DateTime(year);
+    });
+    _centerSelectedYearAfterLayout();
   }
 
   void _showTaskScreen(DateTime date) {
@@ -247,6 +280,38 @@ class _YearViewState extends State<YearView> {
     );
   }
 
+  Widget _yearBubbleSelector() {
+    final years = _selectorYears();
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F4EC),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.primary.withOpacity(0.12)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, 7))],
+      ),
+      child: SingleChildScrollView(
+        controller: _yearSelectorController,
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Row(
+          children: years.map((year) {
+            final selected = year == _currentYear.year;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              child: _PeriodSelectorPill(
+                label: '$year',
+                selected: selected,
+                onTap: () => _selectYear(year),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -260,40 +325,6 @@ class _YearViewState extends State<YearView> {
       appBar: AppBar(
         title: Text('${_currentYear.year} Progress'),
         automaticallyImplyLeading: false,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(52.0),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.chevron_left, size: 18),
-                    label: const Text('Prev Year'),
-                    onPressed: () {
-                      setState(() {
-                        _currentYear = DateTime(_currentYear.year - 1);
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.chevron_right, size: 18),
-                    label: const Text('Next Year'),
-                    onPressed: () {
-                      setState(() {
-                        _currentYear = DateTime(_currentYear.year + 1);
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
@@ -312,7 +343,7 @@ class _YearViewState extends State<YearView> {
               return ListView(
                 padding: const EdgeInsets.all(16.0),
                 children: [
-                  _yearlyTasksPanel(yearlyTasks),
+                  _yearBubbleSelector(),
                   const SizedBox(height: 16),
                   ProductivityPeriodSummaryCard(stats: yearlyStats),
                   const SizedBox(height: 16),
@@ -340,6 +371,8 @@ class _YearViewState extends State<YearView> {
                       },
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  _yearlyTasksPanel(yearlyTasks),
                 ],
               );
             },
@@ -355,6 +388,61 @@ class _YearViewState extends State<YearView> {
               child: const Icon(Icons.add),
             )
           : null,
+    );
+  }
+}
+
+class _PeriodSelectorPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PeriodSelectorPill({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutBack,
+      scale: selected ? 1.08 : 1.0,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            constraints: const BoxConstraints(minWidth: 80, minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primary : Colors.white,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: selected ? AppColors.primaryDark : AppColors.primary.withOpacity(0.18), width: selected ? 1.8 : 1),
+              boxShadow: selected
+                  ? [BoxShadow(color: AppColors.primary.withOpacity(0.34), blurRadius: 16, offset: const Offset(0, 7))]
+                  : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 4))],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? Colors.white : AppColors.textPrimary,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
+                  ),
+                ),
+                if (selected) ...[
+                  const SizedBox(width: 7),
+                  Container(width: 7, height: 7, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
