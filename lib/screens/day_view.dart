@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
+import '../widgets/routine_occurrence_dialog.dart';
 import '../services/hive_service.dart';
 import '../models/task_model.dart';
 import '../constants/colors.dart';
+import '../utils/task_time_utils.dart';
+import 'journal_view.dart';
 
 class DayView extends StatefulWidget {
   final HiveService hiveService;
@@ -65,116 +68,64 @@ class _DayViewState extends State<DayView> {
   }
 
 
-  String _normalizedRepeatFrequency(Task task) {
-    final normalized = task.repeatFrequency?.trim().toLowerCase();
-    switch (normalized) {
-      case 'daily':
-      case 'weekly':
-      case 'monthly':
-      case 'yearly':
-        return normalized!;
-      default:
-        return '';
-    }
-  }
 
-  bool _isRecurringTask(Task task) => task.repeatTask && _normalizedRepeatFrequency(task).isNotEmpty;
-
-
-  String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
-
-  bool _isOccurrenceLocked(Task task) {
-    final status = _normalizedStatus(task);
-    return task.done || status == 'completed' || status == 'cancelled' || status == 'missed' || status == 'overdue';
-  }
-
-  String _occurrenceLabel(Task task) {
-    switch (_normalizedRepeatFrequency(task)) {
-      case 'daily':
-        return 'today';
-      case 'weekly':
-        return 'this week';
-      case 'monthly':
-        return 'this month';
-      case 'yearly':
-        return 'this year';
-      default:
-        return 'this period';
-    }
-  }
-
-  Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
-    Future<void> toggleRoutine(BuildContext dialogContext) async {
-      await widget.hiveService.setRecurringTaskEnabledByReference(task, !task.routineEnabled);
-      if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-    }
-
-    Widget toggleButton(BuildContext dialogContext) {
-      return TextButton.icon(
-        onPressed: () => toggleRoutine(dialogContext),
-        icon: Icon(task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
-        label: Text(task.routineEnabled ? 'Disable Routine' : 'Enable Routine'),
-      );
-    }
-
-    if (_isOccurrenceLocked(task)) {
-      final period = _occurrenceLabel(task);
-      final statusLabel = task.done || _normalizedStatus(task) == 'completed' ? 'completed' : task.status.toLowerCase();
-      return showDialog<Task>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Already updated'),
-          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence. You can still enable or disable this routine without deleting its history.'),
-          actions: [
-            toggleButton(context),
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-          ],
-        ),
-      );
-    }
-
-    return showDialog<Task>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Update ${task.task} occurrence'),
-        content: const Text('Routine details are locked here. Update only the current occurrence, or pause the routine without deleting its history.'),
-        actions: [
-          toggleButton(context),
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
-          TextButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed'))
-                : null,
-            child: const Text('Miss This Occurrence'),
-          ),
-          ElevatedButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed'))
-                : null,
-            child: const Text('Complete This Occurrence'),
-          ),
-        ],
-      ),
+  void _openJournalForTask(Task task) {
+    Navigator.of(context).push(
+      JournalView.route(hiveService: widget.hiveService, initialDate: task.dueDate),
     );
   }
 
   Future<void> _editTask(Task task, {int? index}) async {
-    final updated = _isRecurringTask(task)
-        ? await _showRecurringStatusUpdateDialog(task)
-        : await showTaskFormDialog(
+    if (isRoutineTask(task)) {
+      final action = await showRoutineOccurrenceDialog(context: context, task: task);
+      if (action == null || action == RoutineOccurrenceAction.close) return;
+
+      switch (action) {
+        case RoutineOccurrenceAction.openJournal:
+          _openJournalForTask(task);
+          return;
+        case RoutineOccurrenceAction.disableRoutine:
+          await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
+          return;
+        case RoutineOccurrenceAction.editDetails:
+          final edited = await showTaskFormDialog(
             context,
-            date: _currentDay,
+            date: task.dueDate,
             initialTask: task,
-            title: 'Update Task',
-            actionLabel: 'Save Task',
-            onDelete: () async {
-              if (index != null) {
-                await widget.hiveService.deleteTask(_currentDay, index);
-              } else {
-                await widget.hiveService.deleteTaskByReference(task);
-              }
-            },
+            title: 'Edit Routine Details',
+            actionLabel: 'Save Routine',
           );
+          if (edited != null) {
+            await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+          }
+          return;
+        case RoutineOccurrenceAction.missOccurrence:
+          final updated = task.copyWith(done: false, status: 'Missed');
+          await widget.hiveService.updateTaskByReference(task, updated);
+          return;
+        case RoutineOccurrenceAction.completeOccurrence:
+          final updated = task.copyWith(done: true, status: 'Completed');
+          await widget.hiveService.updateTaskByReference(task, updated);
+          return;
+        case RoutineOccurrenceAction.close:
+          return;
+      }
+    }
+
+    final updated = await showTaskFormDialog(
+      context,
+      date: _currentDay,
+      initialTask: task,
+      title: 'Update Task',
+      actionLabel: 'Save Task',
+      onDelete: () async {
+        if (index != null) {
+          await widget.hiveService.deleteTask(_currentDay, index);
+        } else {
+          await widget.hiveService.deleteTaskByReference(task);
+        }
+      },
+    );
 
     if (updated == null) return;
     if (index != null) {
@@ -185,31 +136,79 @@ class _DayViewState extends State<DayView> {
   }
 
   Map<String, double> _calculateMatrix(List<Task> tasks) {
-    final totalMinutes = tasks.fold<int>(0, (sum, task) => sum + task.estimatedMinutes);
-    if (totalMinutes == 0) {
-      return {'uu': 0, 'ui': 0, 'nu': 0, 'ni': 0, 'totalHours': 0};
-    }
+    final visibleTasks = tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
+    int bothMinutes = 0;
+    int importantOnlyMinutes = 0;
+    int urgentOnlyMinutes = 0;
+    int neitherMinutes = 0;
 
-    int uu = 0, ui = 0, nu = 0, ni = 0;
-    for (final task in tasks) {
+    for (final task in visibleTasks) {
+      final minutes = taskRecordedMinutesForDay(task);
+      if (minutes == 0) continue;
       if (task.urgent && task.important) {
-        ui += task.estimatedMinutes;
+        bothMinutes += minutes;
       } else if (task.urgent && !task.important) {
-        uu += task.estimatedMinutes;
+        urgentOnlyMinutes += minutes;
       } else if (!task.urgent && task.important) {
-        ni += task.estimatedMinutes;
+        importantOnlyMinutes += minutes;
       } else {
-        nu += task.estimatedMinutes;
+        neitherMinutes += minutes;
       }
     }
 
+    final totalMinutes = bothMinutes + importantOnlyMinutes + urgentOnlyMinutes + neitherMinutes;
+    final totalHours = totalMinutes / 60;
+    final bothHours = bothMinutes / 60;
+    final importantOnlyHours = importantOnlyMinutes / 60;
+    final urgentOnlyHours = urgentOnlyMinutes / 60;
+    final neitherHours = neitherMinutes / 60;
+    final bothPoints = bothHours * 100;
+    final importantOnlyPoints = importantOnlyHours * 80;
+    final urgentOnlyPoints = urgentOnlyHours * 50;
+    final neitherPoints = neitherHours * 10;
+    final totalPoints = bothPoints + importantOnlyPoints + urgentOnlyPoints + neitherPoints;
+    final productivityScore = (totalPoints / 1600) * 100;
+
+    double percentage(int minutes) => totalMinutes == 0 ? 0 : minutes / totalMinutes * 100;
+
     return {
-      'uu': uu / totalMinutes * 100,
-      'ui': ui / totalMinutes * 100,
-      'nu': nu / totalMinutes * 100,
-      'ni': ni / totalMinutes * 100,
-      'totalHours': totalMinutes / 60,
+      'ui': percentage(bothMinutes),
+      'ni': percentage(importantOnlyMinutes),
+      'uu': percentage(urgentOnlyMinutes),
+      'nu': percentage(neitherMinutes),
+      'uiHours': bothHours,
+      'niHours': importantOnlyHours,
+      'uuHours': urgentOnlyHours,
+      'nuHours': neitherHours,
+      'uiPoints': bothPoints,
+      'niPoints': importantOnlyPoints,
+      'uuPoints': urgentOnlyPoints,
+      'nuPoints': neitherPoints,
+      'totalHours': totalHours,
+      'totalPoints': totalPoints,
+      'productivityScore': productivityScore.clamp(0, 100).toDouble(),
+      'focusedHours': bothHours + importantOnlyHours + urgentOnlyHours,
+      'distractionHours': neitherHours,
     };
+  }
+
+  String _productivityRating(double score) {
+    if (score >= 90) return 'Elite 🌟';
+    if (score >= 80) return 'Excellent 🏆';
+    if (score >= 70) return 'Very Good 💪';
+    if (score >= 60) return 'Good 👍';
+    if (score >= 50) return 'Average 🙂';
+    if (score >= 40) return 'Low ⚠️';
+    return 'Poor ❌';
+  }
+
+  String _formatHours(double hours) {
+    if (hours == 0) return '0 hrs';
+    final wholeHours = hours.floor();
+    final minutes = ((hours - wholeHours) * 60).round();
+    if (wholeHours == 0) return '$minutes min';
+    if (minutes == 0) return '$wholeHours hrs';
+    return '$wholeHours hrs $minutes min';
   }
 
   @override
@@ -308,37 +307,92 @@ class _DayViewState extends State<DayView> {
   }
 
   Widget _metricsPanel(Map<String, double> matrix) {
-    Widget cell(String value) => Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(border: Border.all(color: Colors.black54)),
-          child: Text('${value}%', style: const TextStyle(fontWeight: FontWeight.bold)),
-        );
+    Widget cell({
+      required String label,
+      required String key,
+      required Color color,
+    }) {
+      final hours = matrix['${key}Hours'] ?? 0;
+      final percentage = matrix[key] ?? 0;
+      final points = matrix['${key}Points'] ?? 0;
+      return Container(
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(border: Border.all(color: Colors.black54), color: color.withOpacity(0.08)),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(label, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+              const SizedBox(height: 3),
+              Text(_formatHours(hours), style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('${percentage.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12)),
+              Text('${points.round()} pts', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final productivityScore = matrix['productivityScore'] ?? 0;
+    final totalPoints = matrix['totalPoints'] ?? 0;
 
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(border: Border.all(color: Colors.black45), borderRadius: BorderRadius.circular(12), color: Colors.white),
       child: Column(
         children: [
           Text('Total hours recorded: ${matrix['totalHours']!.toStringAsFixed(1)}'),
-          const SizedBox(height: 6),
-          const Text('Daily Productivity Matrix (by time %)'),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
+            child: Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                Text('Productivity Score: ${productivityScore.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text('Rating: ${_productivityRating(productivityScore)}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text('Total Points: ${totalPoints.round()} / 1600'),
+                Text('Focused Hours: ${_formatHours(matrix['focusedHours'] ?? 0)}'),
+                Text('Distraction Hours: ${_formatHours(matrix['distractionHours'] ?? 0)}'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text('Daily Productivity Matrix (by completed time, % and points)'),
           const SizedBox(height: 6),
           SizedBox(
-            height: 120,
+            height: 240,
             child: Row(
               children: [
                 const RotatedBox(quarterTurns: 3, child: Text('Urgent')),
                 Expanded(
                   child: Column(
                     children: [
+                      const Row(
+                        children: [
+                          Expanded(child: Center(child: Text('Important: No', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)))),
+                          Expanded(child: Center(child: Text('Important: Yes', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)))),
+                        ],
+                      ),
                       Expanded(
                         child: Row(
-                          children: [Expanded(child: cell(matrix['uu']!.toStringAsFixed(0))), Expanded(child: cell(matrix['ui']!.toStringAsFixed(0)))],
+                          children: [
+                            Expanded(child: cell(label: 'Urgent Only\n50 pts/hr', key: 'uu', color: Colors.amber)),
+                            Expanded(child: cell(label: 'Both\n100 pts/hr', key: 'ui', color: Colors.redAccent)),
+                          ],
                         ),
                       ),
                       Expanded(
                         child: Row(
-                          children: [Expanded(child: cell(matrix['nu']!.toStringAsFixed(0))), Expanded(child: cell(matrix['ni']!.toStringAsFixed(0)))],
+                          children: [
+                            Expanded(child: cell(label: 'Neither\n10 pts/hr', key: 'nu', color: Colors.grey)),
+                            Expanded(child: cell(label: 'Important Only\n80 pts/hr', key: 'ni', color: Colors.blueAccent)),
+                          ],
                         ),
                       ),
                     ],
@@ -348,12 +402,20 @@ class _DayViewState extends State<DayView> {
             ),
           ),
           const Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [Text('Not Important'), Text('Important')]),
+          const SizedBox(height: 6),
+          Text(
+            'Ideal target: Both 6–8 hrs • Important only 3–5 hrs • Urgent only 1–2 hrs • Neither ≤1 hr',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[700], fontSize: 12),
+          ),
         ],
       ),
     );
   }
 
   Widget _todayTasksPanel(List<Task> tasks) {
+    final visibleTasks = tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
+
     return Container(
       decoration: BoxDecoration(color: const Color(0xFFECE8E6), border: Border.all(color: Colors.black38), borderRadius: BorderRadius.circular(22)),
       child: Column(
@@ -377,18 +439,18 @@ class _DayViewState extends State<DayView> {
             Container(width: double.infinity, color: const Color(0xFFE8C1A0), padding: const EdgeInsets.symmetric(vertical: 4), child: const Text('TASK', textAlign: TextAlign.center, style: TextStyle(letterSpacing: 3))),
             SizedBox(
               height: 170,
-              child: tasks.isEmpty
+              child: visibleTasks.isEmpty
                   ? const Center(child: Text('Nothing for Today, Great Job !'))
                   : ListView.separated(
-                      itemCount: tasks.length,
+                      itemCount: visibleTasks.length,
                       separatorBuilder: (context, index) => const Divider(height: 1),
                       itemBuilder: (context, index) {
-                        final task = tasks[index];
+                        final task = visibleTasks[index];
                         return ListTile(
                           dense: true,
-                          onTap: () => _editTask(task, index: index),
+                          onTap: () => _editTask(task),
                           title: Text(task.task),
-                          subtitle: Text('${task.priority} • ${task.status} • ${task.estimatedMinutes} min'),
+                          subtitle: Text('${task.priority} • ${task.status} • ${taskPlannedMinutes(task)} min'),
                         );
                       },
                     ),

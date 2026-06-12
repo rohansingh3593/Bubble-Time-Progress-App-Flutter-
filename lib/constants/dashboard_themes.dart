@@ -1,5 +1,416 @@
 import 'package:flutter/material.dart';
 
+enum AppFontFamily {
+  modern,
+  elegant,
+  minimal,
+  friendly,
+  professional,
+  premium,
+  classic,
+  reading,
+  rounded,
+  tech,
+  luxury,
+  futuristic,
+}
+
+extension AppFontFamilyX on AppFontFamily {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case AppFontFamily.modern:
+        return 'Modern';
+      case AppFontFamily.elegant:
+        return 'Elegant';
+      case AppFontFamily.minimal:
+        return 'Minimal';
+      case AppFontFamily.friendly:
+        return 'Friendly';
+      case AppFontFamily.professional:
+        return 'Professional';
+      case AppFontFamily.premium:
+        return 'Premium';
+      case AppFontFamily.classic:
+        return 'Classic';
+      case AppFontFamily.reading:
+        return 'Reading';
+      case AppFontFamily.rounded:
+        return 'Rounded';
+      case AppFontFamily.tech:
+        return 'Tech';
+      case AppFontFamily.luxury:
+        return 'Luxury';
+      case AppFontFamily.futuristic:
+        return 'Futuristic';
+    }
+  }
+
+  String get familyName {
+    switch (this) {
+      case AppFontFamily.modern:
+        return 'Inter';
+      case AppFontFamily.elegant:
+        return 'Poppins';
+      case AppFontFamily.minimal:
+        return 'Manrope';
+      case AppFontFamily.friendly:
+        return 'Nunito';
+      case AppFontFamily.professional:
+        return 'Roboto';
+      case AppFontFamily.premium:
+        return 'Outfit';
+      case AppFontFamily.classic:
+        return 'Lato';
+      case AppFontFamily.reading:
+        return 'Merriweather';
+      case AppFontFamily.rounded:
+        return 'Quicksand';
+      case AppFontFamily.tech:
+        return 'Space Grotesk';
+      case AppFontFamily.luxury:
+        return 'Plus Jakarta Sans';
+      case AppFontFamily.futuristic:
+        return 'Sora';
+    }
+  }
+
+  String get description {
+    switch (this) {
+      case AppFontFamily.modern:
+        return 'Recommended default • clean and modern';
+      case AppFontFamily.elegant:
+        return 'Rounded headlines and friendly cards';
+      case AppFontFamily.minimal:
+        return 'Minimal professional dashboards';
+      case AppFontFamily.friendly:
+        return 'Soft habit and journal style';
+      case AppFontFamily.professional:
+        return 'Material Design compatibility';
+      case AppFontFamily.premium:
+        return 'Premium startup feeling';
+      case AppFontFamily.classic:
+        return 'Simple elegant long text';
+      case AppFontFamily.reading:
+        return 'Reading-focused notes and reflections';
+      case AppFontFamily.rounded:
+        return 'Playful habits and reflection';
+      case AppFontFamily.tech:
+        return 'Analytics, XP, and statistics';
+      case AppFontFamily.luxury:
+        return 'Luxury SaaS profile style';
+      case AppFontFamily.futuristic:
+        return 'Rank, XP, and hero cards';
+    }
+  }
+}
+
+AppFontFamily appFontFamilyFromStorage(String? value) {
+  return AppFontFamily.values.firstWhere(
+    (font) => font.storageKey == value,
+    orElse: () => AppFontFamily.modern,
+  );
+}
+
+enum AppFontScale { small, medium, large, extraLarge }
+
+extension AppFontScaleX on AppFontScale {
+  String get storageKey => name;
+  String get label {
+    switch (this) {
+      case AppFontScale.small:
+        return 'Small';
+      case AppFontScale.medium:
+        return 'Medium';
+      case AppFontScale.large:
+        return 'Large';
+      case AppFontScale.extraLarge:
+        return 'Extra Large';
+    }
+  }
+
+  double get scale {
+    switch (this) {
+      case AppFontScale.small:
+        return 0.90;
+      case AppFontScale.medium:
+        return 1.0;
+      case AppFontScale.large:
+        return 1.12;
+      case AppFontScale.extraLarge:
+        return 1.24;
+    }
+  }
+}
+
+AppFontScale appFontScaleFromStorage(String? value) {
+  return AppFontScale.values.firstWhere(
+    (scale) => scale.storageKey == value,
+    orElse: () => AppFontScale.medium,
+  );
+}
+
+enum AppFontWeightChoice { light, regular, medium, semiBold, bold, extraBold }
+
+extension AppFontWeightChoiceX on AppFontWeightChoice {
+  String get storageKey => name;
+  String get label {
+    switch (this) {
+      case AppFontWeightChoice.light:
+        return 'Light';
+      case AppFontWeightChoice.regular:
+        return 'Regular';
+      case AppFontWeightChoice.medium:
+        return 'Medium';
+      case AppFontWeightChoice.semiBold:
+        return 'SemiBold';
+      case AppFontWeightChoice.bold:
+        return 'Bold';
+      case AppFontWeightChoice.extraBold:
+        return 'ExtraBold';
+    }
+  }
+
+  FontWeight get weight {
+    switch (this) {
+      case AppFontWeightChoice.light:
+        return FontWeight.w300;
+      case AppFontWeightChoice.regular:
+        return FontWeight.w400;
+      case AppFontWeightChoice.medium:
+        return FontWeight.w500;
+      case AppFontWeightChoice.semiBold:
+        return FontWeight.w600;
+      case AppFontWeightChoice.bold:
+        return FontWeight.w700;
+      case AppFontWeightChoice.extraBold:
+        return FontWeight.w800;
+    }
+  }
+}
+
+AppFontWeightChoice appFontWeightFromStorage(String? value) {
+  return AppFontWeightChoice.values.firstWhere(
+    (weight) => weight.storageKey == value,
+    orElse: () => AppFontWeightChoice.semiBold,
+  );
+}
+
+enum DashboardLayoutStyle { classic, modern, glass, minimal, cards, compact }
+
+extension DashboardLayoutStyleX on DashboardLayoutStyle {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardLayoutStyle.classic:
+        return 'Classic';
+      case DashboardLayoutStyle.modern:
+        return 'Modern';
+      case DashboardLayoutStyle.glass:
+        return 'Glass';
+      case DashboardLayoutStyle.minimal:
+        return 'Minimal';
+      case DashboardLayoutStyle.cards:
+        return 'Cards';
+      case DashboardLayoutStyle.compact:
+        return 'Compact';
+    }
+  }
+}
+
+DashboardLayoutStyle dashboardLayoutStyleFromStorage(String? value) {
+  return DashboardLayoutStyle.values.firstWhere(
+    (layout) => layout.storageKey == value,
+    orElse: () => DashboardLayoutStyle.modern,
+  );
+}
+
+enum DashboardCardAnimationStyle { fade, slide, scale, bounce, flip, none }
+
+extension DashboardCardAnimationStyleX on DashboardCardAnimationStyle {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardCardAnimationStyle.fade:
+        return 'Fade';
+      case DashboardCardAnimationStyle.slide:
+        return 'Slide';
+      case DashboardCardAnimationStyle.scale:
+        return 'Scale';
+      case DashboardCardAnimationStyle.bounce:
+        return 'Bounce';
+      case DashboardCardAnimationStyle.flip:
+        return 'Flip';
+      case DashboardCardAnimationStyle.none:
+        return 'None';
+    }
+  }
+}
+
+DashboardCardAnimationStyle dashboardCardAnimationStyleFromStorage(String? value) {
+  return DashboardCardAnimationStyle.values.firstWhere(
+    (animation) => animation.storageKey == value,
+    orElse: () => DashboardCardAnimationStyle.fade,
+  );
+}
+
+enum DashboardAnimationSpeed { slow, normal, fast, instant }
+
+extension DashboardAnimationSpeedX on DashboardAnimationSpeed {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardAnimationSpeed.slow:
+        return 'Slow';
+      case DashboardAnimationSpeed.normal:
+        return 'Normal';
+      case DashboardAnimationSpeed.fast:
+        return 'Fast';
+      case DashboardAnimationSpeed.instant:
+        return 'Instant';
+    }
+  }
+
+  Duration get duration {
+    switch (this) {
+      case DashboardAnimationSpeed.slow:
+        return const Duration(milliseconds: 500);
+      case DashboardAnimationSpeed.normal:
+        return const Duration(milliseconds: 350);
+      case DashboardAnimationSpeed.fast:
+        return const Duration(milliseconds: 180);
+      case DashboardAnimationSpeed.instant:
+        return Duration.zero;
+    }
+  }
+}
+
+DashboardAnimationSpeed dashboardAnimationSpeedFromStorage(String? value) {
+  return DashboardAnimationSpeed.values.firstWhere(
+    (speed) => speed.storageKey == value,
+    orElse: () => DashboardAnimationSpeed.normal,
+  );
+}
+
+enum DashboardChartStyle { flat, gradient, glass, minimal, animated }
+
+extension DashboardChartStyleX on DashboardChartStyle {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardChartStyle.flat:
+        return 'Flat';
+      case DashboardChartStyle.gradient:
+        return 'Gradient';
+      case DashboardChartStyle.glass:
+        return 'Glass';
+      case DashboardChartStyle.minimal:
+        return 'Minimal';
+      case DashboardChartStyle.animated:
+        return 'Animated';
+    }
+  }
+}
+
+DashboardChartStyle dashboardChartStyleFromStorage(String? value) {
+  return DashboardChartStyle.values.firstWhere(
+    (chart) => chart.storageKey == value,
+    orElse: () => DashboardChartStyle.gradient,
+  );
+}
+
+enum DashboardIconPack { outlined, filled, rounded, minimal, material }
+
+extension DashboardIconPackX on DashboardIconPack {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardIconPack.outlined:
+        return 'Outlined';
+      case DashboardIconPack.filled:
+        return 'Filled';
+      case DashboardIconPack.rounded:
+        return 'Rounded';
+      case DashboardIconPack.minimal:
+        return 'Minimal';
+      case DashboardIconPack.material:
+        return 'Material';
+    }
+  }
+}
+
+DashboardIconPack dashboardIconPackFromStorage(String? value) {
+  return DashboardIconPack.values.firstWhere(
+    (pack) => pack.storageKey == value,
+    orElse: () => DashboardIconPack.rounded,
+  );
+}
+
+enum DashboardPaletteType {
+  seaCalm,
+  emeraldGrey,
+  springEnergy,
+  happyPurple,
+  pastelSky,
+  neonPastel,
+}
+
+extension DashboardPaletteTypeX on DashboardPaletteType {
+  String get storageKey => name;
+
+  String get label {
+    switch (this) {
+      case DashboardPaletteType.seaCalm:
+        return 'Sea Calm';
+      case DashboardPaletteType.emeraldGrey:
+        return 'Emerald Grey';
+      case DashboardPaletteType.springEnergy:
+        return 'Spring Energy';
+      case DashboardPaletteType.happyPurple:
+        return 'Happy Purple';
+      case DashboardPaletteType.pastelSky:
+        return 'Pastel Sky';
+      case DashboardPaletteType.neonPastel:
+        return 'Neon Pastel';
+    }
+  }
+
+  List<Color> get colors {
+    switch (this) {
+      case DashboardPaletteType.seaCalm:
+        return const [Color(0xFF1A312C), Color(0xFF428475), Color(0xFF89D7B7), Color(0xFFFFF4E1)];
+      case DashboardPaletteType.emeraldGrey:
+        return const [Color(0xFFEEEEEE), Color(0xFF6FCF97), Color(0xFF2FA084), Color(0xFF1F6F5F)];
+      case DashboardPaletteType.springEnergy:
+        return const [Color(0xFFF72C5B), Color(0xFFFF748B), Color(0xFFA7D477), Color(0xFFE4F1AC)];
+      case DashboardPaletteType.happyPurple:
+        return const [Color(0xFFFBF5A7), Color(0xFFFF97D0), Color(0xFFFF62BB), Color(0xFFB331F1)];
+      case DashboardPaletteType.pastelSky:
+        return const [Color(0xFF9FA1FF), Color(0xFFB5BAFF), Color(0xFFAEE2FF), Color(0xFFD9F9DF)];
+      case DashboardPaletteType.neonPastel:
+        return const [Color(0xFF45FFCA), Color(0xFFFEFFAC), Color(0xFFFFB6D9), Color(0xFFD67BFF)];
+    }
+  }
+
+  Color get primary => colors[0];
+  Color get secondary => colors[1];
+  Color get accent => colors[2];
+  Color get background => colors[3];
+}
+
+DashboardPaletteType dashboardPaletteTypeFromStorage(String? value) {
+  return DashboardPaletteType.values.firstWhere(
+    (palette) => palette.storageKey == value,
+    orElse: () => DashboardPaletteType.seaCalm,
+  );
+}
+
 enum DashboardThemeType {
   light,
   dark,
@@ -79,7 +490,8 @@ class DashboardThemeStyle {
     required this.animated,
   });
 
-  static DashboardThemeStyle of(DashboardThemeType type) {
+  static DashboardThemeStyle of(DashboardThemeType type, {DashboardPaletteType? palette}) {
+    if (palette != null) return _fromPalette(type, palette);
     switch (type) {
       case DashboardThemeType.light:
         return const DashboardThemeStyle(
@@ -158,4 +570,104 @@ class DashboardThemeStyle {
         );
     }
   }
+
+  static DashboardThemeStyle _fromPalette(DashboardThemeType type, DashboardPaletteType palette) {
+    final colors = palette.colors;
+    final primary = colors[0];
+    final secondary = colors[1];
+    final accent = colors[2];
+    final base = colors[3];
+
+    DashboardThemeStyle build({
+      required Color background,
+      required Color surface,
+      required Color elevatedSurface,
+      required Color textPrimary,
+      required Color textMuted,
+      required List<Color> heroGradient,
+      required bool dark,
+      bool animated = true,
+    }) {
+      return DashboardThemeStyle(
+        type: type,
+        background: background,
+        surface: surface,
+        elevatedSurface: elevatedSurface,
+        primary: primary,
+        secondary: secondary,
+        accent: accent,
+        textPrimary: textPrimary,
+        textMuted: textMuted,
+        heroGradient: heroGradient,
+        dark: dark,
+        animated: animated,
+      );
+    }
+
+    switch (type) {
+      case DashboardThemeType.light:
+        final background = _tint(base, Colors.white, 0.36);
+        return build(
+          background: background,
+          surface: _tint(base, Colors.white, 0.68),
+          elevatedSurface: _tint(accent, Colors.white, 0.62),
+          textPrimary: _readableTextOn(background),
+          textMuted: Color.lerp(primary, Colors.black54, 0.56)!,
+          heroGradient: [secondary, accent, primary],
+          dark: false,
+        );
+      case DashboardThemeType.dark:
+        return build(
+          background: _tint(primary, Colors.black, 0.74),
+          surface: _tint(primary, Colors.black, 0.58),
+          elevatedSurface: _tint(secondary, Colors.black, 0.52),
+          textPrimary: Colors.white,
+          textMuted: _tint(accent, Colors.white, 0.38),
+          heroGradient: [_tint(primary, Colors.black, 0.18), _tint(secondary, Colors.black, 0.20), _tint(accent, Colors.black, 0.26)],
+          dark: true,
+        );
+      case DashboardThemeType.gamified:
+        return build(
+          background: _tint(secondary, Colors.black, 0.68),
+          surface: _tint(secondary, Colors.black, 0.46),
+          elevatedSurface: _tint(accent, Colors.black, 0.34),
+          textPrimary: Colors.white,
+          textMuted: _tint(base, Colors.white, 0.18),
+          heroGradient: [primary, secondary, accent],
+          dark: true,
+        );
+      case DashboardThemeType.calm:
+        final background = _tint(base, const Color(0xFFFFF7EA), 0.46);
+        return build(
+          background: background,
+          surface: _tint(base, Colors.white, 0.74),
+          elevatedSurface: _tint(accent, const Color(0xFFFFF7EA), 0.60),
+          textPrimary: const Color(0xFF2D241A),
+          textMuted: Color.lerp(primary, const Color(0xFF756B5D), 0.58)!,
+          heroGradient: [primary, _tint(secondary, const Color(0xFFE89A5B), 0.35)],
+          dark: false,
+          animated: false,
+        );
+      case DashboardThemeType.minimal:
+        return build(
+          background: _tint(base, const Color(0xFFF3F4F6), 0.72),
+          surface: _tint(base, Colors.white, 0.88),
+          elevatedSurface: _tint(accent, const Color(0xFFE5E7EB), 0.74),
+          textPrimary: const Color(0xFF111827),
+          textMuted: const Color(0xFF6B7280),
+          heroGradient: [_tint(primary, const Color(0xFF4B5563), 0.42), _tint(secondary, const Color(0xFF111827), 0.28)],
+          dark: false,
+          animated: false,
+        );
+    }
+  }
+
+  static Color _tint(Color color, Color mix, double amount) {
+    return Color.lerp(color, mix, amount) ?? color;
+  }
+
+  static Color _readableTextOn(Color color) {
+    return color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF14211E);
+  }
+
 }

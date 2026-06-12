@@ -2,15 +2,19 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../constants/dashboard_themes.dart';
 import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
+import '../utils/task_time_utils.dart';
+import '../widgets/profile_avatar.dart';
 import '../widgets/quick_add_task_dialog.dart';
-import '../widgets/rank_profile_card.dart';
+import '../widgets/routine_occurrence_dialog.dart';
 import 'journal_view.dart';
 import 'journey_timeline_view.dart';
+import 'productivity_timeline_view.dart';
 
 class DashboardView extends StatefulWidget {
   final HiveService hiveService;
@@ -95,14 +99,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final allTasks = allByDate.values.expand((list) => list).toList();
           final dashboardTasks = _dedupeTasksForDashboard(allTasks);
           final nonRoutineDashboardTasks = dashboardTasks.where(_isNonRoutineTask).toList();
+          final lifetimeStats = widget.hiveService.getLifetimeProductivityStats();
           final rankProfile = RankProfile.calculate(
             username: widget.hiveService.getUsername(),
             allTasksByDate: allByDate,
             journalEntries: widget.hiveService.getAllJournalEntries(),
+            lifetimeStats: lifetimeStats,
           );
 
-          final summary = _buildSummary(dashboardTasks, todayStart);
-          final scopedTaskCounts = _buildScopedTaskCounts(dashboardTasks, todayStart);
           final yearProgress = _buildYearProgress(todayStart);
           final timeProgress = _buildTimeProgress(today);
           final taskInsightItems = _buildTaskInsightItems(nonRoutineDashboardTasks);
@@ -111,14 +115,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final insightCategoryCounts = _countInsightItems(taskInsightItems, (item) => item.category, const []);
           final insightDelegatedCounts = _countInsightItems(taskInsightItems, (item) => item.delegateLabel, const []);
 
-          final dueTodayTasks = dashboardTasks
-              .where((task) => _isSameDay(task.dueDate, todayStart))
+          final activeRoutineTasks = _buildEnabledRoutineOccurrences(allTasks, todayStart);
+          final todayTaskRows = _buildTodayTaskRows(allTasks, todayStart);
+          final pendingTodayTasks = todayTaskRows
+              .where((row) => row.group != _TodayTaskGroup.completed)
+              .map((row) => row.task)
               .toList();
-          final pendingTodayTasks = _buildPendingTodayTasks(dashboardTasks, todayStart);
-          final todayOccurrenceTasks = _dedupeTasksForDashboard(widget.hiveService.getTasksForDate(todayStart))
-              .where((task) => !task.repeatTask || task.routineEnabled)
-              .toList();
-          final todayProductivityStats = _buildTodayProductivityStats(todayOccurrenceTasks);
+          final todayProductivityStats = _buildTodayProductivityStats(todayTaskRows);
+          final summary = _buildSummary(dashboardTasks, todayTaskRows);
+          final scopedTaskCounts = _buildScopedTaskCounts(dashboardTasks, todayStart, todayTaskRows);
           final disabledRoutineTasks = _buildDisabledRoutineTasks(allTasks);
 
           final priorityOptions = ['All', ...insightPriorityCounts.keys];
@@ -142,36 +147,25 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             children: [
               _buildDashboardHeader(rankProfile),
               const SizedBox(height: 14),
-              _buildThemeSelector(),
-              const SizedBox(height: 14),
               _buildHeroCard(rankProfile, summary),
               const SizedBox(height: 14),
-              _buildProgressOverviewStrip(timeProgress),
-              const SizedBox(height: 14),
-              _buildDailyFocusStrip(pendingTodayTasks, todayStart),
-              const SizedBox(height: 14),
-              _buildHabitRoutineSection(dueTodayTasks),
-              const SizedBox(height: 14),
-              _buildDisabledRoutineBoard(disabledRoutineTasks),
-              const SizedBox(height: 14),
-              _buildProjectsSection(nonRoutineDashboardTasks),
-              const SizedBox(height: 14),
-              _buildJourneySection(),
-              const SizedBox(height: 14),
-              RankProfileCard(
-                profile: rankProfile,
-                onUsernameChanged: widget.hiveService.setUsername,
-                onTap: _openJournal,
-                onJourneyTap: _openJourneyTimeline,
-              ),
-              const SizedBox(height: 12),
               _summaryHeader(summary),
+              const SizedBox(height: 14),
+              _buildProgressOverviewStrip(timeProgress),
               const SizedBox(height: 12),
               _scopeTaskHeader(scopedTaskCounts),
               const SizedBox(height: 12),
               _yearProgressPanel(yearProgress),
               const SizedBox(height: 12),
               _timeProgressSection(timeProgress),
+              const SizedBox(height: 14),
+              _buildHabitRoutineSection(activeRoutineTasks),
+              const SizedBox(height: 14),
+              _buildDisabledRoutineBoard(disabledRoutineTasks),
+              const SizedBox(height: 14),
+              _todaysProductivitySection(todayProductivityStats),
+              const SizedBox(height: 14),
+              _todayTasksSection(todayTaskRows),
               const SizedBox(height: 12),
               _productivityAnalyticsCenter(
                 tasks: analyticsTasks,
@@ -188,10 +182,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 statusOptions: statusOptions,
                 categoryOptions: categoryOptions,
               ),
-              const SizedBox(height: 12),
-              _todayTasksSection(pendingTodayTasks),
-              const SizedBox(height: 12),
-              _todaysProductivitySection(todayProductivityStats),
+              const SizedBox(height: 14),
+              _buildDailyFocusStrip(pendingTodayTasks, todayStart),
+              const SizedBox(height: 14),
+              _buildProjectsSection(nonRoutineDashboardTasks),
               const SizedBox(height: 12),
             ],
           );
@@ -208,7 +202,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final recurringByIdentity = <String, Task>{};
 
     for (final task in tasks) {
-      if (!_isRecurringTask(task)) {
+      if (!isRoutineTask(task)) {
         oneTimeTasks.add(task);
         continue;
       }
@@ -253,10 +247,52 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
+  void _openSettingsPanel() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close settings',
+      barrierColor: Colors.black.withOpacity(0.35),
+      transitionDuration: const Duration(milliseconds: 360),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: Material(
+            color: Colors.transparent,
+            child: FractionallySizedBox(
+              widthFactor: MediaQuery.of(context).size.width < 760 ? 1 : 0.58,
+              heightFactor: 1,
+              child: _DashboardSettingsPanel(
+                hiveService: widget.hiveService,
+                onClose: () => Navigator.of(context).pop(),
+                themeSelectorBuilder: (_) => _buildThemeSelector(),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+  }
+
   void _openJourneyTimeline() {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => JourneyTimelineView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+  void _openProductivityTimeline() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProductivityTimelineView(hiveService: widget.hiveService),
       ),
     );
   }
@@ -275,110 +311,71 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }
   }
 
-  bool _isRecurringTask(Task task) => task.repeatTask && _normalizedRepeatFrequency(task).isNotEmpty;
 
-
-  String _normalizedStatus(Task task) => task.status.trim().toLowerCase();
-
-  bool _isOccurrenceLocked(Task task) {
-    final status = _normalizedStatus(task);
-    return task.done || status == 'completed' || status == 'cancelled' || status == 'missed' || status == 'overdue';
-  }
-
-  String _occurrenceLabel(Task task) {
-    switch (_normalizedRepeatFrequency(task)) {
-      case 'daily':
-        return 'today';
-      case 'weekly':
-        return 'this week';
-      case 'monthly':
-        return 'this month';
-      case 'yearly':
-        return 'this year';
-      default:
-        return 'this period';
-    }
-  }
-
-  Future<Task?> _showRecurringStatusUpdateDialog(Task task) {
-    Future<void> toggleRoutine(BuildContext dialogContext) async {
-      await widget.hiveService.setRecurringTaskEnabledByReference(task, !task.routineEnabled);
-      if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-    }
-
-    Widget toggleButton(BuildContext dialogContext) {
-      return TextButton.icon(
-        onPressed: () => toggleRoutine(dialogContext),
-        icon: Icon(task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
-        label: Text(task.routineEnabled ? 'Disable Routine' : 'Enable Routine'),
-      );
-    }
-
-    if (_isOccurrenceLocked(task)) {
-      final period = _occurrenceLabel(task);
-      final statusLabel = task.done || _normalizedStatus(task) == 'completed' ? 'completed' : task.status.toLowerCase();
-      return showDialog<Task>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Already updated'),
-          content: Text('This recurring task was already $statusLabel for $period. You can update it again in the next occurrence. You can still enable or disable this routine without deleting its history.'),
-          actions: [
-            toggleButton(context),
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-          ],
-        ),
-      );
-    }
-
-    return showDialog<Task>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Update ${task.task} occurrence'),
-        content: const Text('Routine details are locked here. Update only the current occurrence, or pause the routine without deleting its history.'),
-        actions: [
-          toggleButton(context),
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
-          TextButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: false, status: 'Missed'))
-                : null,
-            child: const Text('Miss This Occurrence'),
-          ),
-          ElevatedButton(
-            onPressed: task.routineEnabled
-                ? () => Navigator.of(context).pop(task.copyWith(done: true, status: 'Completed'))
-                : null,
-            child: const Text('Complete This Occurrence'),
-          ),
-        ],
+  void _openJournalForTask(Task task) {
+    Navigator.of(context).push(
+      JournalView.route(
+        hiveService: widget.hiveService,
+        onGoToDashboard: widget.onGoToDashboard,
+        initialDate: task.dueDate,
       ),
     );
   }
 
   Future<void> _editTask(Task task) async {
-    final updated = _isRecurringTask(task)
-        ? await _showRecurringStatusUpdateDialog(task)
-        : await showTaskFormDialog(
+    if (isRoutineTask(task)) {
+      final action = await showRoutineOccurrenceDialog(context: context, task: task);
+      if (action == null || action == RoutineOccurrenceAction.close) return;
+
+      switch (action) {
+        case RoutineOccurrenceAction.openJournal:
+          _openJournalForTask(task);
+          return;
+        case RoutineOccurrenceAction.disableRoutine:
+          await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
+          return;
+        case RoutineOccurrenceAction.editDetails:
+          final edited = await showTaskFormDialog(
             context,
             date: task.dueDate,
             initialTask: task,
-            title: 'Update Task',
-            actionLabel: 'Save Task',
-            onDelete: () => widget.hiveService.deleteTaskByReference(task),
+            title: 'Edit Routine Details',
+            actionLabel: 'Save Routine',
           );
+          if (edited != null) {
+            await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+          }
+          return;
+        case RoutineOccurrenceAction.missOccurrence:
+          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: false, status: 'Missed'));
+          return;
+        case RoutineOccurrenceAction.completeOccurrence:
+          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed'));
+          return;
+        case RoutineOccurrenceAction.close:
+          return;
+      }
+    }
+
+    final updated = await showTaskFormDialog(
+      context,
+      date: task.dueDate,
+      initialTask: task,
+      title: 'Update Task',
+      actionLabel: 'Save Task',
+      onDelete: () => widget.hiveService.deleteTaskByReference(task),
+    );
 
     if (updated != null) {
       await widget.hiveService.updateTaskByReference(task, updated);
     }
   }
 
-  Map<String, int> _buildSummary(List<Task> tasks, DateTime todayStart) {
+  Map<String, int> _buildSummary(List<Task> tasks, List<_DashboardTodayTask> todayRows) {
     final total = tasks.length;
     final completed = tasks.where(_isCompletedTask).length;
-    final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
-    final overdue = tasks
-        .where((task) => _dateOnly(task.dueDate).isBefore(todayStart) && _isPendingTask(task))
-        .length;
+    final todayTasks = todayRows.length;
+    final overdue = todayRows.where((row) => row.group == _TodayTaskGroup.overdue).length;
 
     return {
       'TOTAL TASKS': total,
@@ -388,13 +385,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     };
   }
 
-
-  Map<String, int> _buildScopedTaskCounts(List<Task> tasks, DateTime todayStart) {
+  Map<String, int> _buildScopedTaskCounts(List<Task> tasks, DateTime todayStart, List<_DashboardTodayTask> todayRows) {
     final monthlyTasks = tasks
         .where((t) => t.dueDate.year == todayStart.year && t.dueDate.month == todayStart.month)
         .length;
     final yearlyTasks = tasks.where((t) => t.dueDate.year == todayStart.year).length;
-    final todayTasks = _buildPendingTodayTasks(tasks, todayStart).length;
+    final todayTasks = todayRows.length;
 
     return {
       'YEAR TASKS': yearlyTasks,
@@ -403,18 +399,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     };
   }
 
-  _TodayProductivityStats _buildTodayProductivityStats(List<Task> tasks) {
-    final activeTasks = tasks.where((task) => !_isCancelledTask(task)).toList();
-    final completed = activeTasks.where(_isCompletedTask).length;
-    final overdue = activeTasks.where((task) {
-      final status = task.status.trim().toLowerCase();
-      return !_isCompletedTask(task) && (status == 'overdue' || status == 'missed');
-    }).length;
-    final pending = activeTasks.length - completed - overdue;
+  _TodayProductivityStats _buildTodayProductivityStats(List<_DashboardTodayTask> rows) {
+    final completed = rows.where((row) => row.group == _TodayTaskGroup.completed).length;
+    final overdue = rows.where((row) => row.group == _TodayTaskGroup.overdue).length;
+    final pending = rows.where((row) => row.group == _TodayTaskGroup.pending).length;
     return _TodayProductivityStats(
-      total: activeTasks.length,
+      total: rows.length,
       completed: completed,
-      pending: pending < 0 ? 0 : pending,
+      pending: pending,
       overdue: overdue,
     );
   }
@@ -478,25 +470,220 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     };
   }
 
+  List<_DashboardTodayTask> _buildTodayTaskRows(List<Task> tasks, DateTime todayStart) {
+    final rows = <_DashboardTodayTask>[];
 
-  List<Task> _buildPendingTodayTasks(List<Task> tasks, DateTime todayStart) {
-    final indexedTasks = tasks.asMap().entries.where((entry) {
-      final task = entry.value;
+    for (final task in tasks.where((task) => !task.repeatTask)) {
+      if (_isCancelledTask(task)) continue;
       final dueDate = _dateOnly(task.dueDate);
-      return !dueDate.isAfter(todayStart) && _isPendingTask(task);
-    }).toList();
+      if (dueDate.isBefore(todayStart) && !_isCompletedTask(task)) {
+        rows.add(_DashboardTodayTask(task: task, group: _TodayTaskGroup.overdue, displayStatus: 'Overdue'));
+      } else if (_isSameDay(dueDate, todayStart)) {
+        if (_isCompletedTask(task)) {
+          rows.add(_DashboardTodayTask(task: task, group: _TodayTaskGroup.completed, displayStatus: 'Completed'));
+        } else {
+          rows.add(_DashboardTodayTask(task: task, group: _TodayTaskGroup.pending, displayStatus: _pendingDisplayStatus(task)));
+        }
+      }
+    }
 
-    indexedTasks.sort((a, b) {
-      final priorityCompare = _prioritySortRank(a.value.priority).compareTo(_prioritySortRank(b.value.priority));
-      if (priorityCompare != 0) return priorityCompare;
-
-      final dueCompare = a.value.dueDate.compareTo(b.value.dueDate);
+    rows.addAll(_buildTodayRoutineRows(tasks, todayStart));
+    rows.sort((a, b) {
+      final groupCompare = a.group.sortRank.compareTo(b.group.sortRank);
+      if (groupCompare != 0) return groupCompare;
+      final dueCompare = a.task.dueDate.compareTo(b.task.dueDate);
       if (dueCompare != 0) return dueCompare;
+      return a.task.task.toLowerCase().compareTo(b.task.task.toLowerCase());
+    });
+    return rows;
+  }
 
-      return a.key.compareTo(b.key);
+  List<_DashboardTodayTask> _buildTodayRoutineRows(List<Task> tasks, DateTime todayStart) {
+    final grouped = <String, List<Task>>{};
+
+    for (final task in tasks) {
+      if (!task.repeatTask) continue;
+      final frequency = _normalizedRepeatFrequency(task);
+      if (!['daily', 'weekly', 'monthly', 'yearly'].contains(frequency)) continue;
+      grouped.putIfAbsent(_recurringSeriesKey(task), () => <Task>[]).add(task);
+    }
+
+    final rows = <_DashboardTodayTask>[];
+    for (final records in grouped.values) {
+      records.sort((a, b) => b.dueDate.compareTo(a.dueDate));
+      final template = records.first;
+      if (!template.routineEnabled) continue;
+
+      final occurrenceDate = _currentRoutineOccurrenceDate(template, todayStart);
+      final currentOccurrence = _recordForDate(records, occurrenceDate);
+
+      final hasOverduePreviousOccurrence = _hasOverduePreviousRoutineOccurrence(records, template, occurrenceDate);
+      if (currentOccurrence != null) {
+        rows.add(_todayRoutineRowForCurrentOccurrence(currentOccurrence, hasOverduePreviousOccurrence: hasOverduePreviousOccurrence));
+        continue;
+      }
+
+      final occurrenceTask = template.copyWith(
+        dueDate: occurrenceDate,
+        done: false,
+        status: 'Not Updated',
+        repeatTask: true,
+        routineEnabled: true,
+      );
+      rows.add(_DashboardTodayTask(
+        task: occurrenceTask,
+        group: hasOverduePreviousOccurrence ? _TodayTaskGroup.overdue : _TodayTaskGroup.pending,
+        displayStatus: hasOverduePreviousOccurrence ? 'Overdue' : 'Pending',
+      ));
+    }
+
+    return rows;
+  }
+
+  Task? _recordForDate(List<Task> records, DateTime date) {
+    for (final record in records) {
+      if (_isSameDay(record.dueDate, date)) return record;
+    }
+    return null;
+  }
+
+  _DashboardTodayTask _todayRoutineRowForCurrentOccurrence(Task task, {required bool hasOverduePreviousOccurrence}) {
+    final status = task.status.trim().toLowerCase();
+    if (task.done || status == 'completed') {
+      return _DashboardTodayTask(task: task, group: _TodayTaskGroup.completed, displayStatus: 'Completed');
+    }
+    if (status == 'missed') {
+      return _DashboardTodayTask(task: task, group: _TodayTaskGroup.overdue, displayStatus: 'Missed');
+    }
+    if (status == 'overdue' || hasOverduePreviousOccurrence) {
+      return _DashboardTodayTask(task: task, group: _TodayTaskGroup.overdue, displayStatus: 'Overdue');
+    }
+    return _DashboardTodayTask(task: task, group: _TodayTaskGroup.pending, displayStatus: 'Pending');
+  }
+
+  bool _hasOverduePreviousRoutineOccurrence(List<Task> records, Task template, DateTime occurrenceDate) {
+    final previousDate = _previousRoutineOccurrenceDate(template, occurrenceDate);
+    if (previousDate == null) return false;
+
+    final firstTrackedDate = records
+        .map((record) => _dateOnly(record.dueDate))
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    if (firstTrackedDate.isAfter(previousDate)) return false;
+
+    final previousOccurrence = _recordForDate(records, previousDate);
+    if (previousOccurrence == null) return true;
+
+    final status = previousOccurrence.status.trim().toLowerCase();
+    return !previousOccurrence.done && status != 'completed' && status != 'cancelled';
+  }
+
+  DateTime? _previousRoutineOccurrenceDate(Task task, DateTime occurrenceDate) {
+    switch (_normalizedRepeatFrequency(task)) {
+      case 'daily':
+        return occurrenceDate.subtract(const Duration(days: 1));
+      case 'weekly':
+        return occurrenceDate.subtract(const Duration(days: 7));
+      default:
+        return null;
+    }
+  }
+
+  String _pendingDisplayStatus(Task task) {
+    final status = task.status.trim();
+    if (status.isEmpty || status.toLowerCase() == 'not updated') return 'Pending';
+    return status;
+  }
+
+  List<Task> _buildEnabledRoutineOccurrences(List<Task> tasks, DateTime todayStart) {
+    final grouped = <String, List<Task>>{};
+
+    for (final task in tasks) {
+      if (!task.repeatTask) continue;
+      final frequency = _normalizedRepeatFrequency(task);
+      if (!['daily', 'weekly', 'monthly', 'yearly'].contains(frequency)) continue;
+      grouped.putIfAbsent(_recurringSeriesKey(task), () => <Task>[]).add(task);
+    }
+
+    final routines = <Task>[];
+    for (final records in grouped.values) {
+      records.sort((a, b) => b.dueDate.compareTo(a.dueDate));
+      final template = records.first;
+      if (!template.routineEnabled) continue;
+
+      final occurrenceDate = _currentRoutineOccurrenceDate(template, todayStart);
+      Task? currentOccurrence;
+      for (final record in records) {
+        if (_isSameDay(record.dueDate, occurrenceDate)) {
+          currentOccurrence = record;
+          break;
+        }
+      }
+
+      routines.add(
+        currentOccurrence ??
+            template.copyWith(
+              dueDate: occurrenceDate,
+              done: false,
+              status: 'Not Updated',
+              repeatTask: true,
+              routineEnabled: true,
+            ),
+      );
+    }
+
+    routines.sort((a, b) {
+      final frequencyCompare = _routineFrequencySortRank(a).compareTo(_routineFrequencySortRank(b));
+      if (frequencyCompare != 0) return frequencyCompare;
+      return a.task.toLowerCase().compareTo(b.task.toLowerCase());
     });
 
-    return indexedTasks.map((entry) => entry.value).toList();
+    return routines;
+  }
+
+  DateTime _currentRoutineOccurrenceDate(Task task, DateTime todayStart) {
+    switch (_normalizedRepeatFrequency(task)) {
+      case 'weekly':
+        return todayStart.subtract(Duration(days: todayStart.weekday - 1));
+      case 'monthly':
+        return DateTime(todayStart.year, todayStart.month, 1);
+      case 'yearly':
+        return DateTime(todayStart.year, 1, 1);
+      case 'daily':
+      default:
+        return todayStart;
+    }
+  }
+
+  int _routineFrequencySortRank(Task task) {
+    switch (_normalizedRepeatFrequency(task)) {
+      case 'daily':
+        return 0;
+      case 'weekly':
+        return 1;
+      case 'monthly':
+        return 2;
+      case 'yearly':
+        return 3;
+      default:
+        return 4;
+    }
+  }
+
+  int _routineCurrentStreak(Task task) {
+    final allTasks = widget.hiveService.getAllTasksByDate().values.expand((list) => list).where((candidate) {
+      return candidate.repeatTask &&
+          candidate.task.trim().toLowerCase() == task.task.trim().toLowerCase() &&
+          _normalizedRepeatFrequency(candidate) == _normalizedRepeatFrequency(task);
+    }).toList()
+      ..sort((a, b) => b.dueDate.compareTo(a.dueDate));
+
+    var streak = 0;
+    for (final record in allTasks) {
+      final completed = record.done || record.status.trim().toLowerCase() == 'completed';
+      if (!completed) break;
+      streak++;
+    }
+    return streak;
   }
 
   int _prioritySortRank(String priority) {
@@ -542,7 +729,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
-  DashboardThemeStyle _dashboardStyle() => DashboardThemeStyle.of(widget.hiveService.getDashboardTheme());
+  DashboardThemeStyle _dashboardStyle() => DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
 
   String _formatShortDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
 
@@ -719,13 +906,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final style = _dashboardStyle();
     return Row(
       children: [
-        CircleAvatar(
+        ProfileAvatar(
+          profile: widget.hiveService.getUserProfile(),
           radius: 22,
-          backgroundColor: style.primary,
-          child: Text(
-            profile.username.isNotEmpty ? profile.username[0].toUpperCase() : 'U',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20),
-          ),
+          accentColor: style.primary,
+          showGlow: false,
+          onTap: _openProductivityTimeline,
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -738,15 +924,50 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             ],
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: style.surface,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
-          ),
-          child: IconButton(onPressed: _openJournal, icon: Icon(Icons.notifications_none_rounded, color: style.primary)),
+        _headerActionButton(
+          icon: Icons.notifications_none_rounded,
+          tooltip: 'Notifications',
+          style: style,
+          onTap: _openJournal,
+        ),
+        const SizedBox(width: 8),
+        _headerActionButton(
+          icon: Icons.settings_rounded,
+          tooltip: 'Dashboard settings',
+          style: style,
+          onTap: _openSettingsPanel,
         ),
       ],
+    );
+  }
+
+
+  Widget _headerActionButton({
+    required IconData icon,
+    required String tooltip,
+    required DashboardThemeStyle style,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: style.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: style.primary.withOpacity(0.12)),
+              boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
+            ),
+            child: Icon(icon, color: style.primary, size: 22),
+          ),
+        ),
+      ),
     );
   }
 
@@ -754,6 +975,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   Widget _buildThemeSelector() {
     final style = _dashboardStyle();
     final selectedTheme = widget.hiveService.getDashboardTheme();
+    final selectedPalette = widget.hiveService.getDashboardPalette();
+    final selectedFont = widget.hiveService.getAppFontFamily();
+    final selectedScale = widget.hiveService.getAppFontScale();
+    final selectedWeight = widget.hiveService.getAppFontWeight();
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 350),
@@ -783,7 +1008,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 17),
                 ),
               ),
-              Text(selectedTheme.label, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+              Text('${selectedTheme.label} • ${selectedPalette.label}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 10),
@@ -794,27 +1019,367 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 final isSelected = theme == selectedTheme;
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
+                  child: _themeSelectorChip(
                     selected: isSelected,
-                    label: Text(theme.label),
-                    avatar: Icon(_themeIcon(theme), size: 18),
-                    selectedColor: style.primary.withOpacity(style.dark ? 0.30 : 0.18),
-                    backgroundColor: style.elevatedSurface,
-                    labelStyle: TextStyle(
-                      color: isSelected ? style.primary : style.textMuted,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    side: BorderSide(color: isSelected ? style.primary : style.primary.withOpacity(0.16)),
-                    onSelected: (_) => widget.hiveService.setDashboardTheme(theme),
+                    label: theme.label,
+                    leading: Icon(_themeIcon(theme), size: 17, color: _selectorTextColor(isSelected, style)),
+                    style: style,
+                    onTap: () => widget.hiveService.setDashboardTheme(theme),
                   ),
                 );
               }).toList(),
             ),
           ),
+          const SizedBox(height: 10),
+          Text('Color Palette', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          Text(selectedTheme.description, style: TextStyle(color: style.textMuted, fontSize: 12)),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: DashboardPaletteType.values.map((palette) {
+                final isSelected = palette == selectedPalette;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _themeSelectorChip(
+                    selected: isSelected,
+                    label: palette.label,
+                    leading: _paletteDots(palette, compact: true),
+                    style: style,
+                    onTap: () => widget.hiveService.setDashboardPalette(palette),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 14),
+          _buildTypographySelector(
+            style: style,
+            selectedFont: selectedFont,
+            selectedScale: selectedScale,
+            selectedWeight: selectedWeight,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${selectedTheme.description} • ${selectedPalette.label} palette • ${selectedFont.familyName} typography applied app-wide.',
+            style: TextStyle(color: style.textMuted, fontSize: 12),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTypographySelector({
+    required DashboardThemeStyle style,
+    required AppFontFamily selectedFont,
+    required AppFontScale selectedScale,
+    required AppFontWeightChoice selectedWeight,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.text_fields_rounded, color: style.primary, size: 18),
+            const SizedBox(width: 8),
+            Text('Typography', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${selectedFont.familyName} • ${selectedScale.label} • ${selectedWeight.label}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: AppFontFamily.values.map((font) {
+              final isSelected = font == selectedFont;
+              return Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: _fontChoiceCard(
+                  font: font,
+                  selected: isSelected,
+                  style: style,
+                  scale: selectedScale,
+                  weight: selectedWeight,
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text('Font Size', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+        const SizedBox(height: 6),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: AppFontScale.values.map((scale) {
+              final isSelected = scale == selectedScale;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _themeSelectorChip(
+                  selected: isSelected,
+                  label: scale.label,
+                  leading: Text(
+                    'A',
+                    style: TextStyle(
+                      color: _selectorTextColor(isSelected, style),
+                      fontSize: 11 * scale.scale,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  style: style,
+                  onTap: () => widget.hiveService.setAppFontScale(scale),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text('Font Weight', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+        const SizedBox(height: 6),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: AppFontWeightChoice.values.map((weight) {
+              final isSelected = weight == selectedWeight;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _themeSelectorChip(
+                  selected: isSelected,
+                  label: weight.label,
+                  leading: Text(
+                    'Aa',
+                    style: TextStyle(
+                      color: _selectorTextColor(isSelected, style),
+                      fontWeight: weight.weight,
+                      fontSize: 12,
+                    ),
+                  ),
+                  style: style,
+                  onTap: () => widget.hiveService.setAppFontWeight(weight),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: style.elevatedSurface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: style.primary.withOpacity(0.18)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'The quick brown fox jumps over the lazy dog.',
+                style: _fontPreviewStyle(selectedFont, style, selectedScale, selectedWeight, size: 13),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'Small Wins. Massive Progress.',
+                style: _fontPreviewStyle(selectedFont, style, selectedScale, selectedWeight, size: 16, heading: true),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _fontChoiceCard({
+    required AppFontFamily font,
+    required bool selected,
+    required DashboardThemeStyle style,
+    required AppFontScale scale,
+    required AppFontWeightChoice weight,
+  }) {
+    final cardColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.38 : 0.18)! : style.elevatedSurface;
+    final foreground = _readableOn(cardColor);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => widget.hiveService.setAppFontFamily(font),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: 220,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: selected ? foreground.withOpacity(0.78) : style.primary.withOpacity(0.18), width: selected ? 1.5 : 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text('Aa', style: _fontPreviewStyle(font, style, scale, weight, size: 18, heading: true, color: foreground)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(font.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _fontPreviewStyle(font, style, scale, weight, size: 13, heading: true, color: foreground)),
+                        Text(font.familyName, maxLines: 1, overflow: TextOverflow.ellipsis, style: _fontPreviewStyle(font, style, scale, weight, size: 11, color: foreground.withOpacity(0.75))),
+                      ],
+                    ),
+                  ),
+                  if (selected) Icon(Icons.check_circle_rounded, color: foreground, size: 18),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Small Wins. Massive Progress.',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _fontPreviewStyle(font, style, scale, weight, size: 12, color: foreground),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                font.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: foreground.withOpacity(0.72), fontSize: 10.5, height: 1.15),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  TextStyle _fontPreviewStyle(
+    AppFontFamily font,
+    DashboardThemeStyle style,
+    AppFontScale scale,
+    AppFontWeightChoice weight, {
+    required double size,
+    bool heading = false,
+    Color? color,
+  }) {
+    final textStyle = TextStyle(
+      color: color ?? style.textPrimary,
+      fontSize: size * scale.scale,
+      fontWeight: heading ? _strongerPreviewWeight(weight.weight, 2) : weight.weight,
+      letterSpacing: heading && style.type == DashboardThemeType.minimal ? 0.4 : 0,
+      height: 1.18,
+    );
+    switch (font) {
+      case AppFontFamily.modern:
+        return GoogleFonts.inter(textStyle: textStyle);
+      case AppFontFamily.elegant:
+        return GoogleFonts.poppins(textStyle: textStyle);
+      case AppFontFamily.minimal:
+        return GoogleFonts.manrope(textStyle: textStyle);
+      case AppFontFamily.friendly:
+        return GoogleFonts.nunito(textStyle: textStyle);
+      case AppFontFamily.professional:
+        return GoogleFonts.roboto(textStyle: textStyle);
+      case AppFontFamily.premium:
+        return GoogleFonts.outfit(textStyle: textStyle);
+      case AppFontFamily.classic:
+        return GoogleFonts.lato(textStyle: textStyle);
+      case AppFontFamily.reading:
+        return GoogleFonts.merriweather(textStyle: textStyle);
+      case AppFontFamily.rounded:
+        return GoogleFonts.quicksand(textStyle: textStyle);
+      case AppFontFamily.tech:
+        return GoogleFonts.spaceGrotesk(textStyle: textStyle);
+      case AppFontFamily.luxury:
+        return GoogleFonts.plusJakartaSans(textStyle: textStyle);
+      case AppFontFamily.futuristic:
+        return GoogleFonts.sora(textStyle: textStyle);
+    }
+  }
+
+  FontWeight _strongerPreviewWeight(FontWeight weight, int steps) {
+    final nextIndex = (weight.index + steps).clamp(0, FontWeight.values.length - 1).toInt();
+    return FontWeight.values[nextIndex];
+  }
+
+  Widget _themeSelectorChip({
+    required bool selected,
+    required String label,
+    required Widget leading,
+    required DashboardThemeStyle style,
+    required VoidCallback onTap,
+  }) {
+    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
+    final foreground = _readableOn(chipColor);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          constraints: const BoxConstraints(minHeight: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: chipColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: selected ? foreground.withOpacity(0.72) : style.primary.withOpacity(0.22), width: selected ? 1.4 : 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconTheme(data: IconThemeData(color: foreground), child: leading),
+              const SizedBox(width: 7),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: foreground,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: style.type == DashboardThemeType.minimal ? 0.4 : 0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _selectorTextColor(bool selected, DashboardThemeStyle style) {
+    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
+    return _readableOn(chipColor);
+  }
+
+  Color _readableOn(Color color) {
+    return color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF17211D);
+  }
+
+  Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
+    final size = compact ? 5.0 : 12.0;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: palette.colors
+          .map((color) => Container(
+                width: size,
+                height: size,
+                margin: const EdgeInsets.only(right: 2),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.black.withOpacity(0.12)),
+                ),
+              ))
+          .toList(),
     );
   }
 
@@ -850,7 +1415,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             behavior: HitTestBehavior.opaque,
             onTap: _openJournal,
             child: Transform.translate(
-              offset: Offset(0, 24 * (1 - intro)),
+              offset: Offset(0, -28 * (1 - intro)),
               child: AnimatedBuilder(
                 animation: _pulseController,
                 builder: (context, _) {
@@ -878,8 +1443,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.workspace_premium_rounded, color: Color(0xFFFFD86D), size: 32),
-                                const SizedBox(width: 10),
+                                ProfileAvatar(
+                                  profile: widget.hiveService.getUserProfile(),
+                                  radius: 26,
+                                  accentColor: const Color(0xFFFFD86D),
+                                  badge: profile.currentRank.emoji,
+                                  onTap: _openProductivityTimeline,
+                                ),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -922,6 +1493,33 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             ),
                             const SizedBox(height: 8),
                             Text('$completed / $total completed', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: const BorderSide(color: Colors.white70),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                  ),
+                                  onPressed: _openJourneyTimeline,
+                                  icon: const Icon(Icons.menu_book_rounded, size: 16),
+                                  label: const Text('Open Journey Timeline'),
+                                ),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: const BorderSide(color: Colors.white70),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                  ),
+                                  onPressed: _openProductivityTimeline,
+                                  icon: const Icon(Icons.show_chart_rounded, size: 16),
+                                  label: const Text('Open Productivity Timeline'),
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: 10),
                             GestureDetector(
                               onTap: () => setState(() => _showDetails = !_showDetails),
@@ -1031,7 +1629,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
 
-  Widget _darkSection(String title, Widget child, {String? action, VoidCallback? onActionTap}) {
+  Widget _darkSection(String title, Widget child, {String? action, VoidCallback? onActionTap, bool pulseAction = false}) {
     final style = _dashboardStyle();
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1045,12 +1643,19 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           Text(title, style: TextStyle(color: style.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
           const Spacer(),
           if (action != null)
-            InkWell(
-              borderRadius: BorderRadius.circular(999),
-              onTap: onActionTap,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Text(action, style: TextStyle(color: style.primary, fontWeight: FontWeight.w700)),
+            AnimatedBuilder(
+              animation: _pulseController,
+              builder: (context, child) {
+                final scale = pulseAction && style.animated ? 1 + (_pulseController.value * 0.04) : 1.0;
+                return Transform.scale(scale: scale, child: child);
+              },
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: onActionTap,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(action, style: TextStyle(color: style.primary, fontWeight: FontWeight.w700)),
+                ),
               ),
             ),
         ]),
@@ -1062,7 +1667,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _buildDailyFocusStrip(List<Task> tasks, DateTime today) {
     final sorted = [...tasks]..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
-    final focus = sorted.take(6).toList();
+    final focus = sorted.take(3).toList();
     return _darkSection('Daily Focus', SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(children: focus.map((t){
@@ -1073,45 +1678,67 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           curve: Curves.easeInOut,
           builder: (context, lift, child) =>
               Transform.translate(offset: Offset(0, -2 * lift), child: child),
-          child: Container(
-          width: 220,
-          margin: const EdgeInsets.only(right: 10),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A2442),
-            borderRadius: BorderRadius.circular(14),
-            border: Border(left: BorderSide(color: urgent ? const Color(0xFFFF6A3D) : const Color(0xFF6D7CFF), width: 4)),
+          child: Tooltip(
+            message: 'Tap to update task',
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _editTask(t),
+                child: Container(
+                  width: 220,
+                  margin: const EdgeInsets.only(right: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A2442),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border(left: BorderSide(color: urgent ? const Color(0xFFFF6A3D) : const Color(0xFF6D7CFF), width: 4)),
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(t.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text(urgent ? '⚡ High Priority' : '• ${t.priority}', style: const TextStyle(color: Color(0xFFB9C6F3))),
+                    const SizedBox(height: 4),
+                    Text(_formatDueLabel(t), style: const TextStyle(color: Color(0xFF7F8EB9), fontSize: 12)),
+                  ]),
+                ),
+              ),
+            ),
           ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(t.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            Text(urgent ? '⚡ High Priority' : '• ${t.priority}', style: const TextStyle(color: Color(0xFFB9C6F3))),
-            const SizedBox(height: 4),
-            Text(_formatDueLabel(t), style: const TextStyle(color: Color(0xFF7F8EB9), fontSize: 12)),
-          ]),
-        ),
         );
       }).toList()),
     ), action: 'View All');
   }
 
-  Widget _buildHabitRoutineSection(List<Task> todayTasks) {
-    final habits = todayTasks.where((t)=>t.repeatTask && t.routineEnabled).toList();
+  Widget _buildHabitRoutineSection(List<Task> routines) {
     return _darkSection('Habit & Routine Tracker', Column(children: [
-      if (habits.isEmpty)
-        const Padding(padding: EdgeInsets.all(8), child: Text('No recurring habits for today.', style: TextStyle(color: Color(0xFFB9C6F3))))
+      if (routines.isEmpty)
+        const Padding(padding: EdgeInsets.all(8), child: Text('No enabled routines yet.', style: TextStyle(color: Color(0xFFB9C6F3))))
       else
-        ...habits.take(4).map((task)=>Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: const Color(0xFF1A2442), borderRadius: BorderRadius.circular(12)),
-          child: Row(children:[
-            Container(width: 10,height: 10,decoration: const BoxDecoration(color: Color(0xFF6D7CFF),shape: BoxShape.circle)),
-            const SizedBox(width: 10),
-            Expanded(child: Text(task.task, style: const TextStyle(color: Colors.white))),
-            Text(task.repeatFrequency ?? 'Daily', style: const TextStyle(color: Color(0xFF9CB3FF))),
-          ]),
-        )),
+        ...routines.map((task) {
+          final taskColor = Color(task.colorValue);
+          return InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _editTask(task),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: const Color(0xFF1A2442), borderRadius: BorderRadius.circular(12)),
+              child: Row(children:[
+                Container(width: 10,height: 10,decoration: BoxDecoration(color: taskColor,shape: BoxShape.circle)),
+                const SizedBox(width: 10),
+                Expanded(child: Text(task.task, style: const TextStyle(color: Colors.white))),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(task.repeatFrequency ?? 'Daily', style: const TextStyle(color: Color(0xFF9CB3FF))),
+                    Text('${_routineCurrentStreak(task)} streak', style: const TextStyle(color: Color(0xFFB9C6F3), fontSize: 11)),
+                  ],
+                ),
+              ]),
+            ),
+          );
+        }),
     ]));
   }
 
@@ -1190,27 +1817,86 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Widget _buildProjectsSection(List<Task> tasks) {
-    final projects = tasks.where((t)=>!t.repeatTask).take(4).toList();
-    return _darkSection('Projects / Phases', Column(children: projects.map((p) {
-      final done = p.done || p.status=='Completed';
-      return ListTile(
-        contentPadding: EdgeInsets.zero,
-        title: Text(p.task, style: const TextStyle(color: Colors.white)),
-        subtitle: Text(p.category, style: const TextStyle(color: Color(0xFF9CB3FF))),
-        trailing: Icon(done ? Icons.check_circle : Icons.timelapse, color: done ? Colors.greenAccent : Colors.orangeAccent),
-      );
-    }).toList()), action: 'Expand');
+    final style = _dashboardStyle();
+    final projects = tasks.where((task) => !task.repeatTask).take(4).toList();
+    return _darkSection(
+      'Projects / Phases',
+      Column(
+        children: projects.map((project) {
+          final phases = parseTaskPhases(project.description);
+          final completedPhases = phases.where((phase) => phase.isCompleted).length;
+          final totalPhases = phases.isEmpty ? 1 : phases.length;
+          final progress = phases.isEmpty ? (project.done || project.status == 'Completed' ? 1.0 : 0.0) : completedPhases / totalPhases;
+          final done = progress >= 1;
+          final subtitle = phases.isEmpty
+              ? '${project.category} • ${project.status}'
+              : '${project.category} • $completedPhases/$totalPhases phases • ${(progress * 100).round()}%';
+
+          return InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => _editTask(project),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(project.task, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
+                    subtitle: Text(subtitle, style: TextStyle(color: style.primary, fontWeight: FontWeight.w700)),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(done ? Icons.check_circle : Icons.timelapse, color: done ? Colors.greenAccent : Colors.orangeAccent),
+                        if (phases.isNotEmpty)
+                          Text('${(progress * 100).round()}%', style: TextStyle(color: style.textMuted, fontSize: 11, fontWeight: FontWeight.w800)),
+                      ],
+                    ),
+                  ),
+                  if (phases.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: progress.clamp(0.0, 1.0).toDouble(),
+                        minHeight: 6,
+                        backgroundColor: Colors.white.withOpacity(0.16),
+                        color: done ? Colors.greenAccent : Colors.orangeAccent,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: phases.map((phase) {
+                        final completed = phase.isCompleted;
+                        return _projectPhaseChip(
+                          label: '${phase.name.isEmpty ? 'Phase' : phase.name}: ${phase.status}',
+                          color: completed ? Colors.greenAccent : Colors.orangeAccent,
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+      action: 'Expand',
+    );
   }
 
-  Widget _buildJourneySection() {
-    final style = _dashboardStyle();
-    return _darkSection('Journey & Reflection', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('🌅 Wake up routine completed', style: TextStyle(color: style.textPrimary)),
-      const SizedBox(height: 6),
-      Text('📘 Deep work block tracked', style: TextStyle(color: style.textPrimary)),
-      const SizedBox(height: 6),
-      Text('😊 Mood: Focused', style: TextStyle(color: style.textPrimary)),
-    ]), action: 'Open Journal', onActionTap: _openJournal);
+
+  Widget _projectPhaseChip({required String label, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Text(label, style: TextStyle(color: _dashboardStyle().dark ? Colors.white : const Color(0xFF2D241E), fontSize: 11, fontWeight: FontWeight.w800)),
+    );
   }
 
   Widget _heroMetric(String label, String value) {
@@ -1867,6 +2553,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                         _todayProductivityStat('Today\'s Tasks', stats.total),
                         _todayProductivityStat('Completed', stats.completed),
                         _todayProductivityStat('Pending', stats.pending),
+                        _todayProductivityStat('Overdue', stats.overdue),
                         _todayProductivityStat('Completion Rate', stats.completionRate, suffix: '%'),
                       ],
                     ),
@@ -1937,7 +2624,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     return const _ProductivityBadge(label: 'Excellent', emoji: '🔥', color: Color(0xFFFF7043));
   }
 
-  Widget _todayTasksSection(List<Task> tasks) {
+  Widget _todayTasksSection(List<_DashboardTodayTask> tasks) {
     final style = _dashboardStyle();
     return _panel(
       title: "TODAY'S TASKS",
@@ -1968,23 +2655,22 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
 
-  List<Widget> _buildPendingTaskRows(List<Task> tasks) {
+  List<Widget> _buildPendingTaskRows(List<_DashboardTodayTask> tasks) {
     final style = _dashboardStyle();
-    final todayStart = _dateOnly(DateTime.now());
     final rows = <Widget>[];
-    String? activeGroup;
+    _TodayTaskGroup? activeGroup;
 
-    for (final task in tasks) {
-      final group = _dateOnly(task.dueDate).isBefore(todayStart) ? 'Overdue' : 'Today';
-      if (group != activeGroup) {
-        activeGroup = group;
+    for (final row in tasks) {
+      final task = row.task;
+      if (row.group != activeGroup) {
+        activeGroup = row.group;
         rows.add(
           Padding(
             padding: const EdgeInsets.only(top: 8, bottom: 4),
             child: Text(
-              group.toUpperCase(),
+              row.group.label,
               style: TextStyle(
-                color: group == 'Overdue' ? Colors.redAccent : Colors.green,
+                color: row.group.color,
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.4,
@@ -1999,10 +2685,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           dense: true,
           onTap: () => _editTask(task),
           title: Text(task.task, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w700)),
-          subtitle: Text('${task.priority} • ${task.status} • ${_formatDueLabel(task)}', style: TextStyle(color: style.textMuted)),
+          subtitle: Text('${task.priority} • ${row.displayStatus} • ${_formatDueLabel(task)}', style: TextStyle(color: style.textMuted)),
           trailing: Icon(
-            group == 'Overdue' ? Icons.warning_amber_rounded : Icons.radio_button_unchecked,
-            color: group == 'Overdue' ? Colors.redAccent : Colors.green,
+            row.group.icon,
+            color: row.group.color,
           ),
         ),
       );
@@ -2276,6 +2962,64 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 }
 
+enum _TodayTaskGroup {
+  overdue,
+  pending,
+  completed;
+
+  int get sortRank {
+    switch (this) {
+      case _TodayTaskGroup.overdue:
+        return 0;
+      case _TodayTaskGroup.pending:
+        return 1;
+      case _TodayTaskGroup.completed:
+        return 2;
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case _TodayTaskGroup.overdue:
+        return 'OVERDUE';
+      case _TodayTaskGroup.pending:
+        return 'PENDING';
+      case _TodayTaskGroup.completed:
+        return 'COMPLETED TODAY';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case _TodayTaskGroup.overdue:
+        return Colors.redAccent;
+      case _TodayTaskGroup.pending:
+        return Colors.orangeAccent;
+      case _TodayTaskGroup.completed:
+        return Colors.green;
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case _TodayTaskGroup.overdue:
+        return Icons.warning_amber_rounded;
+      case _TodayTaskGroup.pending:
+        return Icons.radio_button_unchecked;
+      case _TodayTaskGroup.completed:
+        return Icons.check_circle_outline;
+    }
+  }
+}
+
+class _DashboardTodayTask {
+  final Task task;
+  final _TodayTaskGroup group;
+  final String displayStatus;
+
+  const _DashboardTodayTask({required this.task, required this.group, required this.displayStatus});
+}
+
 class _TodayProductivityStats {
   final int total;
   final int completed;
@@ -2397,4 +3141,291 @@ class _DisabledRoutineTask {
     required this.previousStreak,
     required this.lastUpdated,
   });
+}
+
+class _DashboardSettingsPanel extends StatelessWidget {
+  final HiveService hiveService;
+  final VoidCallback onClose;
+  final WidgetBuilder themeSelectorBuilder;
+
+  const _DashboardSettingsPanel({
+    required this.hiveService,
+    required this.onClose,
+    required this.themeSelectorBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+      valueListenable: hiveService.getBoxListenable(),
+      builder: (context, box, _) {
+        final style = DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
+        final speed = hiveService.getDashboardAnimationSpeed();
+        return AnimatedContainer(
+          duration: speed.duration,
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: style.background,
+            boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 24, offset: Offset(-8, 0))],
+          ),
+          child: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings_rounded, color: style.primary, size: 28),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Dashboard Settings', style: TextStyle(color: style.textPrimary, fontSize: 24, fontWeight: FontWeight.w900)),
+                            Text('Appearance, typography, layout, charts, and motion', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close settings',
+                        onPressed: onClose,
+                        icon: Icon(Icons.close_rounded, color: style.textPrimary),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                    children: [
+                      themeSelectorBuilder(context),
+                      const SizedBox(height: 14),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.dashboard_customize_rounded,
+                        title: 'Dashboard Layout Style',
+                        child: _wrapChoiceChips(
+                          children: DashboardLayoutStyle.values.map((layout) {
+                            final selected = layout == hiveService.getDashboardLayoutStyle();
+                            return _simpleSettingsChip(
+                              style: style,
+                              label: layout.label,
+                              selected: selected,
+                              onTap: () => hiveService.setDashboardLayoutStyle(layout),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.animation_rounded,
+                        title: 'Card Animation Style',
+                        child: _wrapChoiceChips(
+                          children: DashboardCardAnimationStyle.values.map((animation) {
+                            final selected = animation == hiveService.getDashboardCardAnimationStyle();
+                            return _simpleSettingsChip(
+                              style: style,
+                              label: animation.label,
+                              selected: selected,
+                              onTap: () => hiveService.setDashboardCardAnimationStyle(animation),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.speed_rounded,
+                        title: 'UI Animation Speed',
+                        child: _wrapChoiceChips(
+                          children: DashboardAnimationSpeed.values.map((speedOption) {
+                            final selected = speedOption == hiveService.getDashboardAnimationSpeed();
+                            return _simpleSettingsChip(
+                              style: style,
+                              label: speedOption.label,
+                              selected: selected,
+                              onTap: () => hiveService.setDashboardAnimationSpeed(speedOption),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.bar_chart_rounded,
+                        title: 'Chart Style',
+                        child: _wrapChoiceChips(
+                          children: DashboardChartStyle.values.map((chart) {
+                            final selected = chart == hiveService.getDashboardChartStyle();
+                            return _simpleSettingsChip(
+                              style: style,
+                              label: chart.label,
+                              selected: selected,
+                              onTap: () => hiveService.setDashboardChartStyle(chart),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.interests_rounded,
+                        title: 'Icon Pack',
+                        child: _wrapChoiceChips(
+                          children: DashboardIconPack.values.map((pack) {
+                            final selected = pack == hiveService.getDashboardIconPack();
+                            return _simpleSettingsChip(
+                              style: style,
+                              label: pack.label,
+                              selected: selected,
+                              onTap: () => hiveService.setDashboardIconPack(pack),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.brightness_auto_rounded,
+                        title: 'Dynamic Theme',
+                        child: Column(
+                          children: [
+                            _settingsSwitch(
+                              style: style,
+                              title: 'Follow System Theme',
+                              value: hiveService.getFollowSystemTheme(),
+                              onChanged: hiveService.setFollowSystemTheme,
+                            ),
+                            _settingsSwitch(
+                              style: style,
+                              title: 'Auto Day/Night',
+                              value: hiveService.getAutoDayNight(),
+                              onChanged: hiveService.setAutoDayNight,
+                            ),
+                            _settingsSwitch(
+                              style: style,
+                              title: 'Adaptive Colors',
+                              value: hiveService.getAdaptiveColors(),
+                              onChanged: hiveService.setAdaptiveColors,
+                            ),
+                          ],
+                        ),
+                      ),
+                      _settingsSection(
+                        style: style,
+                        icon: Icons.preview_rounded,
+                        title: 'Live Preview',
+                        child: _livePreview(style),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _settingsSection({required DashboardThemeStyle style, required IconData icon, required String title, required Widget child}) {
+    return AnimatedContainer(
+      duration: hiveService.getDashboardAnimationSpeed().duration,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: style.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: style.primary.withOpacity(0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: style.primary, size: 19),
+              const SizedBox(width: 8),
+              Text(title, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _wrapChoiceChips({required List<Widget> children}) {
+    return Wrap(spacing: 8, runSpacing: 8, children: children);
+  }
+
+  Widget _simpleSettingsChip({required DashboardThemeStyle style, required String label, required bool selected, required VoidCallback onTap}) {
+    final color = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.44 : 0.22)! : style.elevatedSurface;
+    final foreground = color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF17211D);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: hiveService.getDashboardAnimationSpeed().duration,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: selected ? foreground.withOpacity(0.7) : style.primary.withOpacity(0.16), width: selected ? 1.4 : 1),
+          ),
+          child: Text(label, style: TextStyle(color: foreground, fontWeight: FontWeight.w800)),
+        ),
+      ),
+    );
+  }
+
+  Widget _settingsSwitch({required DashboardThemeStyle style, required String title, required bool value, required ValueChanged<bool> onChanged}) {
+    return SwitchListTile.adaptive(
+      contentPadding: EdgeInsets.zero,
+      title: Text(title, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
+      value: value,
+      activeColor: style.primary,
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _livePreview(DashboardThemeStyle style) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [style.elevatedSurface, style.surface]),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: style.primary.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Dashboard Preview', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Text('Hello, Rohan', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 18)),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(value: 0.85, minHeight: 10, backgroundColor: style.elevatedSurface, color: style.primary),
+          ),
+          const SizedBox(height: 8),
+          Text('Daily Progress 85%', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: _previewPill(style, 'Today Tasks')),
+              const SizedBox(width: 8),
+              Expanded(child: _previewPill(style, 'Analytics')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewPill(DashboardThemeStyle style, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(color: style.primary.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+      child: Text(label, textAlign: TextAlign.center, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+    );
+  }
 }

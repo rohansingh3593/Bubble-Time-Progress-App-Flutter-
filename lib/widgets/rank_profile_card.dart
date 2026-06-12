@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
 import '../models/rank_profile.dart';
+import '../models/user_profile.dart';
+import 'profile_avatar.dart';
 
 class RankProfileCard extends StatelessWidget {
   final RankProfile profile;
@@ -9,6 +11,8 @@ class RankProfileCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onJourneyTap;
   final bool compact;
+  final UserProfile? userProfile;
+  final VoidCallback? onProfilePhotoTap;
 
   const RankProfileCard({
     super.key,
@@ -17,11 +21,14 @@ class RankProfileCard extends StatelessWidget {
     this.onTap,
     this.onJourneyTap,
     this.compact = false,
+    this.userProfile,
+    this.onProfilePhotoTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final rankColor = Color(profile.currentRank.colorValue);
+    final effectiveProfile = userProfile ?? UserProfile.defaults(fullName: profile.username);
 
     return GestureDetector(
       onTap: onTap,
@@ -49,7 +56,7 @@ class RankProfileCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _ProfileAvatar(rankColor: rankColor, emoji: profile.currentRank.emoji),
+                ProfileAvatar(profile: effectiveProfile, accentColor: rankColor, badge: profile.currentRank.emoji, radius: 31, onTap: onProfilePhotoTap),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -178,41 +185,6 @@ class RankProfileCard extends StatelessWidget {
     if (username != null && username.trim().isNotEmpty) {
       await onUsernameChanged?.call(username.trim());
     }
-  }
-}
-
-class _ProfileAvatar extends StatelessWidget {
-  final Color rankColor;
-  final String emoji;
-
-  const _ProfileAvatar({required this.rankColor, required this.emoji});
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.bottomRight,
-      children: [
-        Container(
-          width: 62,
-          height: 62,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
-          ),
-          child: const Icon(Icons.person, color: Colors.white, size: 34),
-        ),
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            border: Border.all(color: rankColor, width: 2),
-          ),
-          child: Text(emoji, style: const TextStyle(fontSize: 16)),
-        ),
-      ],
-    );
   }
 }
 
