@@ -690,20 +690,64 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   int _routineCurrentStreak(Task task) {
-    final allTasks = widget.hiveService.getAllTasksByDate().values.expand((list) => list).where((candidate) {
-      return candidate.repeatTask &&
-          candidate.task.trim().toLowerCase() == task.task.trim().toLowerCase() &&
-          _normalizedRepeatFrequency(candidate) == _normalizedRepeatFrequency(task);
-    }).toList()
-      ..sort((a, b) => b.dueDate.compareTo(a.dueDate));
+    final frequency = _normalizedRepeatFrequency(task);
+    if (!['daily', 'weekly', 'monthly', 'yearly'].contains(frequency)) return 0;
+
+    final completedOccurrences = <DateTime>{};
+    for (final candidate in widget.hiveService.getAllTasksByDate().values.expand((list) => list)) {
+      if (!_isSameRoutineSeries(candidate, task) || !_isCompletedTask(candidate)) continue;
+      final occurrence = _routineOccurrenceDateFor(candidate, _dateOnly(candidate.dueDate));
+      completedOccurrences.add(occurrence);
+    }
+
+    final todayOccurrence = _routineOccurrenceDateFor(task, _dateOnly(DateTime.now()));
+    var cursor = completedOccurrences.contains(todayOccurrence)
+        ? todayOccurrence
+        : _previousRoutineOccurrenceForFrequency(frequency, todayOccurrence);
 
     var streak = 0;
-    for (final record in allTasks) {
-      final completed = record.done || record.status.trim().toLowerCase() == 'completed';
-      if (!completed) break;
+    while (cursor != null && completedOccurrences.contains(cursor)) {
       streak++;
+      cursor = _previousRoutineOccurrenceForFrequency(frequency, cursor);
     }
     return streak;
+  }
+
+  bool _isSameRoutineSeries(Task a, Task b) {
+    return a.repeatTask &&
+        b.repeatTask &&
+        a.task.trim().toLowerCase() == b.task.trim().toLowerCase() &&
+        a.category.trim().toLowerCase() == b.category.trim().toLowerCase() &&
+        _normalizedRepeatFrequency(a) == _normalizedRepeatFrequency(b);
+  }
+
+  DateTime _routineOccurrenceDateFor(Task task, DateTime date) {
+    switch (_normalizedRepeatFrequency(task)) {
+      case 'weekly':
+        return date.subtract(Duration(days: date.weekday - 1));
+      case 'monthly':
+        return DateTime(date.year, date.month, 1);
+      case 'yearly':
+        return DateTime(date.year, 1, 1);
+      case 'daily':
+      default:
+        return date;
+    }
+  }
+
+  DateTime? _previousRoutineOccurrenceForFrequency(String frequency, DateTime occurrence) {
+    switch (frequency) {
+      case 'daily':
+        return occurrence.subtract(const Duration(days: 1));
+      case 'weekly':
+        return occurrence.subtract(const Duration(days: 7));
+      case 'monthly':
+        return DateTime(occurrence.year, occurrence.month - 1, 1);
+      case 'yearly':
+        return DateTime(occurrence.year - 1, 1, 1);
+      default:
+        return null;
+    }
   }
 
   int _prioritySortRank(String priority) {
