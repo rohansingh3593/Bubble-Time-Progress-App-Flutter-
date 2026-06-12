@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
+import '../models/instruction.dart';
 import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/rank_profile.dart';
@@ -83,6 +84,8 @@ class StreakView extends StatelessWidget {
                 const SizedBox(height: 14),
                 _RecurringTaskListView(hiveService: hiveService, habits: habits, today: stats.today),
                 const SizedBox(height: 14),
+                _InstructionStreakPanel(hiveService: hiveService, today: stats.today),
+                const SizedBox(height: 14),
                 _HabitTrackerSection(
                   hiveService: hiveService,
                   habits: habits,
@@ -100,6 +103,58 @@ class StreakView extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+
+class _InstructionStreakPanel extends StatelessWidget {
+  final HiveService hiveService;
+  final DateTime today;
+
+  const _InstructionStreakPanel({required this.hiveService, required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    final instructions = hiveService.getInstructions().where((instruction) => instruction.enabled).toList();
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.primary.withOpacity(0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('📘 Instruction Streaks', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          const SizedBox(height: 10),
+          if (instructions.isEmpty)
+            const Text('No active instructions yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+          else
+            ...instructions.map((instruction) {
+              final entry = hiveService.instructionEntryForDate(instruction, today);
+              final color = entry?.followed == true
+                  ? Colors.green
+                  : entry?.missed == true
+                      ? Colors.red
+                      : Color(instruction.colorValue);
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: color.withOpacity(0.10), borderRadius: BorderRadius.circular(16)),
+                child: Row(
+                  children: [
+                    Icon(Icons.rule_folder_outlined, color: color),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary))),
+                    Text('${hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+                  ],
+                ),
+              );
+            }),
+        ],
       ),
     );
   }

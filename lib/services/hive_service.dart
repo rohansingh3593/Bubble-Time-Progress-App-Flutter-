@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../models/instruction.dart';
 import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/productivity_snapshot.dart';
@@ -30,6 +31,7 @@ class HiveService {
   static const _defaultScheduleBonusPoints = 20;
   static const _journeyPrefix = '__journey__';
   static const _productivityPrefix = '__productivity_snapshot__';
+  static const _instructionPrefix = '__instruction__';
   static const _rewardLedgerPrefix = '__reward_ledger__';
   static const _rewardGoalPrefix = '__reward_goal__';
   static const _autoJourneyPrefix = 'auto_journey_';
@@ -982,6 +984,140 @@ class HiveService {
   }
 
 
+
+  String _instructionKey(String id) => '$_instructionPrefix$id';
+
+  List<InstructionRule> getInstructions() {
+    final instructions = <InstructionRule>[];
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(_instructionPrefix)) continue;
+      final raw = _box.get(key);
+      if (raw == null) continue;
+      instructions.add(InstructionRule.fromStorageList(raw.cast<dynamic>()));
+    }
+    instructions.sort((a, b) {
+      if (a.enabled != b.enabled) return a.enabled ? -1 : 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return instructions;
+  }
+
+  Future<void> saveInstruction(InstructionRule instruction) async {
+    await _box.put(_instructionKey(instruction.id), instruction.toStorageList());
+  }
+
+  Future<void> deleteInstruction(String id) async {
+    await _box.delete(_instructionKey(id));
+  }
+
+  Future<void> setInstructionEnabled(InstructionRule instruction, bool enabled) async {
+    await saveInstruction(instruction.copyWith(enabled: enabled));
+  }
+
+  InstructionHistoryEntry? instructionEntryForDate(InstructionRule instruction, DateTime date) {
+    final occurrence = _instructionOccurrenceDate(instruction, date);
+    for (final entry in instruction.history) {
+      if (_isSameDate(_instructionOccurrenceDate(instruction, entry.date), occurrence)) return entry;
+    }
+    return null;
+  }
+
+  Future<void> updateInstructionStatus(InstructionRule instruction, DateTime date, String status, {String note = ''}) async {
+    final occurrence = _instructionOccurrenceDate(instruction, date);
+    final updatedHistory = instruction.history
+        .where((entry) => !_isSameDate(_instructionOccurrenceDate(instruction, entry.date), occurrence))
+        .toList();
+    final followed = status == InstructionHistoryEntry.statusFollowed;
+    updatedHistory.add(
+      InstructionHistoryEntry(
+        date: occurrence,
+        status: status,
+        bonusPoints: followed ? instruction.bonusPoints : 0,
+        xpEarned: followed ? instruction.xpEarned : 0,
+        note: note.trim(),
+      ),
+    );
+    await saveInstruction(instruction.copyWith(history: updatedHistory));
+    await recalculateProductivitySnapshotForDate(occurrence);
+  }
+
+  DateTime _instructionOccurrenceDate(InstructionRule instruction, DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    switch (instruction.repeatType.trim().toLowerCase()) {
+      case 'weekly':
+        return day.subtract(Duration(days: day.weekday - 1));
+      case 'monthly':
+        return DateTime(day.year, day.month, 1);
+      case 'yearly':
+        return DateTime(day.year, 1, 1);
+      case 'one-time':
+        return DateTime(instruction.createdAt.year, instruction.createdAt.month, instruction.createdAt.day);
+      case 'daily':
+      default:
+        return day;
+    }
+  }
+
+  DateTime? _previousInstructionOccurrence(InstructionRule instruction, DateTime occurrence) {
+    switch (instruction.repeatType.trim().toLowerCase()) {
+      case 'daily':
+        return occurrence.subtract(const Duration(days: 1));
+      case 'weekly':
+        return occurrence.subtract(const Duration(days: 7));
+      case 'monthly':
+        return DateTime(occurrence.year, occurrence.month - 1, 1);
+      case 'yearly':
+        return DateTime(occurrence.year - 1, 1, 1);
+      default:
+        return null;
+    }
+  }
+
+  int instructionCurrentStreak(InstructionRule instruction, DateTime date) {
+    if (!instruction.enabled || !instruction.streakTracking) return 0;
+    final followedOccurrences = instruction.history
+        .where((entry) => entry.followed)
+        .map((entry) => _instructionOccurrenceDate(instruction, entry.date))
+        .toSet();
+    final currentOccurrence = _instructionOccurrenceDate(instruction, date);
+    var cursor = followedOccurrences.contains(currentOccurrence)
+        ? currentOccurrence
+        : _previousInstructionOccurrence(instruction, currentOccurrence);
+    var streak = 0;
+    while (cursor != null && followedOccurrences.contains(cursor)) {
+      streak++;
+      cursor = _previousInstructionOccurrence(instruction, cursor);
+    }
+    return streak;
+  }
+
+  int instructionBestStreak(InstructionRule instruction) {
+    final followed = instruction.history
+        .where((entry) => entry.followed)
+        .map((entry) => _instructionOccurrenceDate(instruction, entry.date))
+        .toList()
+      ..sort();
+    var best = 0;
+    var current = 0;
+    DateTime? previous;
+    for (final occurrence in followed) {
+      final expected = previous == null ? null : _previousInstructionOccurrence(instruction, occurrence);
+      current = previous != null && expected != null && _isSameDate(expected, previous) ? current + 1 : 1;
+      if (current > best) best = current;
+      previous = occurrence;
+    }
+    return best;
+  }
+
+  int instructionBonusForDate(DateTime date) {
+    var total = 0;
+    for (final instruction in getInstructions()) {
+      final entry = instructionEntryForDate(instruction, date);
+      if (instruction.enabled && entry != null && entry.followed) total += entry.bonusPoints;
+    }
+    return total;
+  }
+
   String _rewardLedgerKey(String id) => '$_rewardLedgerPrefix$id';
   String _rewardGoalKey(String id) => '$_rewardGoalPrefix$id';
 
@@ -1270,6 +1406,24 @@ class HiveService {
           xpBonus: taskTimingXpBonus,
           totalPoints: taskBasePoints + taskBonusPoints + taskTimingBonusPoints,
           reason: reason,
+        ),
+      );
+    }
+
+    for (final instruction in getInstructions()) {
+      if (!instruction.enabled) continue;
+      final entry = instructionEntryForDate(instruction, day);
+      if (entry == null || !entry.followed) continue;
+      timingBonusPoints += entry.bonusPoints;
+      pointEvents.add(
+        ProductivityPointEvent(
+          title: '✅ Instruction followed: ${instruction.name}',
+          basePoints: 0,
+          streakBonusPoints: 0,
+          timingBonusPoints: entry.bonusPoints,
+          xpBonus: entry.xpEarned,
+          totalPoints: entry.bonusPoints,
+          reason: instruction.description.isEmpty ? 'Instruction bonus' : instruction.description,
         ),
       );
     }
