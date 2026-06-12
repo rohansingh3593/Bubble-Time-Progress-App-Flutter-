@@ -22,6 +22,10 @@ class HiveService {
   static const _dailyJournalCategory = 'Journal';
   static const _dailyJournalDescription =
       'Built-in System Task • Completed by saving a journal entry';
+  static const _scheduledTimeMarker = '⏰ Scheduled:';
+  static const _timingBonusWindowMinutes = 15;
+  static const _onTimeTimingBonusPoints = 20;
+  static const _earlyTimingBonusPoints = 10;
   static const _journeyPrefix = '__journey__';
   static const _productivityPrefix = '__productivity_snapshot__';
   static const _autoJourneyPrefix = 'auto_journey_';
@@ -217,8 +221,8 @@ class HiveService {
       task: _dailyJournalTaskName,
       done: completed,
       description: completed
-          ? 'Built-in System Task • Journal saved successfully'
-          : _dailyJournalDescription,
+          ? 'Built-in System Task • Journal saved successfully\n$_scheduledTimeMarker 21:45'
+          : '$_dailyJournalDescription\n$_scheduledTimeMarker 21:45',
       dueDate: journal?.date ?? day,
       priority: 'Important',
       status: completed ? 'Completed' : missed ? 'Missed' : 'Not Completed',
@@ -725,7 +729,20 @@ class HiveService {
     final now = DateTime.now();
     final normalizedTask = _withNormalizedTaskName(updated);
     final occurrenceDate = _currentOccurrenceDate(normalizedTask.repeatFrequency, now);
-    final normalizedUpdated = normalizedTask.copyWith(dueDate: occurrenceDate, repeatTask: true);
+    final completionTimestamp = DateTime(
+      occurrenceDate.year,
+      occurrenceDate.month,
+      occurrenceDate.day,
+      now.hour,
+      now.minute,
+      now.second,
+      now.millisecond,
+      now.microsecond,
+    );
+    final normalizedUpdated = normalizedTask.copyWith(
+      dueDate: _isCompletedTask(normalizedTask) ? completionTimestamp : occurrenceDate,
+      repeatTask: true,
+    );
     final key = _formatKey(occurrenceDate);
     final tasks = _storedTasksForDate(occurrenceDate);
 
@@ -985,6 +1002,7 @@ class HiveService {
     var projectPhasesCompleted = 0;
     var basePoints = 0;
     var streakBonusPoints = 0;
+    var timingBonusPoints = 0;
     final completedTaskNames = <String>[];
     final pointEvents = <ProductivityPointEvent>[];
 
@@ -1006,6 +1024,8 @@ class HiveService {
       var taskBonusPoints = 0;
       var reason = 'Base productivity points';
 
+      var taskTimingBonusPoints = 0;
+      var taskTimingXpBonus = 0;
       if (_isCompletedTask(task)) {
         completedTasks++;
         completedTaskNames.add(task.task);
@@ -1015,6 +1035,15 @@ class HiveService {
           taskBonusPoints = _streakBonusForLength(streak);
           if (taskBonusPoints > 0) {
             reason = '$streak-day streak milestone';
+          }
+
+          final timingBonus = _routineTimingBonusForTask(task, streak);
+          taskTimingBonusPoints = timingBonus.points;
+          taskTimingXpBonus = timingBonus.xp;
+          if (taskTimingBonusPoints > 0) {
+            reason = reason == 'Base productivity points'
+                ? timingBonus.reason
+                : '$reason • ${timingBonus.reason}';
           }
         }
       }
@@ -1028,6 +1057,7 @@ class HiveService {
 
       basePoints += taskBasePoints;
       streakBonusPoints += taskBonusPoints;
+      timingBonusPoints += taskTimingBonusPoints;
       pointEvents.add(
         ProductivityPointEvent(
           title: task.repeatTask
@@ -1037,7 +1067,9 @@ class HiveService {
                   : '${task.task} Completed',
           basePoints: taskBasePoints,
           streakBonusPoints: taskBonusPoints,
-          totalPoints: taskBasePoints + taskBonusPoints,
+          timingBonusPoints: taskTimingBonusPoints,
+          xpBonus: taskTimingXpBonus,
+          totalPoints: taskBasePoints + taskBonusPoints + taskTimingBonusPoints,
           reason: taskBonusPoints > 0 ? reason : (completedPhaseCount > 0 ? '$completedPhaseCount project phase${completedPhaseCount == 1 ? '' : 's'} completed' : reason),
         ),
       );
@@ -1048,7 +1080,7 @@ class HiveService {
     final urgentHours = urgentMinutes / 60.0;
     final neitherHours = neitherMinutes / 60.0;
     final totalHours = bothHours + importantHours + urgentHours + neitherHours;
-    final totalPoints = basePoints + streakBonusPoints;
+    final totalPoints = basePoints + streakBonusPoints + timingBonusPoints;
     final score = (totalPoints / ProductivitySnapshot.maximumPoints * 100).clamp(0.0, 100.0).toDouble();
 
     return ProductivitySnapshot(
@@ -1061,6 +1093,7 @@ class HiveService {
       totalPoints: totalPoints,
       basePoints: basePoints,
       streakBonusPoints: streakBonusPoints,
+      timingBonusPoints: timingBonusPoints,
       productivityScore: score,
       rating: ProductivitySnapshot.ratingForScore(score),
       completedTasks: completedTasks,
@@ -1085,6 +1118,64 @@ class HiveService {
     if (task.important) return 80;
     if (task.urgent) return 50;
     return 10;
+  }
+
+
+  _RoutineTimingBonus _routineTimingBonusForTask(Task task, int streakLength) {
+    final scheduled = _scheduledMinutesForTask(task);
+    if (scheduled == null || !_isCompletedTask(task)) return const _RoutineTimingBonus.none();
+
+    final completed = (task.dueDate.hour * 60) + task.dueDate.minute;
+    final windowStart = scheduled - _timingBonusWindowMinutes;
+    final windowEnd = scheduled + _timingBonusWindowMinutes;
+    var points = 0;
+    var xp = 0;
+    var label = 'Late completion • no timing bonus';
+
+    if (completed >= windowStart && completed <= windowEnd) {
+      points = _onTimeTimingBonusPoints;
+      xp = 5;
+      label = 'On time within ±$_timingBonusWindowMinutes min window';
+    } else if (completed < windowStart) {
+      points = _earlyTimingBonusPoints;
+      xp = 2;
+      label = 'Early completion before scheduled window';
+    }
+
+    final streakExtra = _timingStreakBonusForLength(streakLength);
+    if (streakExtra > 0 && points > 0) {
+      points += streakExtra;
+      label = '$label • $streakLength-day on-time streak extra +$streakExtra';
+    }
+
+    return _RoutineTimingBonus(points: points, xp: xp, reason: label);
+  }
+
+  int? _scheduledMinutesForTask(Task task) {
+    for (final line in task.description.split('\n')) {
+      final trimmed = line.trim();
+      if (!trimmed.startsWith(_scheduledTimeMarker)) continue;
+      final raw = trimmed.substring(_scheduledTimeMarker.length).trim();
+      final parts = raw.split(':');
+      if (parts.length != 2) return null;
+      final hour = int.tryParse(parts[0]);
+      final minute = int.tryParse(parts[1]);
+      if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        return null;
+      }
+      return (hour * 60) + minute;
+    }
+    return null;
+  }
+
+  int _timingStreakBonusForLength(int streakLength) {
+    const bonuses = {
+      7: 10,
+      30: 30,
+      100: 100,
+      365: 500,
+    };
+    return bonuses[streakLength] ?? 0;
   }
 
   int _streakBonusForLength(int streakLength) {
@@ -1182,8 +1273,14 @@ class HiveService {
     lines.add('📊 Productivity score: ${snapshot.productivityScore.toStringAsFixed(1)}%');
     lines.add('⭐ Points earned today: +${snapshot.totalPoints}');
     if (snapshot.streakBonusPoints > 0) lines.add('🏆 Streak bonus earned: +${snapshot.streakBonusPoints}');
-    for (final event in snapshot.pointEvents.where((event) => event.streakBonusPoints > 0)) {
-      lines.add('🔥 ${event.title} • ${event.reason} • +${event.streakBonusPoints} bonus points');
+    if (snapshot.timingBonusPoints > 0) lines.add('⏰ Timing bonus earned: +${snapshot.timingBonusPoints}');
+    for (final event in snapshot.pointEvents.where((event) => event.streakBonusPoints > 0 || event.timingBonusPoints > 0)) {
+      if (event.streakBonusPoints > 0) {
+        lines.add('🔥 ${event.title} • ${event.reason} • +${event.streakBonusPoints} streak bonus points');
+      }
+      if (event.timingBonusPoints > 0) {
+        lines.add('⏰ ${event.title} • ${event.reason} • +${event.timingBonusPoints} timing bonus points • +${event.xpBonus} XP');
+      }
     }
     lines.add('💎 Lifetime points: ${lifetime.totalPoints}');
     lines.add('🔥 Streak: ${lifetime.currentStreak} day${lifetime.currentStreak == 1 ? '' : 's'}');
@@ -1288,4 +1385,17 @@ class HiveService {
   ValueListenable<Box<List>> getBoxListenable() {
     return _box.listenable();
   }
+}
+
+class _RoutineTimingBonus {
+  final int points;
+  final int xp;
+  final String reason;
+
+  const _RoutineTimingBonus({required this.points, required this.xp, required this.reason});
+
+  const _RoutineTimingBonus.none()
+      : points = 0,
+        xp = 0,
+        reason = '';
 }

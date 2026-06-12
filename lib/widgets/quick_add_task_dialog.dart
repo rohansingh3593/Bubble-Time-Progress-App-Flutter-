@@ -20,6 +20,7 @@ const List<String> _statusOptions = [
 ];
 const List<String> _repeatFrequencyOptions = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
 const List<String> _projectPhaseStatusOptions = ['Not Started', 'In Progress', 'Completed', 'Cancelled'];
+const String _scheduledTimeMarker = '⏰ Scheduled:';
 
 const Map<String, int> _taskColorOptions = {
   'Yellow': 0xFFFFC107,
@@ -41,13 +42,21 @@ Future<Task?> showTaskFormDialog(
   Future<void> Function()? onDelete,
 }) async {
   final isEditing = initialTask != null;
+  final initialDescription = initialTask?.description ?? '';
+  final initialScheduledTime = _parseScheduledTime(initialDescription);
   final nameController = TextEditingController(text: initialTask?.task ?? '');
-  final descriptionController = TextEditingController(text: initialTask?.description ?? '');
+  final descriptionController = TextEditingController(
+    text: _stripScheduledTime(initialDescription),
+  );
   final hiveService = HiveService.instance;
   final categories = hiveService.getCategories().toList();
   final delegates = hiveService.getDelegates().toList();
 
   DateTime dueDate = DateTime((initialTask?.dueDate ?? date).year, (initialTask?.dueDate ?? date).month, (initialTask?.dueDate ?? date).day);
+  TimeOfDay? scheduledTime = initialScheduledTime ??
+      (initialTask?.repeatTask == true && initialTask?.hourSlot != null
+          ? TimeOfDay(hour: initialTask!.hourSlot!, minute: 0)
+          : null);
   int? hourSlot = initialTask?.hourSlot ?? initialHourSlot;
 
   String selectedPriority = initialTask?.priority ?? 'Medium';
@@ -106,8 +115,7 @@ Future<Task?> showTaskFormDialog(
                     setDialogState(() {
                       repeatTask = value;
                       if (!repeatTask) repeatFrequency = 'Daily';
-                      if (repeatTask && repeatFrequency == 'Daily') {
-                        hourSlot = null;
+                      if (repeatTask) {
                         selectedDelegate = null;
                       }
                       syncStatusForTaskType();
@@ -124,7 +132,7 @@ Future<Task?> showTaskFormDialog(
                       children: [
                         const Text('Repeat Frequency', style: TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
-                        ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() { repeatFrequency = value; if (repeatFrequency == 'Daily') { hourSlot = null; selectedDelegate = null; } }); })),
+                        ..._repeatFrequencyOptions.map((frequency) => RadioListTile<String>(value: frequency, groupValue: repeatFrequency, title: Text(frequency), dense: true, contentPadding: EdgeInsets.zero, visualDensity: const VisualDensity(horizontal: -4, vertical: -4), onChanged: (value) { if (value != null) setDialogState(() { repeatFrequency = value; selectedDelegate = null; }); })),
                         const SizedBox(height: 8),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
@@ -160,18 +168,52 @@ Future<Task?> showTaskFormDialog(
                             if (value != null) setDialogState(() => selectedRoutineMinutes = value);
                           },
                         ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('⏰ Scheduled Time (Optional)', style: TextStyle(fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 2),
+                                    Text(scheduledTime == null ? 'None • no timing bonus' : '${scheduledTime!.format(context)} • ±15 min bonus window'),
+                                  ],
+                                ),
+                              ),
+                              if (scheduledTime != null)
+                                TextButton(
+                                  onPressed: () => setDialogState(() => scheduledTime = null),
+                                  child: const Text('None'),
+                                ),
+                              TextButton(
+                                onPressed: () async {
+                                  final picked = await showTimePicker(
+                                    context: context,
+                                    initialTime: scheduledTime ?? const TimeOfDay(hour: 6, minute: 0),
+                                  );
+                                  if (picked != null) setDialogState(() => scheduledTime = picked);
+                                },
+                                child: const Text('Select'),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 const SizedBox(height: 12),
-                if (hourSlot != null && !(repeatTask && repeatFrequency == 'Daily'))
+                if (hourSlot != null && !repeatTask)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
                     child: Text('Time Slot: ${_formatHour(hourSlot!)}'),
                   ),
-                if (hourSlot != null && !(repeatTask && repeatFrequency == 'Daily')) const SizedBox(height: 12),
+                if (hourSlot != null && !repeatTask) const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
@@ -419,15 +461,25 @@ Future<Task?> showTaskFormDialog(
                 }
                 final mergedDescription = !repeatTask
                     ? _ProjectPhaseDraft.mergeIntoDescription(descriptionController.text.trim(), projectPhases)
-                    : descriptionController.text.trim();
+                    : _mergeScheduledTime(descriptionController.text.trim(), scheduledTime);
                 final inferredStatus = repeatTask
                     ? 'Not Updated'
                     : _ProjectPhaseDraft.inferTaskStatus(projectPhases, selectedStatus);
 
+                final taskDueDate = repeatTask && scheduledTime != null
+                    ? DateTime(
+                        dueDate.year,
+                        dueDate.month,
+                        dueDate.day,
+                        scheduledTime!.hour,
+                        scheduledTime!.minute,
+                      )
+                    : dueDate;
+
                 Navigator.of(context).pop(Task(
                   task: name,
                   description: mergedDescription,
-                  dueDate: dueDate,
+                  dueDate: taskDueDate,
                   priority: repeatTask ? 'Medium' : selectedPriority,
                   status: inferredStatus,
                   category: selectedCategory,
@@ -438,7 +490,7 @@ Future<Task?> showTaskFormDialog(
                   urgent: selectedUrgent,
                   important: selectedImportant,
                   estimatedMinutes: repeatTask ? selectedRoutineMinutes : _ProjectPhaseDraft.totalMinutes(projectPhases),
-                  hourSlot: repeatTask && repeatFrequency == 'Daily' ? null : hourSlot,
+                  hourSlot: repeatTask ? scheduledTime?.hour : hourSlot,
                   colorValue: selectedColorValue,
                   routineEnabled: repeatTask ? routineEnabled : true,
                 ));
@@ -457,6 +509,40 @@ Future<Task?> showTaskFormDialog(
       phase.dispose();
     }
   }
+}
+
+
+TimeOfDay? _parseScheduledTime(String description) {
+  for (final line in description.split('\n')) {
+    final trimmed = line.trim();
+    if (!trimmed.startsWith(_scheduledTimeMarker)) continue;
+    final raw = trimmed.substring(_scheduledTimeMarker.length).trim();
+    final parts = raw.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return null;
+    }
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+  return null;
+}
+
+String _stripScheduledTime(String description) {
+  return description
+      .split('\n')
+      .where((line) => !line.trim().startsWith(_scheduledTimeMarker))
+      .join('\n')
+      .trim();
+}
+
+String _mergeScheduledTime(String description, TimeOfDay? scheduledTime) {
+  final cleaned = _stripScheduledTime(description);
+  if (scheduledTime == null) return cleaned;
+  final encoded = '${scheduledTime.hour.toString().padLeft(2, '0')}:${scheduledTime.minute.toString().padLeft(2, '0')}';
+  final markerLine = '$_scheduledTimeMarker $encoded';
+  return cleaned.isEmpty ? markerLine : '$cleaned\n$markerLine';
 }
 
 String _formatHour(int hour) {
