@@ -12,6 +12,7 @@ import '../utils/task_time_utils.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
+import 'reward_money_history_view.dart';
 import 'journal_view.dart';
 import 'journey_timeline_view.dart';
 import 'productivity_timeline_view.dart';
@@ -285,6 +286,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => JourneyTimelineView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+
+  void _openRewardMoneyHistory() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => RewardMoneyHistoryView(hiveService: widget.hiveService),
       ),
     );
   }
@@ -733,6 +743,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   String _formatShortDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
 
+  String _formatCompactNumber(int value) {
+    if (value >= 100000) return '${(value / 100000).toStringAsFixed(value % 100000 == 0 ? 0 : 1)}L';
+    if (value >= 1000) return '${(value / 1000).toStringAsFixed(value % 1000 == 0 ? 0 : 1)}K';
+    return '$value';
+  }
+
   String _formatDueLabel(Task task) {
     final dueDate = task.dueDate;
     final dueDay = _dateOnly(dueDate);
@@ -931,6 +947,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           onTap: _openJournal,
         ),
         const SizedBox(width: 8),
+        _rewardMoneyBadge(style),
+        const SizedBox(width: 8),
         _headerActionButton(
           icon: Icons.settings_rounded,
           tooltip: 'Dashboard settings',
@@ -938,6 +956,42 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           onTap: _openSettingsPanel,
         ),
       ],
+    );
+  }
+
+
+  Widget _rewardMoneyBadge(DashboardThemeStyle style) {
+    final rewardSummary = widget.hiveService.getRewardMoneySummary();
+    return Tooltip(
+      message: 'Reward money history',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: _openRewardMoneyHistory,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            decoration: BoxDecoration(
+              color: style.primary.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: style.primary.withOpacity(0.22)),
+              boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.account_balance_wallet_outlined, color: style.primary, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  '₹${_formatCompactNumber(rewardSummary.availableRupees)}',
+                  style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
