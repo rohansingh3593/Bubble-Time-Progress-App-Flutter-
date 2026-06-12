@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
 import '../models/instruction.dart';
+import '../models/task_model.dart';
 import '../services/hive_service.dart';
+import '../utils/task_time_utils.dart';
 
 class InstructionDashboardView extends StatefulWidget {
   final HiveService hiveService;
@@ -151,10 +153,11 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   Future<void> _showInstructionForm([InstructionRule? instruction]) async {
     final nameController = TextEditingController(text: instruction?.name ?? '');
     final descriptionController = TextEditingController(text: instruction?.description ?? '');
-    final linkedTaskController = TextEditingController(text: instruction?.linkedTask ?? '');
-    final linkedPhaseController = TextEditingController(text: instruction?.linkedPhase ?? '');
     final bonusController = TextEditingController(text: instruction == null ? '20' : '${instruction.bonusPoints}');
     final xpController = TextEditingController(text: instruction == null ? '5' : '${instruction.xpEarned}');
+    var linkedTasks = [...(instruction?.linkedTasks ?? const <String>[])];
+    final initialPhases = instruction?.linkedPhases ?? const <String>[];
+    var linkedPhase = initialPhases.isEmpty ? '' : initialPhases.first;
     var repeatType = instruction?.repeatType ?? InstructionRule.repeatDaily;
     var enabled = instruction?.enabled ?? true;
     var streakTracking = instruction?.streakTracking ?? true;
@@ -162,81 +165,290 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     final saved = await showDialog<InstructionRule>(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(instruction == null ? 'Add Instruction' : 'Edit Instruction'),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
-                  TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
-                  TextField(controller: linkedTaskController, decoration: const InputDecoration(labelText: 'Linked Task (Optional)')),
-                  TextField(controller: linkedPhaseController, decoration: const InputDecoration(labelText: 'Linked Phase (Optional)')),
-                  DropdownButtonFormField<String>(
-                    value: repeatType,
-                    decoration: const InputDecoration(labelText: 'Repeat Type'),
-                    items: const [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly, InstructionRule.repeatOneTime]
-                        .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-                        .toList(),
-                    onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
-                  ),
-                  TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      for (final color in const [0xFF43A047, 0xFF1E88E5, 0xFFFF9800, 0xFF8E24AA, 0xFFE53935])
-                        ChoiceChip(
-                          selected: colorValue == color,
-                          label: const Text(''),
-                          avatar: CircleAvatar(backgroundColor: Color(color)),
-                          onSelected: (_) => setDialogState(() => colorValue = color),
+        builder: (context, setDialogState) {
+          final availablePhases = _phaseOptionsForSelection(linkedTasks);
+          if (availablePhases.isEmpty || (linkedPhase.isNotEmpty && !availablePhases.contains(linkedPhase))) linkedPhase = '';
+          final taskSummary = linkedTasks.isEmpty
+              ? 'No linked task selected'
+              : linkedTasks.length == 1
+                  ? linkedTasks.first
+                  : '${linkedTasks.length} tasks selected';
+          return AlertDialog(
+            title: Text(instruction == null ? 'Add Instruction' : 'Edit Instruction'),
+            content: SingleChildScrollView(
+              child: SizedBox(
+                width: 460,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
+                    TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+                    const SizedBox(height: 12),
+                    const Text('Linked Task (Optional)', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black54)),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () async {
+                        final selected = await _showTaskSelectorDialog(linkedTasks);
+                        if (selected == null) return;
+                        setDialogState(() {
+                          linkedTasks = selected;
+                          if (_phaseOptionsForSelection(linkedTasks).isEmpty) linkedPhase = '';
+                        });
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.88),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.primary.withOpacity(0.22)),
                         ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.link_rounded, color: AppColors.primary),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(taskSummary, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                                  const SizedBox(height: 2),
+                                  const Text('Tap to select from routine and non-routine tasks', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.keyboard_arrow_down_rounded),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (linkedTasks.length > 1) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: linkedTasks
+                            .map((task) => Chip(
+                                  label: Text(task),
+                                  onDeleted: () => setDialogState(() {
+                                    linkedTasks = linkedTasks.where((item) => item != task).toList();
+                                    if (_phaseOptionsForSelection(linkedTasks).isEmpty) linkedPhase = '';
+                                  }),
+                                ))
+                            .toList(),
+                      ),
                     ],
-                  ),
-                  SwitchListTile(value: enabled, onChanged: (value) => setDialogState(() => enabled = value), title: const Text('Enable Instruction')),
-                  SwitchListTile(value: streakTracking, onChanged: (value) => setDialogState(() => streakTracking = value), title: const Text('Streak Tracking')),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(
-                context,
-                InstructionRule(
-                  id: instruction?.id ?? 'instruction_${DateTime.now().microsecondsSinceEpoch}',
-                  name: nameController.text.trim().isEmpty ? 'Instruction' : nameController.text.trim(),
-                  description: descriptionController.text.trim(),
-                  linkedTask: linkedTaskController.text.trim(),
-                  linkedPhase: linkedPhaseController.text.trim(),
-                  repeatType: repeatType,
-                  bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
-                  xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
-                  colorValue: colorValue,
-                  enabled: enabled,
-                  streakTracking: streakTracking,
-                  createdAt: instruction?.createdAt ?? DateTime.now(),
-                  history: instruction?.history ?? const [],
+                    if (availablePhases.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: linkedPhase.isEmpty ? 'All Phases' : linkedPhase,
+                        decoration: const InputDecoration(labelText: 'Linked Phase (Optional)'),
+                        items: ['All Phases', ...availablePhases]
+                            .map((phase) => DropdownMenuItem(value: phase, child: Text(phase)))
+                            .toList(),
+                        onChanged: (value) => setDialogState(() => linkedPhase = value == 'All Phases' ? '' : value ?? ''),
+                      ),
+                    ],
+                    DropdownButtonFormField<String>(
+                      value: repeatType,
+                      decoration: const InputDecoration(labelText: 'Repeat Type'),
+                      items: const [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly, InstructionRule.repeatOneTime]
+                          .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                          .toList(),
+                      onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
+                    ),
+                    TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+                    TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final color in const [0xFF43A047, 0xFF1E88E5, 0xFFFF9800, 0xFF8E24AA, 0xFFE53935])
+                          ChoiceChip(
+                            selected: colorValue == color,
+                            label: const Text(''),
+                            avatar: CircleAvatar(backgroundColor: Color(color)),
+                            onSelected: (_) => setDialogState(() => colorValue = color),
+                          ),
+                      ],
+                    ),
+                    SwitchListTile(value: enabled, onChanged: (value) => setDialogState(() => enabled = value), title: const Text('Enable Instruction')),
+                    SwitchListTile(value: streakTracking, onChanged: (value) => setDialogState(() => streakTracking = value), title: const Text('Streak Tracking')),
+                  ],
                 ),
               ),
-              child: const Text('Save'),
             ),
-          ],
-        ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(
+                  context,
+                  InstructionRule(
+                    id: instruction?.id ?? 'instruction_${DateTime.now().microsecondsSinceEpoch}',
+                    name: nameController.text.trim().isEmpty ? 'Instruction' : nameController.text.trim(),
+                    description: descriptionController.text.trim(),
+                    linkedTask: InstructionRule.encodeLinks(linkedTasks),
+                    linkedPhase: linkedPhase.trim(),
+                    repeatType: repeatType,
+                    bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
+                    xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
+                    colorValue: colorValue,
+                    enabled: enabled,
+                    streakTracking: streakTracking,
+                    createdAt: instruction?.createdAt ?? DateTime.now(),
+                    history: instruction?.history ?? const [],
+                  ),
+                ),
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
     nameController.dispose();
     descriptionController.dispose();
-    linkedTaskController.dispose();
-    linkedPhaseController.dispose();
     bonusController.dispose();
     xpController.dispose();
     if (saved != null) await widget.hiveService.saveInstruction(saved);
+  }
+
+  List<_InstructionTaskOption> _taskOptions() {
+    final deduped = <String, _InstructionTaskOption>{};
+    for (final tasks in widget.hiveService.getAllTasksByDate().values) {
+      for (final task in tasks) {
+        final title = task.task.trim();
+        if (title.isEmpty) continue;
+        final normalized = title.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+        final routine = task.repeatTask && (task.repeatFrequency?.trim().isNotEmpty ?? false);
+        final existing = deduped[normalized];
+        if (existing == null || (!existing.isRoutine && routine)) {
+          deduped[normalized] = _InstructionTaskOption(task: task, isRoutine: routine);
+        }
+      }
+    }
+    final options = deduped.values.toList()
+      ..sort((a, b) {
+        if (a.isRoutine != b.isRoutine) return a.isRoutine ? -1 : 1;
+        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      });
+    return options;
+  }
+
+  List<String> _phaseOptionsForSelection(List<String> selectedTasks) {
+    if (selectedTasks.length != 1) return const <String>[];
+    final selected = selectedTasks.first.trim().toLowerCase();
+    _InstructionTaskOption? option;
+    for (final taskOption in _taskOptions()) {
+      if (taskOption.title.trim().toLowerCase() == selected) {
+        option = taskOption;
+        break;
+      }
+    }
+    if (option == null || option.isRoutine) return const <String>[];
+    return parseTaskPhases(option.task.description).map((phase) => phase.name).where((name) => name.trim().isNotEmpty).toList();
+  }
+
+  Future<List<String>?> _showTaskSelectorDialog(List<String> initialSelection) async {
+    final searchController = TextEditingController();
+    final selected = initialSelection.toSet();
+    final options = _taskOptions();
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final query = searchController.text.trim().toLowerCase();
+          final filtered = options.where((option) {
+            if (query.isEmpty) return true;
+            return option.title.toLowerCase().contains(query) || option.subtitle.toLowerCase().contains(query);
+          }).toList();
+          final routineTasks = filtered.where((option) => option.isRoutine).toList();
+          final nonRoutineTasks = filtered.where((option) => !option.isRoutine).toList();
+          return AlertDialog(
+            title: const Text('Select Task'),
+            content: SizedBox(
+              width: 520,
+              height: 520,
+              child: Column(
+                children: [
+                  TextField(
+                    controller: searchController,
+                    decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search Task...'),
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        if (routineTasks.isNotEmpty) _taskSelectorSection('📅 Routine Tasks', routineTasks, selected, setDialogState),
+                        if (nonRoutineTasks.isNotEmpty) _taskSelectorSection('📁 Non-Routine Tasks', nonRoutineTasks, selected, setDialogState),
+                        if (filtered.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('No matching tasks found.', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, <String>[]), child: const Text('Clear')),
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () {
+                  final orderedSelected = options.where((option) => selected.contains(option.title)).map((option) => option.title).toList();
+                  for (final taskName in selected) {
+                    if (!orderedSelected.contains(taskName)) orderedSelected.add(taskName);
+                  }
+                  Navigator.pop(context, orderedSelected);
+                },
+                child: const Text('Use Selected'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    searchController.dispose();
+    return result;
+  }
+
+  Widget _taskSelectorSection(String title, List<_InstructionTaskOption> options, Set<String> selected, StateSetter setDialogState) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
+          child: Text(title, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+        ),
+        ...options.map((option) {
+          final checked = selected.contains(option.title);
+          return CheckboxListTile(
+            value: checked,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            secondary: CircleAvatar(
+              radius: 14,
+              backgroundColor: option.isRoutine ? Colors.green.withOpacity(0.14) : Colors.blue.withOpacity(0.14),
+              child: Icon(option.isRoutine ? Icons.repeat_rounded : Icons.folder_copy_outlined, color: option.isRoutine ? Colors.green : Colors.blue, size: 16),
+            ),
+            title: Text(option.title, style: const TextStyle(fontWeight: FontWeight.w900)),
+            subtitle: Text(option.subtitle),
+            onChanged: (value) => setDialogState(() {
+              if (value == true) {
+                selected.add(option.title);
+              } else {
+                selected.remove(option.title);
+              }
+            }),
+          );
+        }),
+      ],
+    );
   }
 
   void _showInstructionDetails(InstructionRule instruction) {
@@ -276,6 +488,25 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
       ),
     );
+  }
+}
+
+
+class _InstructionTaskOption {
+  final Task task;
+  final bool isRoutine;
+
+  const _InstructionTaskOption({required this.task, required this.isRoutine});
+
+  String get title => task.task.trim();
+
+  String get subtitle {
+    if (isRoutine) {
+      final frequency = (task.repeatFrequency?.trim().isEmpty ?? true) ? 'Routine' : task.repeatFrequency!.trim();
+      return 'Routine • $frequency';
+    }
+    final category = task.category.trim().isEmpty ? 'Project' : task.category.trim();
+    return 'Non-Routine • $category';
   }
 }
 
@@ -352,7 +583,7 @@ class _InstructionCard extends StatelessWidget {
                 Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
                 Text('${instruction.repeatType} • +${instruction.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
-                if (instruction.linkedTask.isNotEmpty) Text('Linked: ${instruction.linkedTask}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: const TextStyle(fontSize: 12, color: Colors.black45)),
+                if (instruction.linkedTasks.isNotEmpty) Text('Linked: ${_linkedTaskSummary(instruction)}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: const TextStyle(fontSize: 12, color: Colors.black45)),
               ]),
             ),
             Container(
@@ -407,6 +638,12 @@ Widget _detailLine(String label, String value) {
     padding: const EdgeInsets.only(bottom: 6),
     child: Row(children: [Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700))), Text(value, style: const TextStyle(fontWeight: FontWeight.w900))]),
   );
+}
+
+String _linkedTaskSummary(InstructionRule instruction) {
+  final tasks = instruction.linkedTasks;
+  if (tasks.length <= 2) return tasks.join(', ');
+  return '${tasks.take(2).join(', ')} +${tasks.length - 2} more';
 }
 
 String _formatDate(DateTime date) => '${date.day}/${date.month}/${date.year}';

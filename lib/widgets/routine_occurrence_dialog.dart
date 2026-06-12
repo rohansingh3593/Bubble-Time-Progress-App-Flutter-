@@ -216,9 +216,9 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
 
 
 List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, Task task) {
-  final taskName = task.task.trim().toLowerCase();
+  final taskName = task.task.trim();
   return hiveService.getInstructions().where((instruction) {
-    return instruction.enabled && instruction.linkedTask.trim().toLowerCase() == taskName;
+    return instruction.enabled && instruction.isLinkedToTask(taskName);
   }).toList();
 }
 

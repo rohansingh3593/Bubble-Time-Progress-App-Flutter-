@@ -47,6 +47,8 @@ class InstructionRule {
   static const String repeatYearly = 'Yearly';
   static const String repeatOneTime = 'One-Time';
 
+  static const String linkDelimiter = '|||';
+
   final String id;
   final String name;
   final String description;
@@ -76,6 +78,44 @@ class InstructionRule {
     required this.createdAt,
     this.history = const [],
   });
+
+  List<String> get linkedTasks => splitLinks(linkedTask);
+
+  List<String> get linkedPhases => splitLinks(linkedPhase);
+
+  bool isLinkedToTask(String taskName) {
+    final normalizedTaskName = _normalizeLink(taskName);
+    if (normalizedTaskName.isEmpty) return false;
+    return linkedTasks.any((task) => _normalizeLink(task) == normalizedTaskName);
+  }
+
+  static String encodeLinks(Iterable<String> values) {
+    final unique = <String>[];
+    final seen = <String>{};
+    for (final value in values) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) continue;
+      final normalized = _normalizeLink(trimmed);
+      if (seen.add(normalized)) unique.add(trimmed);
+    }
+    return unique.join(linkDelimiter);
+  }
+
+  static List<String> splitLinks(String raw) {
+    final normalizedRaw = raw.trim();
+    if (normalizedRaw.isEmpty) return const <String>[];
+    final separator = normalizedRaw.contains(linkDelimiter) ? linkDelimiter : ',';
+    final parts = normalizedRaw.split(separator);
+    final unique = <String>[];
+    final seen = <String>{};
+    for (final part in parts) {
+      final trimmed = part.trim();
+      if (trimmed.isEmpty) continue;
+      final normalized = _normalizeLink(trimmed);
+      if (seen.add(normalized)) unique.add(trimmed);
+    }
+    return unique;
+  }
 
   InstructionRule copyWith({
     String? name,
@@ -147,6 +187,8 @@ class InstructionRule {
     );
   }
 }
+
+String _normalizeLink(String value) => value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
 int _readInt(List<dynamic> raw, int index, {int fallback = 0}) {
   if (raw.length <= index) return fallback;
