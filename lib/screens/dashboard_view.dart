@@ -189,8 +189,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 categoryOptions: categoryOptions,
               ),
               const SizedBox(height: 14),
-              _buildDailyFocusStrip(pendingTodayTasks, todayStart),
-              const SizedBox(height: 14),
               _buildProjectsSection(nonRoutineDashboardTasks),
               const SizedBox(height: 12),
             ],
@@ -2389,51 +2387,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         child,
       ]),
     );
-  }
-
-  Widget _buildDailyFocusStrip(List<Task> tasks, DateTime today) {
-    final sorted = [...tasks]..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
-    final focus = sorted.take(3).toList();
-    return _darkSection('Daily Focus', SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(children: focus.map((t){
-        final urgent = t.priority == 'Urgent (Now)' || t.priority == 'High';
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: urgent ? 1 : 0.6),
-          duration: const Duration(milliseconds: 1200),
-          curve: Curves.easeInOut,
-          builder: (context, lift, child) =>
-              Transform.translate(offset: Offset(0, -2 * lift), child: child),
-          child: Tooltip(
-            message: 'Tap to update task',
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _editTask(t),
-                child: Container(
-                  width: 220,
-                  margin: const EdgeInsets.only(right: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A2442),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border(left: BorderSide(color: urgent ? const Color(0xFFFF6A3D) : const Color(0xFF6D7CFF), width: 4)),
-                  ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(t.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 6),
-                    Text(urgent ? '⚡ High Priority' : '• ${t.priority}', style: const TextStyle(color: Color(0xFFB9C6F3))),
-                    const SizedBox(height: 4),
-                    Text(_formatDueLabel(t), style: const TextStyle(color: Color(0xFF7F8EB9), fontSize: 12)),
-                  ]),
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList()),
-    ), action: 'View All');
   }
 
   Widget _buildHabitRoutineSection(List<Task> routines) {
