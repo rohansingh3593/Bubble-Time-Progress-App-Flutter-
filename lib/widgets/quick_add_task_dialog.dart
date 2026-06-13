@@ -104,9 +104,7 @@ Future<Task?> showTaskFormDialog(
                   controller: nameController,
                   decoration: InputDecoration(labelText: 'Task Name *', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
                   autofocus: !isEditing,
-                  onChanged: (_) {
-                    if (isEditing) setDialogState(() {});
-                  },
+                  onChanged: (_) => setDialogState(() {}),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -570,7 +568,7 @@ Future<Task?> showTaskFormDialog(
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              onPressed: () {
+              onPressed: () async {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task name is required')));
@@ -604,6 +602,13 @@ Future<Task?> showTaskFormDialog(
                         scheduleStart!.minute,
                       )
                     : dueDate;
+
+                await _relinkTaskInstructionsIfRenamed(
+                  hiveService: hiveService,
+                  oldName: initialTask?.task ?? '',
+                  newName: name,
+                );
+                if (!context.mounted) return;
 
                 Navigator.of(context).pop(Task(
                   task: name,
@@ -743,6 +748,23 @@ List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, String
   final normalizedName = taskName.trim();
   if (normalizedName.isEmpty) return const <InstructionRule>[];
   return hiveService.getInstructions().where((instruction) => instruction.isLinkedToTask(normalizedName)).toList();
+}
+
+Future<void> _relinkTaskInstructionsIfRenamed({
+  required HiveService hiveService,
+  required String oldName,
+  required String newName,
+}) async {
+  final from = oldName.trim();
+  final to = newName.trim();
+  if (from.isEmpty || to.isEmpty || from.toLowerCase() == to.toLowerCase()) return;
+
+  for (final instruction in hiveService.getInstructions().where((instruction) => instruction.isLinkedToTask(from))) {
+    final updatedLinks = instruction.linkedTasks.map((linkedTask) {
+      return linkedTask.trim().toLowerCase() == from.toLowerCase() ? to : linkedTask;
+    }).toList();
+    await hiveService.saveInstruction(instruction.copyWith(linkedTask: InstructionRule.encodeLinks(updatedLinks)));
+  }
 }
 
 Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames, {InstructionRule? existing}) async {

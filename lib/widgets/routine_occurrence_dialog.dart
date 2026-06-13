@@ -29,6 +29,10 @@ String normalizedRoutineFrequency(Task task) {
 
 bool isRoutineTask(Task task) => task.repeatTask && normalizedRoutineFrequency(task).isNotEmpty;
 
+bool hasTaskLinkedInstructions(HiveService hiveService, Task task) {
+  return _linkedInstructionsForTask(hiveService, task, includeDisabled: true).isNotEmpty;
+}
+
 bool isDailyJournalSystemTask(Task task) {
   return task.task.trim().toLowerCase() == 'daily journal' &&
       task.category.trim().toLowerCase() == 'journal';
@@ -91,6 +95,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
     return _showDailyJournalDialog(context: context, task: task);
   }
 
+  final routineTask = isRoutineTask(task);
   final occurrenceUpdated = isRoutineOccurrenceUpdated(task);
   final existingCompleted = task.done || _normalizedStatus(task) == 'completed';
   final existingMissed = _normalizedStatus(task) == 'missed' || _normalizedStatus(task) == 'overdue';
@@ -292,18 +297,19 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                   ElevatedButton(onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.close), child: const Text('Close')),
                 ]
               : [
-                  TextButton.icon(
-                    onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.disableRoutine),
-                    icon: const Icon(Icons.pause_circle_outline),
-                    label: const Text('Disable Routine'),
-                  ),
+                  if (routineTask)
+                    TextButton.icon(
+                      onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.disableRoutine),
+                      icon: const Icon(Icons.pause_circle_outline),
+                      label: const Text('Disable Routine'),
+                    ),
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.close),
                     child: const Text('Close'),
                   ),
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.editDetails),
-                    child: const Text('Edit Routine Details'),
+                    child: Text(routineTask ? 'Edit Routine Details' : 'Edit Task Details'),
                   ),
                   ElevatedButton.icon(
                     onPressed: !canSaveCompleted
@@ -329,10 +335,10 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
 }
 
 
-List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, Task task) {
+List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, Task task, {bool includeDisabled = false}) {
   final taskName = task.task.trim();
   return hiveService.getInstructions().where((instruction) {
-    return instruction.enabled && instruction.isLinkedToTask(taskName);
+    return (includeDisabled || instruction.enabled) && instruction.isLinkedToTask(taskName);
   }).toList();
 }
 
@@ -482,7 +488,7 @@ Future<void> _saveRoutineOccurrence({
 }) async {
   await hiveService.updateTaskByReference(
     task,
-    task.copyWith(done: completed, status: completed ? 'Completed' : 'Missed', repeatTask: true),
+    task.copyWith(done: completed, status: completed ? 'Completed' : 'Missed', repeatTask: task.repeatTask),
   );
 
   if (!completed) return;
