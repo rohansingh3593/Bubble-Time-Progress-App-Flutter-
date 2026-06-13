@@ -679,7 +679,7 @@ class _YearProgressPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = _streakThemeStyle(hiveService);
+    final style = _streakThemeStyle(HiveService.instance);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: _panelDecoration(),
@@ -688,15 +688,15 @@ class _YearProgressPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.timeline, color: AppColors.primary),
+              Icon(Icons.timeline, color: style.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '${stats.year} Year Progress Overview',
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: style.textPrimary),
                 ),
               ),
-              Text('${(stats.yearCalendarRatio * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.w900)),
+              Text('${(stats.yearCalendarRatio * 100).round()}%', style: TextStyle(fontWeight: FontWeight.w900, color: style.textPrimary)),
             ],
           ),
           const SizedBox(height: 14),
@@ -704,8 +704,8 @@ class _YearProgressPanel extends StatelessWidget {
             value: stats.yearCalendarRatio.clamp(0.0, 1.0).toDouble(),
             minHeight: 12,
             borderRadius: BorderRadius.circular(99),
-            color: AppColors.primary,
-            backgroundColor: AppColors.primary.withOpacity(0.14),
+            color: style.primary,
+            backgroundColor: style.primary.withOpacity(0.14),
           ),
           const SizedBox(height: 14),
           Wrap(
