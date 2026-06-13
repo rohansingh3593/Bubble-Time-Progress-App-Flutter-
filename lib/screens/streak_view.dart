@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
+import '../constants/dashboard_themes.dart';
 import '../models/instruction.dart';
 import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
@@ -1303,7 +1304,7 @@ class _StreakBoardTaskNameCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final taskColor = Color(habit.template.colorValue);
+    final taskColor = _themeDerivedTaskColor(hiveService, habit.template.colorValue);
     return InkWell(
       borderRadius: BorderRadius.circular(layout.radius),
       onTap: () => _openTaskPerformanceDetail(context, hiveService, habit, today),
@@ -1350,7 +1351,7 @@ class _StreakBoardActivityRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final taskColor = Color(habit.template.colorValue);
+    final taskColor = _themeDerivedTaskColor(hiveService, habit.template.colorValue);
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: 420 + (rowIndex * 55)),
@@ -1488,7 +1489,7 @@ class _HabitTrackerSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.track_changes, color: habits.isEmpty ? AppColors.taskCompleted : Color(habits.first.template.colorValue)),
+              Icon(Icons.track_changes, color: habits.isEmpty ? _themeAccent(hiveService) : _themeDerivedTaskColor(hiveService, habits.first.template.colorValue)),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text('Habit & Routine Tracker', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
@@ -1542,7 +1543,7 @@ class _HabitCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final todayStatus = habit.statusFor(today);
-    final taskColor = Color(habit.template.colorValue);
+    final taskColor = _themeDerivedTaskColor(hiveService, habit.template.colorValue);
 
     return InkWell(
       borderRadius: BorderRadius.circular(22),
@@ -1555,7 +1556,7 @@ class _HabitCard extends StatelessWidget {
         child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(14),
-        decoration: _softTaskDecoration(taskColor, radius: 22),
+        decoration: _softTaskDecoration(taskColor, radius: 22, style: _streakThemeStyle(hiveService)),
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1717,7 +1718,7 @@ class _HabitActivityGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final startDate = today.subtract(const Duration(days: 27));
-    final taskColor = Color(habit.template.colorValue);
+    final taskColor = _themeDerivedTaskColor(hiveService, habit.template.colorValue);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2097,7 +2098,7 @@ class _TaskJourneyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCompleted = task.done || task.status == 'Completed';
-    final taskColor = Color(task.colorValue);
+    final taskColor = _themeDerivedTaskColor(hiveService, task.colorValue);
     final progress = isCompleted ? 1.0 : task.status == 'In Progress' ? 0.5 : 0.12;
     final difficulty = _difficultyLabel(task);
 
@@ -2110,7 +2111,7 @@ class _TaskJourneyCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
-        decoration: _softTaskDecoration(taskColor, radius: 20, borderOpacity: isCompleted ? 0.65 : 0.28),
+        decoration: _softTaskDecoration(taskColor, radius: 20, borderOpacity: isCompleted ? 0.65 : 0.28, style: _streakThemeStyle(hiveService)),
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2208,7 +2209,7 @@ class _TaskPerformanceDetailView extends StatelessWidget {
       valueListenable: hiveService.getBoxListenable(),
       builder: (context, box, _) {
         final habit = _currentHabit();
-        final taskColor = Color(habit.template.colorValue);
+        final taskColor = _themeDerivedTaskColor(hiveService, habit.template.colorValue);
         final todayStatus = habit.statusFor(today);
         final metrics = _TaskPerformanceMetrics.fromHabit(habit, today);
         final notes = hiveService
@@ -2399,7 +2400,7 @@ class _TaskPerformanceHero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: _softTaskDecoration(color, radius: 26, borderOpacity: 0.34),
+      decoration: _softTaskDecoration(color, radius: 26, borderOpacity: 0.34, style: _streakThemeStyle(hiveService)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -3415,11 +3416,45 @@ class _InsightRow extends StatelessWidget {
 }
 
 
-BoxDecoration _softTaskDecoration(Color taskColor, {required double radius, double borderOpacity = 0.24}) {
+DashboardThemeStyle _streakThemeStyle(HiveService hiveService) {
+  return DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
+}
+
+Color _themeAccent(HiveService hiveService) => _streakThemeStyle(hiveService).accent;
+
+Color _themeDerivedTaskColor(HiveService hiveService, int storedColorValue) {
+  final style = _streakThemeStyle(hiveService);
+  final colors = <Color>[
+    style.primary,
+    style.secondary,
+    style.accent,
+    style.heroGradient.isNotEmpty ? style.heroGradient.last : style.accent,
+    Color.lerp(style.primary, style.accent, 0.35) ?? style.primary,
+    Color.lerp(style.secondary, style.accent, 0.42) ?? style.secondary,
+    Color.lerp(style.accent, style.primary, 0.62) ?? style.accent,
+  ];
+  const legacyTaskColors = <int>[
+    0xFFFFC107,
+    0xFF43A047,
+    0xFF1E88E5,
+    0xFFE53935,
+    0xFF7E57C2,
+    0xFFFF8F00,
+    0xFFE91E63,
+  ];
+  final legacyIndex = legacyTaskColors.indexOf(storedColorValue);
+  final index = legacyIndex >= 0 ? legacyIndex : storedColorValue.abs() % colors.length;
+  return colors[index % colors.length];
+}
+
+
+BoxDecoration _softTaskDecoration(Color taskColor, {required double radius, double borderOpacity = 0.24, DashboardThemeStyle? style}) {
+  final fill = style?.elevatedSurface ?? taskColor.withOpacity(0.10);
+  final borderColor = style == null ? taskColor.withOpacity(borderOpacity) : Color.lerp(style.primary, taskColor, 0.42)!.withOpacity(borderOpacity + 0.10);
   return BoxDecoration(
-    color: taskColor.withOpacity(0.10),
+    color: fill,
     borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: taskColor.withOpacity(borderOpacity)),
+    border: Border.all(color: borderColor),
     boxShadow: [
       BoxShadow(
         color: taskColor.withOpacity(0.06),
