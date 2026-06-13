@@ -251,6 +251,14 @@ Future<Task?> showTaskFormDialog(
                     ),
                   ),
                 const SizedBox(height: 12),
+                _TaskInstructionSection(
+                  hiveService: hiveService,
+                  taskName: nameController.text.trim().isEmpty ? (initialTask?.task ?? '') : nameController.text.trim(),
+                  isRoutine: repeatTask,
+                  phaseNames: repeatTask ? const <String>[] : projectPhases.map((phase) => phase.nameController.text.trim()).where((name) => name.isNotEmpty).toList(),
+                  onChanged: () => setDialogState(() {}),
+                ),
+                const SizedBox(height: 12),
                 if (hourSlot != null && !repeatTask)
                   Container(
                     width: double.infinity,
@@ -446,16 +454,6 @@ Future<Task?> showTaskFormDialog(
                     ),
                   ),
                   const SizedBox(height: 12),
-                ],
-                if (isEditing) ...[
-                  const SizedBox(height: 12),
-                  _TaskInstructionSection(
-                    hiveService: hiveService,
-                    taskName: nameController.text.trim().isEmpty ? (initialTask?.task ?? '') : nameController.text.trim(),
-                    isRoutine: repeatTask,
-                    phaseNames: repeatTask ? const <String>[] : projectPhases.map((phase) => phase.nameController.text.trim()).where((name) => name.isNotEmpty).toList(),
-                    onChanged: () => setDialogState(() {}),
-                  ),
                 ],
                 if (!repeatTask) ...[
                   DropdownButtonFormField<String>(
@@ -675,7 +673,7 @@ class _TaskInstructionSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(child: Text('Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+              const Expanded(child: Text('📋 Task Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
               Text('${linked.length} linked', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
             ],
           ),
@@ -686,15 +684,40 @@ class _TaskInstructionSection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           if (linked.isEmpty)
-            const Text('No instructions linked yet.', style: TextStyle(color: Colors.black54))
+            const Text('No instructions added yet.', style: TextStyle(color: Colors.black54))
           else
-            ...linked.map((instruction) => ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(radius: 13, backgroundColor: Color(instruction.colorValue).withOpacity(0.16), child: Icon(Icons.rule_rounded, color: Color(instruction.colorValue), size: 15)),
-                  title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                  subtitle: Text('Bonus: +${instruction.bonusPoints}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}'),
-                )),
+            ...linked.asMap().entries.map((entry) {
+              final index = entry.key;
+              final instruction = entry.value;
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(radius: 13, backgroundColor: Color(instruction.colorValue).withOpacity(0.16), child: Text('${index + 1}', style: TextStyle(color: Color(instruction.colorValue), fontWeight: FontWeight.w900, fontSize: 12))),
+                title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text('Bonus: +${instruction.bonusPoints} pts • +${instruction.xpEarned} XP${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}'),
+                trailing: Wrap(
+                  spacing: 4,
+                  children: [
+                    IconButton(
+                      tooltip: 'Edit',
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      onPressed: () async {
+                        await _showAddInstructionForTaskDialog(context, hiveService, taskName, phaseNames, existing: instruction);
+                        onChanged();
+                      },
+                    ),
+                    IconButton(
+                      tooltip: 'Delete',
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      onPressed: () async {
+                        await hiveService.deleteInstruction(instruction.id);
+                        onChanged();
+                      },
+                    ),
+                  ],
+                ),
+              );
+            }),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -706,7 +729,7 @@ class _TaskInstructionSection extends StatelessWidget {
                   onChanged();
                 },
                 icon: const Icon(Icons.add),
-                label: const Text('Add Instruction'),
+                label: const Text('+ Add Instruction'),
               ),
             ],
           ),
@@ -722,28 +745,29 @@ List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, String
   return hiveService.getInstructions().where((instruction) => instruction.isLinkedToTask(normalizedName)).toList();
 }
 
-Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames) async {
-  final nameController = TextEditingController();
-  final descriptionController = TextEditingController();
-  final bonusController = TextEditingController(text: '20');
-  final xpController = TextEditingController(text: '5');
-  var repeatType = InstructionRule.repeatDaily;
-  var enabled = true;
-  var streakTracking = true;
-  var colorValue = 0xFF43A047;
-  var linkedPhase = '';
+Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames, {InstructionRule? existing}) async {
+  final nameController = TextEditingController(text: existing?.name ?? '');
+  final descriptionController = TextEditingController(text: existing?.description ?? '');
+  final bonusController = TextEditingController(text: existing == null ? '20' : '${existing.bonusPoints}');
+  final xpController = TextEditingController(text: existing == null ? '5' : '${existing.xpEarned}');
+  var repeatType = existing?.repeatType ?? InstructionRule.repeatDaily;
+  var enabled = existing?.enabled ?? true;
+  var streakTracking = existing?.streakTracking ?? true;
+  var colorValue = existing?.colorValue ?? 0xFF43A047;
+  var linkedPhase = existing?.linkedPhase ?? '';
+  var requiredInstruction = true;
   final instruction = await showDialog<InstructionRule>(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Add Task-Linked Instruction'),
+        title: Text(existing == null ? 'Add Task-Linked Instruction' : 'Edit Task-Linked Instruction'),
         content: SingleChildScrollView(
           child: SizedBox(
             width: 420,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
+                TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name *')),
                 TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
                 if (phaseNames.isNotEmpty) ...[
                   const SizedBox(height: 10),
@@ -757,8 +781,14 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                     onChanged: (value) => setDialogState(() => linkedPhase = value == '__whole_task__' ? '' : value ?? ''),
                   ),
                 ],
-                TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus XP')),
-                TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Coins / Points')),
+                TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+                TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                SwitchListTile(
+                  value: requiredInstruction,
+                  onChanged: (value) => setDialogState(() => requiredInstruction = value),
+                  title: const Text('Required / Optional'),
+                  subtitle: Text(requiredInstruction ? 'Required' : 'Optional'),
+                ),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
@@ -784,7 +814,7 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
             onPressed: () => Navigator.pop(
               context,
               InstructionRule(
-                id: 'instruction_${DateTime.now().microsecondsSinceEpoch}',
+                id: existing?.id ?? 'instruction_${DateTime.now().microsecondsSinceEpoch}',
                 name: nameController.text.trim().isEmpty ? 'Instruction' : nameController.text.trim(),
                 description: descriptionController.text.trim(),
                 linkedTask: InstructionRule.encodeLinks([taskName]),
@@ -795,7 +825,8 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                 colorValue: colorValue,
                 enabled: enabled,
                 streakTracking: streakTracking,
-                createdAt: DateTime.now(),
+                createdAt: existing?.createdAt ?? DateTime.now(),
+                history: existing?.history ?? const [],
               ),
             ),
             child: const Text('Save'),
