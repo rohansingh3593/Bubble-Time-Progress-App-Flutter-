@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -11,6 +10,7 @@ import '../models/reward_money.dart';
 import '../models/rank_profile.dart';
 import '../models/user_profile.dart';
 import '../services/hive_service.dart';
+import '../utils/path_image.dart';
 import '../widgets/profile_avatar.dart';
 
 class ProductivityTimelineView extends StatefulWidget {
@@ -711,7 +711,7 @@ class _RewardMoneyCard extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 10),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      child: SizedBox(width: 360, height: 120, child: Image.file(File(imagePath), width: 360, height: 120, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Center(child: Text('Image preview unavailable')))),
+                      child: SizedBox(width: 360, height: 120, child: imageFromPath(imagePath, width: 360, height: 120, fit: BoxFit.cover, fallback: const Center(child: Text('Image preview unavailable')))),
                     ),
                   ),
               ],
@@ -807,7 +807,7 @@ class _RewardGoalTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             child: goal.imagePath.isEmpty
                 ? Container(width: 58, height: 58, color: AppColors.surface, child: const Icon(Icons.flag_outlined, color: AppColors.primary))
-                : Image.file(File(goal.imagePath), width: 58, height: 58, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 58, height: 58, color: AppColors.surface, child: const Icon(Icons.flag_outlined))),
+                : imageFromPath(goal.imagePath, width: 58, height: 58, fit: BoxFit.cover, fallback: Container(width: 58, height: 58, color: AppColors.surface, child: const Icon(Icons.flag_outlined))),
           ),
           const SizedBox(width: 12),
           Expanded(

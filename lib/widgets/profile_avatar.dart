@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../models/user_profile.dart';
+import '../utils/path_image.dart';
 
 class ProfileAvatar extends StatelessWidget {
   final UserProfile profile;
@@ -36,7 +35,7 @@ class ProfileAvatar extends StatelessWidget {
             ? [BoxShadow(color: border.withOpacity(0.35), blurRadius: 18, spreadRadius: 1)]
             : null,
       ),
-      child: ClipOval(child: _avatarContent(context)),
+      child: ClipOval(child: _avatarContent()),
     );
 
     return GestureDetector(
@@ -60,19 +59,15 @@ class ProfileAvatar extends StatelessWidget {
     );
   }
 
-  Widget _avatarContent(BuildContext context) {
+  Widget _avatarContent() {
     final path = profile.profilePhotoPath.trim();
-    if (path.isNotEmpty) {
-      final file = File(path);
-      if (file.existsSync()) {
-        return Image.file(
-          file,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _fallbackAvatar(),
-        );
-      }
-    }
-    return _fallbackAvatar();
+    if (path.isEmpty) return _fallbackAvatar();
+
+    return imageFromPath(
+      path,
+      fit: BoxFit.cover,
+      fallback: _fallbackAvatar(),
+    );
   }
 
   Widget _fallbackAvatar() {
