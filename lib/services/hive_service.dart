@@ -1595,6 +1595,24 @@ class HiveService {
   }
 
 
+  String? _routineMoodTimelineLine(Task task, DateTime day) {
+    if (!task.repeatTask || _isDailyJournalTask(task) || !_isCompletedTask(task)) return null;
+    final linkedInstructions = getTaskLinkedInstructions()
+        .where((instruction) => instruction.enabled && instruction.isLinkedToTask(task.task))
+        .toList();
+    if (linkedInstructions.isEmpty) return '😐 ${task.task} steady at Neutral Mood';
+
+    final followed = linkedInstructions.where((instruction) {
+      return instructionEntryForDate(instruction, day)?.followed ?? false;
+    }).length;
+    final ratio = followed / linkedInstructions.length;
+    if (ratio >= 1) return '🤩 ${task.task} reached Excellent Mood • all instructions followed';
+    if (ratio >= 0.75) return '😄 ${task.task} recovered to Happy Mood • $followed/${linkedInstructions.length} instructions followed';
+    if (ratio >= 0.5) return '🙂 ${task.task} reached Good Mood • $followed/${linkedInstructions.length} instructions followed';
+    if (followed > 0) return '😐 ${task.task} stayed Neutral • $followed/${linkedInstructions.length} instructions followed';
+    return '😕 ${task.task} completed but skipped linked instructions';
+  }
+
   int _streakBonusForLength(int streakLength) {
     const bonuses = {
       3: 10,
@@ -1666,11 +1684,14 @@ class HiveService {
           lines.add(
             '${task.repeatTask ? '✅ Routine' : '✅ Task'} ${task.task} completed • +$minutes min',
           );
+          final moodLine = _routineMoodTimelineLine(task, day);
+          if (moodLine != null) lines.add(moodLine);
         }
       } else if (task.repeatTask &&
           !_isDailyJournalTask(task) &&
           (status == 'missed' || status == 'overdue' || status == 'cancelled')) {
         lines.add("❌ ${task.task} ${status == 'cancelled' ? 'cancelled' : status}");
+        lines.add('😞 ${task.task} missed today');
       }
 
       for (final phase in parseTaskPhases(task.description).where((phase) => phase.isCompleted)) {
