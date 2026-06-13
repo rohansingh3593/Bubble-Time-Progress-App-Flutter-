@@ -708,14 +708,6 @@ class _TaskInstructionSection extends StatelessWidget {
                 icon: const Icon(Icons.add),
                 label: const Text('Add Instruction'),
               ),
-              OutlinedButton.icon(
-                onPressed: taskName.trim().isEmpty ? null : () async {
-                  await _showLinkInstructionDialog(context, hiveService, taskName, phaseNames);
-                  onChanged();
-                },
-                icon: const Icon(Icons.link_rounded),
-                label: const Text('Link Existing Instruction'),
-              ),
             ],
           ),
         ],
@@ -744,7 +736,7 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Add Instruction'),
+        title: const Text('Add Task-Linked Instruction'),
         content: SingleChildScrollView(
           child: SizedBox(
             width: 420,
@@ -765,16 +757,8 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                     onChanged: (value) => setDialogState(() => linkedPhase = value == '__whole_task__' ? '' : value ?? ''),
                   ),
                 ],
-                DropdownButtonFormField<String>(
-                  value: repeatType,
-                  decoration: const InputDecoration(labelText: 'Repeat Type'),
-                  items: const [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly, InstructionRule.repeatOneTime]
-                      .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-                      .toList(),
-                  onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
-                ),
-                TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-                TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus XP')),
+                TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Coins / Points')),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
@@ -788,8 +772,8 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                       ),
                   ],
                 ),
-                SwitchListTile(value: enabled, onChanged: (value) => setDialogState(() => enabled = value), title: const Text('Enable Instruction')),
-                SwitchListTile(value: streakTracking, onChanged: (value) => setDialogState(() => streakTracking = value), title: const Text('Streak Tracking')),
+                const SizedBox(height: 8),
+                const Text('Task-linked instructions are managed only from this task and unlock after the task is completed.', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black54)),
               ],
             ),
           ),
@@ -821,91 +805,6 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
     ),
   );
   if (instruction != null) await hiveService.saveInstruction(instruction);
-}
-
-Future<void> _showLinkInstructionDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames) async {
-  final searchController = TextEditingController();
-  var selectedIds = <String>{};
-  var linkedPhase = '';
-  final selected = await showDialog<Set<String>>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setDialogState) {
-        final query = searchController.text.trim().toLowerCase();
-        final instructions = hiveService.getInstructions().where((instruction) {
-          if (instruction.isLinkedToTask(taskName)) return false;
-          if (query.isEmpty) return true;
-          return instruction.name.toLowerCase().contains(query) || instruction.description.toLowerCase().contains(query);
-        }).toList();
-        return AlertDialog(
-          title: const Text('Link Existing Instruction'),
-          content: SizedBox(
-            width: 460,
-            height: 460,
-            child: Column(
-              children: [
-                TextField(
-                  controller: searchController,
-                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search instructions...'),
-                  onChanged: (_) => setDialogState(() {}),
-                ),
-                if (phaseNames.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: linkedPhase.isEmpty ? '__whole_task__' : linkedPhase,
-                    decoration: const InputDecoration(labelText: 'Attach To'),
-                    items: [
-                      const DropdownMenuItem(value: '__whole_task__', child: Text('Whole Task')),
-                      ...phaseNames.map((phase) => DropdownMenuItem(value: phase, child: Text('Phase: $phase'))),
-                    ],
-                    onChanged: (value) => setDialogState(() => linkedPhase = value == '__whole_task__' ? '' : value ?? ''),
-                  ),
-                ],
-                const SizedBox(height: 10),
-                Expanded(
-                  child: instructions.isEmpty
-                      ? const Center(child: Text('No matching instructions found.'))
-                      : ListView(
-                          children: instructions.map((instruction) {
-                            final checked = selectedIds.contains(instruction.id);
-                            return CheckboxListTile(
-                              value: checked,
-                              title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                              subtitle: Text('+${instruction.bonusPoints} bonus points'),
-                              onChanged: (value) => setDialogState(() {
-                                selectedIds = {...selectedIds};
-                                if (value == true) {
-                                  selectedIds.add(instruction.id);
-                                } else {
-                                  selectedIds.remove(instruction.id);
-                                }
-                              }),
-                            );
-                          }).toList(),
-                        ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(onPressed: selectedIds.isEmpty ? null : () => Navigator.pop(context, selectedIds), child: const Text('Link Selected')),
-          ],
-        );
-      },
-    ),
-  );
-  if (selected == null || selected.isEmpty) return;
-  for (final instruction in hiveService.getInstructions()) {
-    if (!selected.contains(instruction.id)) continue;
-    final linkedTasks = [...instruction.linkedTasks, taskName];
-    await hiveService.saveInstruction(
-      instruction.copyWith(
-        linkedTask: InstructionRule.encodeLinks(linkedTasks),
-        linkedPhase: linkedPhase.trim().isEmpty ? instruction.linkedPhase : linkedPhase.trim(),
-      ),
-    );
-  }
 }
 
 class _ScheduleDraft {

@@ -3332,7 +3332,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _instructionCompletionCard(DateTime today) {
     final style = _dashboardStyle();
-    final instructions = widget.hiveService.getInstructions().where((instruction) => instruction.enabled).toList();
+    final instructions = widget.hiveService.getStandaloneInstructions().where((instruction) => instruction.enabled).toList();
     final completed = instructions.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).length;
     final total = instructions.length;
     final percent = total == 0 ? 0 : ((completed / total) * 100).round();
@@ -3371,7 +3371,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('📋 Instructions Today', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)),
+                    Text('📋 Standalone Instructions Today', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)),
                     const SizedBox(height: 4),
                     Text('Completed: $completed / $total', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
