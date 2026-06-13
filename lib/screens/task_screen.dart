@@ -71,6 +71,8 @@ class _TaskScreenState extends State<TaskScreen> {
         case RoutineOccurrenceAction.completeOccurrence:
           await widget.hiveService.updateTask(widget.date, index, currentTask.copyWith(done: true, status: 'Completed'));
           return;
+        case RoutineOccurrenceAction.savedOccurrence:
+          return;
         case RoutineOccurrenceAction.close:
           return;
       }

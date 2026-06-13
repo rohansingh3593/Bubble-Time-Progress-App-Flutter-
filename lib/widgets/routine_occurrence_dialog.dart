@@ -11,6 +11,7 @@ enum RoutineOccurrenceAction {
   editDetails,
   missOccurrence,
   completeOccurrence,
+  savedOccurrence,
 }
 
 String normalizedRoutineFrequency(Task task) {
@@ -91,13 +92,22 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
   }
 
   final occurrenceUpdated = isRoutineOccurrenceUpdated(task);
+  final existingCompleted = task.done || _normalizedStatus(task) == 'completed';
+  final existingMissed = _normalizedStatus(task) == 'missed' || _normalizedStatus(task) == 'overdue';
 
   final linkedInstructions = _linkedInstructionsForTask(hiveService, task);
   final selectedStatuses = <String, String>{};
   for (final instruction in linkedInstructions) {
-    selectedStatuses[instruction.id] = hiveService.instructionEntryForDate(instruction, task.dueDate)?.status ?? InstructionHistoryEntry.statusNotApplicable;
+    final existingStatus = hiveService.instructionEntryForDate(instruction, task.dueDate)?.status;
+    selectedStatuses[instruction.id] = existingStatus == InstructionHistoryEntry.statusFollowed || existingStatus == InstructionHistoryEntry.statusMissed
+        ? existingStatus!
+        : '';
   }
-  var occurrenceStatus = '';
+  var occurrenceStatus = existingCompleted
+      ? 'completed'
+      : existingMissed
+          ? 'missed'
+          : '';
 
   return showDialog<RoutineOccurrenceAction>(
     context: context,
@@ -105,82 +115,86 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
       builder: (context, setDialogState) {
         final taskCompleted = occurrenceStatus == 'completed';
         final taskMissed = occurrenceStatus == 'missed';
-        final instructionChoicesEnabled = !occurrenceUpdated && taskCompleted;
+        final readOnly = occurrenceUpdated;
+        final instructionChoicesEnabled = !readOnly && taskCompleted;
         final followedCount = linkedInstructions.where((instruction) => selectedStatuses[instruction.id] == InstructionHistoryEntry.statusFollowed).length;
-        final currentEmoji = _routineDialogMood(taskCompleted, taskMissed, followedCount, linkedInstructions.length);
-        final instructionProgressLabel = linkedInstructions.isEmpty ? 'No linked instructions' : '$followedCount / ${linkedInstructions.length} Complete';
-        final remainingXp = linkedInstructions.fold<int>(0, (sum, instruction) {
-          return sum + (selectedStatuses[instruction.id] == InstructionHistoryEntry.statusFollowed ? 0 : instruction.xpEarned);
+        final allInstructionsSelected = linkedInstructions.every((instruction) {
+          final status = selectedStatuses[instruction.id];
+          return status == InstructionHistoryEntry.statusFollowed || status == InstructionHistoryEntry.statusMissed;
         });
+        final currentEmoji = _routineDialogMood(taskCompleted, taskMissed, followedCount, linkedInstructions.length);
+        final instructionProgressLabel = linkedInstructions.isEmpty ? 'No linked instructions' : '$followedCount / ${linkedInstructions.length} Completed';
+        final reward = _routineDialogReward(task, linkedInstructions, selectedStatuses, taskCompleted: taskCompleted);
+        final canSaveCompleted = taskCompleted && allInstructionsSelected;
+
         return AlertDialog(
-          title: Text('Update ${task.task} Today'),
+          title: Text(readOnly
+              ? '${existingCompleted ? '✅ Already Completed Today' : '⚠️ Already Updated Today'}'
+              : taskCompleted
+                  ? '✅ ${task.task} Completed'
+                  : '📝 ${task.task}'),
           content: SingleChildScrollView(
             child: SizedBox(
-              width: 520,
+              width: 540,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    occurrenceUpdated
-                        ? 'This occurrence is already updated.\n\n${_updatedSummary(task)}\n\nRoutine details are locked here. Use Edit Routine Details to change the routine itself.'
-                        : 'Choose the task status first. Completing the task unlocks linked instructions, but instructions must still be confirmed manually.',
-                  ),
-                  const SizedBox(height: 14),
-                  const Text('Task Status', style: TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      ChoiceChip(
-                        selected: taskCompleted,
-                        label: const Text('☑ Complete'),
-                        onSelected: !task.routineEnabled || occurrenceUpdated
-                            ? null
-                            : (_) => setDialogState(() => occurrenceStatus = 'completed'),
-                      ),
-                      ChoiceChip(
-                        selected: taskMissed,
-                        label: const Text('☐ Missed'),
-                        onSelected: !task.routineEnabled || occurrenceUpdated
-                            ? null
-                            : (_) => setDialogState(() => occurrenceStatus = 'missed'),
-                      ),
-                    ],
-                  ),
+                  if (readOnly) ...[
+                    Text(
+                      existingCompleted
+                          ? 'Completed at: ${_timeLabel(task) ?? 'Recorded today'}\n\nThis record is view only.'
+                          : '${_updatedSummary(task)}\n\nThis record is view only.',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ] else ...[
+                    const Text('Status', style: TextStyle(fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: !task.routineEnabled ? null : () => setDialogState(() => occurrenceStatus = 'completed'),
+                          icon: const Icon(Icons.check_circle_outline),
+                          label: const Text('Complete This Task'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: !task.routineEnabled
+                              ? null
+                              : () async {
+                                  await _saveRoutineOccurrence(
+                                    hiveService: hiveService,
+                                    task: task,
+                                    completed: false,
+                                    linkedInstructions: linkedInstructions,
+                                    selectedStatuses: selectedStatuses,
+                                  );
+                                  if (context.mounted) Navigator.of(context).pop(RoutineOccurrenceAction.savedOccurrence);
+                                },
+                          icon: const Icon(Icons.cancel_outlined),
+                          label: const Text('Miss This Task'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      taskCompleted
+                          ? 'Task marked complete in this popup. Instructions are unlocked; choose Followed or Missed for each one, then Save & Finish.'
+                          : 'Instructions are locked until you complete the task first.',
+                      style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                    ),
+                  ],
                   const SizedBox(height: 14),
                   const Divider(),
                   const SizedBox(height: 6),
-                  const Text('Instructions', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const Text('📋 Instructions', style: TextStyle(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: currentEmoji.color.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: currentEmoji.color.withOpacity(0.24)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Current Emoji  ${currentEmoji.emoji} ${currentEmoji.label}', style: TextStyle(color: currentEmoji.color, fontWeight: FontWeight.w900)),
-                        const SizedBox(height: 4),
-                        Text(instructionProgressLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
-                        if (taskCompleted && linkedInstructions.isNotEmpty && followedCount < linkedInstructions.length)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text('Potential: 🤩 Complete remaining instructions for +$remainingXp XP', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (linkedInstructions.isNotEmpty && !taskCompleted && !occurrenceUpdated)
+                  if (linkedInstructions.isNotEmpty && !taskCompleted)
                     const Padding(
                       padding: EdgeInsets.only(bottom: 8),
                       child: Text(
-                        '🔒 Complete the task first to unlock its instructions.',
+                        '🔒 Complete the task first to unlock instructions.',
                         style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
                       ),
                     ),
@@ -188,9 +202,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                     const Text('No instructions are linked to this task yet.', style: TextStyle(color: Colors.black54))
                   else
                     ...linkedInstructions.map((instruction) {
-                      final selected = taskMissed
-                          ? InstructionHistoryEntry.statusMissed
-                          : selectedStatuses[instruction.id] ?? InstructionHistoryEntry.statusNotApplicable;
+                      final selected = taskMissed ? '' : selectedStatuses[instruction.id] ?? '';
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(10),
@@ -210,28 +222,22 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                               ),
                             const SizedBox(height: 6),
                             Wrap(
-                              spacing: 6,
+                              spacing: 8,
+                              runSpacing: 6,
                               children: [
-                                _instructionStatusChoice(
-                                  label: instructionChoicesEnabled ? '☑ Followed +${instruction.bonusPoints}' : '🔒 Followed +${instruction.bonusPoints}',
+                                _instructionRadioOption(
+                                  label: 'Followed +${instruction.bonusPoints}',
                                   value: InstructionHistoryEntry.statusFollowed,
                                   selected: selected,
                                   enabled: instructionChoicesEnabled,
                                   onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusFollowed),
                                 ),
-                                _instructionStatusChoice(
-                                  label: instructionChoicesEnabled ? '☐ Missed' : '🔒 Missed',
+                                _instructionRadioOption(
+                                  label: 'Missed',
                                   value: InstructionHistoryEntry.statusMissed,
                                   selected: selected,
                                   enabled: instructionChoicesEnabled,
                                   onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusMissed),
-                                ),
-                                _instructionStatusChoice(
-                                  label: instructionChoicesEnabled ? '○ N/A' : '🔒 N/A',
-                                  value: InstructionHistoryEntry.statusNotApplicable,
-                                  selected: selected,
-                                  enabled: instructionChoicesEnabled,
-                                  onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusNotApplicable),
                                 ),
                               ],
                             ),
@@ -239,49 +245,88 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                         ),
                       );
                     }),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: currentEmoji.color.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: currentEmoji.color.withOpacity(0.24)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Instruction Progress: $instructionProgressLabel', style: const TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        Text('Current Emoji  ${currentEmoji.emoji} ${currentEmoji.label}', style: TextStyle(color: currentEmoji.color, fontWeight: FontWeight.w900)),
+                        if (taskCompleted && linkedInstructions.isNotEmpty && followedCount < linkedInstructions.length)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4),
+                            child: Text('Potential Reward: 🤩 Complete all instructions for bonus XP', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+                          ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Bonus ${readOnly ? 'Earned' : 'Preview'}: +${reward.totalXp} XP • +${reward.coins} Coins${reward.onTime ? ' • 🎯 On Time' : ''}',
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        Text(
+                          'Base +${reward.baseXp} XP • Instructions +${reward.instructionXp} XP • Timing +${reward.timingXp} XP • Streak +${reward.streakXp} XP',
+                          style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!readOnly && taskCompleted && linkedInstructions.isNotEmpty && !allInstructionsSelected)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text('Select Followed or Missed for every instruction before saving.', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.w800)),
+                    ),
                 ],
               ),
             ),
           ),
-          actions: [
-            TextButton.icon(
-              onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.disableRoutine),
-              icon: const Icon(Icons.pause_circle_outline),
-              label: const Text('Disable Routine'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.close),
-              child: const Text('Close'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.editDetails),
-              child: const Text('Edit Routine Details'),
-            ),
-            ElevatedButton(
-              onPressed: !task.routineEnabled || occurrenceUpdated || occurrenceStatus.isEmpty
-                  ? null
-                  : () async {
-                      final completed = occurrenceStatus == 'completed';
-                      await _saveLinkedInstructionStatuses(
-                        hiveService,
-                        task,
-                        linkedInstructions,
-                        selectedStatuses,
-                        occurrenceCompleted: completed,
-                      );
-                      if (context.mounted) {
-                        Navigator.of(context).pop(completed ? RoutineOccurrenceAction.completeOccurrence : RoutineOccurrenceAction.missOccurrence);
-                      }
-                    },
-              child: const Text('Save Occurrence'),
-            ),
-          ],
+          actions: readOnly
+              ? [
+                  const TextButton(onPressed: null, child: Text('View Only')),
+                  ElevatedButton(onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.close), child: const Text('Close')),
+                ]
+              : [
+                  TextButton.icon(
+                    onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.disableRoutine),
+                    icon: const Icon(Icons.pause_circle_outline),
+                    label: const Text('Disable Routine'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.close),
+                    child: const Text('Close'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(RoutineOccurrenceAction.editDetails),
+                    child: const Text('Edit Routine Details'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: !canSaveCompleted
+                        ? null
+                        : () async {
+                            await _saveRoutineOccurrence(
+                              hiveService: hiveService,
+                              task: task,
+                              completed: true,
+                              linkedInstructions: linkedInstructions,
+                              selectedStatuses: selectedStatuses,
+                            );
+                            if (context.mounted) Navigator.of(context).pop(RoutineOccurrenceAction.savedOccurrence);
+                          },
+                    icon: const Icon(Icons.save_alt_rounded),
+                    label: const Text('Save & Finish'),
+                  ),
+                ],
         );
       },
     ),
   );
 }
-
 
 
 List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, Task task) {
@@ -302,46 +347,154 @@ class _RoutineDialogMood {
 
 _RoutineDialogMood _routineDialogMood(bool taskCompleted, bool taskMissed, int followed, int total) {
   if (taskMissed) return const _RoutineDialogMood(emoji: '😞', label: 'Missed Today', color: Colors.redAccent);
-  if (!taskCompleted) return const _RoutineDialogMood(emoji: '➖', label: 'Complete task first', color: Colors.blueGrey);
-  if (total == 0) return const _RoutineDialogMood(emoji: '🤩', label: 'Task Complete', color: Colors.green);
+  if (!taskCompleted) return const _RoutineDialogMood(emoji: '😐', label: 'Task Pending', color: Colors.blueGrey);
+  if (total == 0) return const _RoutineDialogMood(emoji: '🙂', label: 'Task Complete', color: Colors.green);
   final ratio = followed / total;
   if (ratio >= 1) return const _RoutineDialogMood(emoji: '🤩', label: 'Perfect', color: Colors.green);
   if (ratio >= 0.75) return const _RoutineDialogMood(emoji: '😄', label: 'Excellent', color: Colors.lightGreen);
   if (ratio >= 0.5) return const _RoutineDialogMood(emoji: '😊', label: 'Good', color: Colors.amber);
-  if (followed > 0) return const _RoutineDialogMood(emoji: '🙂', label: 'Can Improve', color: Colors.blueAccent);
+  if (ratio >= 0.25) return const _RoutineDialogMood(emoji: '🙂', label: 'Can Improve', color: Colors.blueAccent);
   return const _RoutineDialogMood(emoji: '😐', label: 'Instructions Ignored', color: Colors.blueGrey);
 }
 
-Widget _instructionStatusChoice({
+Widget _instructionRadioOption({
   required String label,
   required String value,
   required String selected,
   required bool enabled,
   required VoidCallback onSelected,
 }) {
-  return ChoiceChip(
-    selected: selected == value,
-    label: Text(label),
-    onSelected: enabled ? (_) => onSelected() : null,
+  return InkWell(
+    borderRadius: BorderRadius.circular(999),
+    onTap: enabled ? onSelected : null,
+    child: Opacity(
+      opacity: enabled ? 1 : 0.54,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: selected == value ? Colors.green : Colors.black12),
+          color: selected == value ? Colors.green.withOpacity(0.10) : Colors.white,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Radio<String>(
+              value: value,
+              groupValue: selected.isEmpty ? null : selected,
+              onChanged: enabled ? (_) => onSelected() : null,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ),
+      ),
+    ),
   );
 }
 
-Future<void> _saveLinkedInstructionStatuses(
-  HiveService hiveService,
+class _RoutineDialogReward {
+  final int baseXp;
+  final int instructionXp;
+  final int timingXp;
+  final int streakXp;
+  final int coins;
+  final bool onTime;
+
+  const _RoutineDialogReward({
+    required this.baseXp,
+    required this.instructionXp,
+    required this.timingXp,
+    required this.streakXp,
+    required this.coins,
+    required this.onTime,
+  });
+
+  int get totalXp => baseXp + instructionXp + timingXp + streakXp;
+}
+
+_RoutineDialogReward _routineDialogReward(
   Task task,
   List<InstructionRule> instructions,
   Map<String, String> selectedStatuses, {
-  required bool occurrenceCompleted,
+  required bool taskCompleted,
+}) {
+  if (!taskCompleted) {
+    return const _RoutineDialogReward(baseXp: 0, instructionXp: 0, timingXp: 0, streakXp: 0, coins: 0, onTime: false);
+  }
+
+  const baseXp = 20;
+  const streakXp = 5;
+  final instructionXp = instructions.fold<int>(0, (sum, instruction) {
+    return sum + (selectedStatuses[instruction.id] == InstructionHistoryEntry.statusFollowed ? instruction.xpEarned : 0);
+  });
+  final onTime = _isRoutineCompletionOnTime(task);
+  final timingXp = onTime ? 10 : 0;
+  final totalXp = baseXp + instructionXp + timingXp + streakXp;
+  final coins = (totalXp ~/ 10) + (onTime ? 5 : 0);
+  return _RoutineDialogReward(baseXp: baseXp, instructionXp: instructionXp, timingXp: timingXp, streakXp: streakXp, coins: coins, onTime: onTime);
+}
+
+bool _isRoutineCompletionOnTime(Task task) {
+  final schedule = _scheduleWindowForTask(task);
+  if (schedule == null) return false;
+  final now = task.done || _normalizedStatus(task) == 'completed' ? task.dueDate : DateTime.now();
+  var completed = (now.hour * 60) + now.minute;
+  final start = schedule.$1;
+  var end = schedule.$2;
+  if (end < start) {
+    end += 24 * 60;
+    if (completed < start) completed += 24 * 60;
+  }
+  return completed >= start && completed <= end;
+}
+
+(int, int)? _scheduleWindowForTask(Task task) {
+  int? start;
+  int? end;
+  for (final line in task.description.split('\n')) {
+    final trimmed = line.trim();
+    if (trimmed.startsWith('⏰ Schedule Start:')) {
+      start = _parseScheduleMinutes(trimmed.substring('⏰ Schedule Start:'.length).trim());
+    } else if (trimmed.startsWith('⏰ Schedule End:')) {
+      end = _parseScheduleMinutes(trimmed.substring('⏰ Schedule End:'.length).trim());
+    }
+  }
+  return start == null || end == null ? null : (start, end);
+}
+
+int? _parseScheduleMinutes(String raw) {
+  final parts = raw.split(':');
+  if (parts.length != 2) return null;
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return (hour * 60) + minute;
+}
+
+Future<void> _saveRoutineOccurrence({
+  required HiveService hiveService,
+  required Task task,
+  required bool completed,
+  required List<InstructionRule> linkedInstructions,
+  required Map<String, String> selectedStatuses,
 }) async {
-  for (final instruction in instructions) {
-    final status = occurrenceCompleted
-        ? selectedStatuses[instruction.id] ?? InstructionHistoryEntry.statusNotApplicable
-        : InstructionHistoryEntry.statusMissed;
+  await hiveService.updateTaskByReference(
+    task,
+    task.copyWith(done: completed, status: completed ? 'Completed' : 'Missed', repeatTask: true),
+  );
+
+  if (!completed) return;
+
+  for (final instruction in linkedInstructions) {
+    final status = selectedStatuses[instruction.id];
+    if (status != InstructionHistoryEntry.statusFollowed && status != InstructionHistoryEntry.statusMissed) continue;
     await hiveService.updateInstructionStatus(
       instruction,
       task.dueDate,
-      status,
-      note: 'Task occurrence: ${task.task} • ${routineOccurrenceLabel(task)} • ${occurrenceCompleted ? 'completed' : 'missed'}',
+      status!,
+      note: 'Task occurrence: ${task.task} • ${routineOccurrenceLabel(task)} • completed',
     );
   }
 }

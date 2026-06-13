@@ -129,6 +129,8 @@ class _MonthViewState extends State<MonthView> {
         case RoutineOccurrenceAction.completeOccurrence:
           await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed'));
           return;
+        case RoutineOccurrenceAction.savedOccurrence:
+          return;
         case RoutineOccurrenceAction.close:
           return;
       }

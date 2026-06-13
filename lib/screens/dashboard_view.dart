@@ -810,6 +810,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         case RoutineOccurrenceAction.completeOccurrence:
           await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed'));
           return;
+        case RoutineOccurrenceAction.savedOccurrence:
+          return;
         case RoutineOccurrenceAction.close:
           return;
       }
@@ -1145,7 +1147,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }
 
     if (linkedInstructions.isEmpty) {
-      return const _RoutineMood(emoji: '😐', label: 'Neutral', detail: 'No instructions attached', score: 50);
+      return const _RoutineMood(emoji: '🙂', label: 'Completed', detail: 'No instructions attached', score: 60);
     }
 
     final followed = linkedInstructions.where((instruction) {
@@ -1156,7 +1158,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     if (ratio >= 1) return _RoutineMood(emoji: '🤩', label: 'Perfect Execution', detail: detail, score: 100);
     if (ratio >= 0.75) return _RoutineMood(emoji: '😄', label: 'Excellent', detail: detail, score: 85);
     if (ratio >= 0.5) return _RoutineMood(emoji: '😊', label: 'Good', detail: detail, score: 70);
-    if (followed > 0) return _RoutineMood(emoji: '🙂', label: 'Can Improve', detail: detail, score: 55);
+    if (ratio >= 0.25) return _RoutineMood(emoji: '🙂', label: 'Can Improve', detail: detail, score: 55);
     return _RoutineMood(emoji: '😐', label: 'Instructions Ignored', detail: detail, score: 40);
   }
 

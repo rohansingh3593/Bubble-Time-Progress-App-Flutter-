@@ -1687,7 +1687,7 @@ _HabitInstructionMood _habitInstructionMoodForDate(HiveService hiveService, _Hab
         .toList();
     if (linkedInstructions.isEmpty) {
       return const _HabitInstructionMood(
-        emoji: '🤩',
+        emoji: '🙂',
         label: 'Completed',
         detail: 'Task completed with no linked instructions',
         followed: 0,
@@ -1710,8 +1710,8 @@ _HabitInstructionMood _habitInstructionMoodForDate(HiveService hiveService, _Hab
     if (ratio >= 0.5) {
       return _HabitInstructionMood(emoji: '😊', label: 'Good', detail: '50%+ instructions completed', followed: followed, total: linkedInstructions.length, progress: ratio, ringColor: const Color(0xFFFBC02D));
     }
-    if (followed > 0) {
-      return _HabitInstructionMood(emoji: '🙂', label: 'Can Improve', detail: 'Completed with a few instructions', followed: followed, total: linkedInstructions.length, progress: ratio, ringColor: const Color(0xFF42A5F5));
+    if (ratio >= 0.25) {
+      return _HabitInstructionMood(emoji: '🙂', label: 'Can Improve', detail: '25%+ instructions completed', followed: followed, total: linkedInstructions.length, progress: ratio, ringColor: const Color(0xFF42A5F5));
     }
     return _HabitInstructionMood(emoji: '😐', label: 'Instructions Ignored', detail: 'Task done, instructions ignored', followed: 0, total: linkedInstructions.length, progress: 0.0, ringColor: const Color(0xFFB0BEC5));
   }

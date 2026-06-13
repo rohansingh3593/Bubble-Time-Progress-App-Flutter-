@@ -107,6 +107,8 @@ class _DayViewState extends State<DayView> {
           final updated = task.copyWith(done: true, status: 'Completed');
           await widget.hiveService.updateTaskByReference(task, updated);
           return;
+        case RoutineOccurrenceAction.savedOccurrence:
+          return;
         case RoutineOccurrenceAction.close:
           return;
       }
