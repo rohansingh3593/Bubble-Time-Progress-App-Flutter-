@@ -291,40 +291,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  void _openSettingsPanel() {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Close settings',
-      barrierColor: Colors.black.withOpacity(0.35),
-      transitionDuration: const Duration(milliseconds: 360),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return Align(
-          alignment: Alignment.centerRight,
-          child: Material(
-            color: Colors.transparent,
-            child: FractionallySizedBox(
-              widthFactor: MediaQuery.of(context).size.width < 760 ? 1 : 0.58,
-              heightFactor: 1,
-              child: _DashboardSettingsPanel(
-                hiveService: widget.hiveService,
-                onClose: () => Navigator.of(context).pop(),
-                themeSelectorBuilder: (_) => _buildThemeSelector(),
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
-        return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
-          child: FadeTransition(opacity: curved, child: child),
-        );
-      },
-    );
-  }
-
   void _openJourneyTimeline() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -332,17 +298,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       ),
     );
   }
-
-  void _openProductivityTimeline() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ProductivityTimelineView(hiveService: widget.hiveService),
-      ),
-    );
-  }
-
-
-
 
   void _openInstructionDashboard() {
     Navigator.of(context).push(
@@ -1698,11 +1653,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         ),
       ),
     );
-  }
-
-  Color _selectorTextColor(bool selected, DashboardThemeStyle style) {
-    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
-    return _readableOn(chipColor);
   }
 
   Widget _buildThemeSelector() {
