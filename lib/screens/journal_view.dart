@@ -86,10 +86,20 @@ class _JournalViewState extends State<JournalView> {
   }
 
   Future<void> _saveEntry(List<Task> tasksForDay) async {
+    final reflection = _reflectionController.text.trim();
+    if (reflection.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Write a reflection before saving Daily Journal.')),
+      );
+      return;
+    }
+
     final total = tasksForDay.where((task) => task.status != 'Cancelled').length;
+    final hasDailyJournal = tasksForDay.any(widget.hiveService.isDailyJournalTask);
     final completed = tasksForDay
-        .where((task) => _isCompleted(task) || widget.hiveService.isDailyJournalTask(task))
-        .length;
+            .where((task) => !widget.hiveService.isDailyJournalTask(task) && _isCompleted(task))
+            .length +
+        (hasDailyJournal ? 1 : 0);
     final score = total == 0 ? 0 : ((completed / total) * 100).round();
 
     final savedAt = DateTime.now();
@@ -106,7 +116,7 @@ class _JournalViewState extends State<JournalView> {
           savedAt.microsecond,
         ),
         mood: _selectedMood,
-        reflection: _reflectionController.text.trim(),
+        reflection: reflection,
         completedTasks: completed,
         totalTasks: total,
         productivityScore: score,
@@ -114,8 +124,12 @@ class _JournalViewState extends State<JournalView> {
     );
 
     if (!mounted) return;
+    final wordCount = _reflectionWordCount(reflection);
+    final bonusMessage = _savedWithinJournalWindow(savedAt)
+        ? ' Journal saved inside 10:00 PM–12:00 AM. +20 schedule bonus eligible.'
+        : ' Journal saved outside 10:00 PM–12:00 AM. No schedule bonus.';
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Journal entry saved')),
+      SnackBar(content: Text('Journal entry saved • $wordCount words.$bonusMessage')),
     );
   }
 
@@ -218,7 +232,19 @@ class _JournalViewState extends State<JournalView> {
   }
 
   bool _isCompleted(Task task) => task.done || task.status == 'Completed';
+
+  int _reflectionWordCount(String reflection) {
+    return RegExp(r"\b[\w']+\b").allMatches(reflection).length;
+  }
+
+  bool _savedWithinJournalWindow(DateTime savedAt) {
+    final minutes = savedAt.hour * 60 + savedAt.minute;
+    const start = 22 * 60;
+    const end = 0;
+    return minutes >= start || minutes <= end;
+  }
 }
+
 
 class _DateHeader extends StatelessWidget {
   final DateTime date;

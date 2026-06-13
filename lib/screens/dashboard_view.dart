@@ -242,12 +242,16 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
   void _openJournal() {
-    Navigator.of(context).push(
-      JournalView.route(
-        hiveService: widget.hiveService,
-        onGoToDashboard: widget.onGoToDashboard,
-      ),
-    );
+    Navigator.of(context)
+        .push(
+          JournalView.route(
+            hiveService: widget.hiveService,
+            onGoToDashboard: widget.onGoToDashboard,
+          ),
+        )
+        .then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   void _openSettingsPanel() {
@@ -343,13 +347,17 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
   void _openJournalForTask(Task task) {
-    Navigator.of(context).push(
-      JournalView.route(
-        hiveService: widget.hiveService,
-        onGoToDashboard: widget.onGoToDashboard,
-        initialDate: task.dueDate,
-      ),
-    );
+    Navigator.of(context)
+        .push(
+          JournalView.route(
+            hiveService: widget.hiveService,
+            onGoToDashboard: widget.onGoToDashboard,
+            initialDate: task.dueDate,
+          ),
+        )
+        .then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _editTaskDetails(Task task) async {
@@ -377,6 +385,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Future<void> _openTodayTaskQuickOccurrence(_DashboardTodayTask row) async {
     final task = row.task;
+    if (isDailyJournalSystemTask(task)) {
+      await _showDailyJournalCompletionPrompt(
+        task,
+        message: 'Daily Journal is completed only by writing and saving your journal.',
+      );
+      return;
+    }
+
     if (_isCompletedTask(task)) {
       await _showTodayTaskLockedMessage(
         '${task.task} is already completed today${_timeLabelForTask(task) == null ? '.' : ' at ${_timeLabelForTask(task)}.'}',
@@ -480,6 +496,30 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
+  Future<void> _showDailyJournalCompletionPrompt(Task task, {required String message}) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('📔 Daily Journal'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _openJournalForTask(task);
+            },
+            icon: const Icon(Icons.menu_book_rounded),
+            label: const Text('Go To Journal'),
+          ),
+        ],
+      ),
+    );
+  }
+
   _DashboardScheduleResult? _scheduleResultForCompletion(Task task, DateTime completedAt) {
     if (!task.repeatTask) return null;
     final schedule = _dashboardRoutineScheduleForTask(task);
@@ -571,7 +611,16 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                               trailing: Icon(_isCompletedTask(task) ? Icons.check_circle_outline : Icons.chevron_right, color: _isCompletedTask(task) ? Colors.green : style.primary),
                               onTap: () {
                                 Navigator.pop(context);
-                                _editTaskDetails(task);
+                                if (isDailyJournalSystemTask(task)) {
+                                  _showDailyJournalCompletionPrompt(
+                                    task,
+                                    message: _isCompletedTask(task)
+                                        ? 'Daily Journal is completed only by writing and saving your journal.'
+                                        : 'Write a journal to complete this task.',
+                                  );
+                                } else {
+                                  _editTaskDetails(task);
+                                }
                               },
                             );
                           },

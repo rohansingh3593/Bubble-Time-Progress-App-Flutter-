@@ -23,7 +23,10 @@ class HiveService {
   static const _dailyJournalTaskName = 'Daily Journal';
   static const _dailyJournalCategory = 'Journal';
   static const _dailyJournalDescription =
-      'Built-in System Task • Completed by saving a journal entry';
+      'Built-in System Task • Completed by saving a journal entry\n'
+      '⏰ Schedule Start: 22:00\n'
+      '⏰ Schedule End: 00:00\n'
+      '⏰ Schedule Bonus: 20 points';
   static const _legacyScheduledTimeMarker = '⏰ Scheduled:';
   static const _scheduleStartMarker = '⏰ Schedule Start:';
   static const _scheduleEndMarker = '⏰ Schedule End:';
@@ -220,16 +223,21 @@ class HiveService {
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
     final journal = getJournalEntryForDate(day);
-    final completed = journal != null;
+    final completed = journal?.hasReflection ?? false;
     final missed = !completed && day.isBefore(todayOnly);
+    final journalWordCount = journal == null ? 0 : _journalWordCount(journal.reflection);
 
     return Task(
       task: _dailyJournalTaskName,
       done: completed,
       description: completed
-          ? 'Built-in System Task • Journal saved successfully'
+          ? 'Built-in System Task • Journal saved successfully\n'
+              '📝 Reflection Words: $journalWordCount\n'
+              '⏰ Schedule Start: 22:00\n'
+              '⏰ Schedule End: 00:00\n'
+              '⏰ Schedule Bonus: 20 points'
           : _dailyJournalDescription,
-      dueDate: journal?.date ?? day,
+      dueDate: completed ? journal!.date : day,
       priority: 'Important',
       status: completed ? 'Completed' : missed ? 'Missed' : 'Not Completed',
       category: _dailyJournalCategory,
@@ -237,7 +245,7 @@ class HiveService {
       repeatFrequency: 'Daily',
       urgent: false,
       important: true,
-      estimatedMinutes: 15,
+      estimatedMinutes: completed ? _journalEstimatedMinutes(journal!.reflection) : 15,
       colorValue: 0xFF7E57C2,
       routineEnabled: true,
     );
@@ -246,6 +254,16 @@ class HiveService {
   bool _isDailyJournalTask(Task task) {
     return task.task.trim().toLowerCase() == _dailyJournalTaskName.toLowerCase() &&
         task.category.trim().toLowerCase() == _dailyJournalCategory.toLowerCase();
+  }
+
+  int _journalWordCount(String reflection) {
+    return RegExp(r"\b[\w']+\b").allMatches(reflection).length;
+  }
+
+  int _journalEstimatedMinutes(String reflection) {
+    final wordCount = _journalWordCount(reflection);
+    if (wordCount <= 0) return 0;
+    return (wordCount / 10).ceil().clamp(15, 120).toInt();
   }
 
   bool isDailyJournalTask(Task task) => _isDailyJournalTask(task);
