@@ -1323,6 +1323,41 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   DashboardThemeStyle _dashboardStyle() => DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
 
+  AppThemeColors _dashboardThemeColors() => AppThemeColors.fromDashboardStyle(_dashboardStyle());
+
+  Color _dashboardThemeTaskColor(int storedColorValue) {
+    final theme = _dashboardThemeColors();
+    final colors = <Color>[
+      theme.primary,
+      theme.secondary,
+      theme.accent,
+      theme.success,
+      theme.warning,
+      theme.danger,
+      theme.primarySoft,
+    ];
+    const legacyTaskColors = <int>[
+      0xFFFFC107,
+      0xFF43A047,
+      0xFF1E88E5,
+      0xFFE53935,
+      0xFF7E57C2,
+      0xFFFF8F00,
+      0xFFE91E63,
+    ];
+    final legacyIndex = legacyTaskColors.indexOf(storedColorValue);
+    final index = legacyIndex >= 0 ? legacyIndex : storedColorValue.abs() % colors.length;
+    return colors[index % colors.length];
+  }
+
+  Color _routineMoodColor(_RoutineMood mood, AppThemeColors theme) {
+    if (mood.score >= 75) return theme.success;
+    if (mood.score >= 60) return theme.accent;
+    if (mood.score >= 40) return theme.warning;
+    if (mood.score >= 20) return Color.lerp(theme.warning, theme.danger, 0.35) ?? theme.warning;
+    return theme.danger;
+  }
+
   String _formatShortDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
 
   String _formatCompactNumber(int value) {
@@ -2402,13 +2437,18 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Widget _buildHabitRoutineSection(List<Task> routines) {
+    final theme = _dashboardThemeColors();
+    final style = _dashboardStyle();
+    final cardBackground = theme.card;
+    final onCard = AppThemeColors.readableTextOn(cardBackground, style);
     return _darkSection('Habit & Routine Tracker', Column(children: [
       if (routines.isEmpty)
-        const Padding(padding: EdgeInsets.all(8), child: Text('No enabled routines yet.', style: TextStyle(color: Color(0xFFB9C6F3))))
+        Padding(padding: const EdgeInsets.all(8), child: Text('No enabled routines yet.', style: TextStyle(color: theme.textSecondary)))
       else
         ...routines.map((task) {
-          final taskColor = Color(task.colorValue);
+          final taskColor = _dashboardThemeTaskColor(task.colorValue);
           final mood = _routineMoodForTask(task);
+          final moodColor = _routineMoodColor(mood, theme);
           final linkedInstructions = _linkedInstructionsForRoutine(task);
           final followedInstructions = linkedInstructions.where((instruction) {
             return widget.hiveService.instructionEntryForDate(instruction, task.dueDate)?.followed ?? false;
@@ -2422,7 +2462,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             child: Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: const Color(0xFF1A2442), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: cardBackground,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: theme.border),
+                boxShadow: [BoxShadow(color: theme.shadow, blurRadius: 10, offset: const Offset(0, 5))],
+              ),
               child: Row(children: [
                 Text(mood.emoji, style: const TextStyle(fontSize: 24)),
                 const SizedBox(width: 10),
@@ -2432,18 +2477,18 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(task.task, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+                      Text(task.task, style: TextStyle(color: onCard, fontWeight: FontWeight.w900)),
                       const SizedBox(height: 3),
-                      Text('${task.repeatFrequency ?? 'Daily'} • $instructionSummary', style: const TextStyle(color: Color(0xFFB9C6F3), fontSize: 12)),
-                      Text('Mood: ${mood.emoji} ${mood.label}', style: TextStyle(color: mood.color, fontSize: 12, fontWeight: FontWeight.w800)),
+                      Text('${task.repeatFrequency ?? 'Daily'} • $instructionSummary', style: TextStyle(color: theme.textSecondary, fontSize: 12)),
+                      Text('Mood: ${mood.emoji} ${mood.label}', style: TextStyle(color: moodColor, fontSize: 12, fontWeight: FontWeight.w800)),
                     ],
                   ),
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB74D), size: 18),
-                    Text('${_routineCurrentStreak(task)} streak', style: const TextStyle(color: Color(0xFFB9C6F3), fontSize: 11)),
+                    Icon(Icons.local_fire_department_rounded, color: theme.warning, size: 18),
+                    Text('${_routineCurrentStreak(task)} streak', style: TextStyle(color: theme.textSecondary, fontSize: 11)),
                   ],
                 ),
               ]),
