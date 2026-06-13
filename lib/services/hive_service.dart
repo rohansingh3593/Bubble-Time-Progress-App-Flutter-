@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../models/instruction.dart';
 import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/productivity_snapshot.dart';
+import '../models/reward_money.dart';
 import '../models/task_model.dart';
 import '../models/user_profile.dart';
 import '../constants/dashboard_themes.dart';
@@ -21,7 +23,10 @@ class HiveService {
   static const _dailyJournalTaskName = 'Daily Journal';
   static const _dailyJournalCategory = 'Journal';
   static const _dailyJournalDescription =
-      'Built-in System Task • Completed by saving a journal entry';
+      'Built-in System Task • Completed by saving a journal entry\n'
+      '⏰ Schedule Start: 22:00\n'
+      '⏰ Schedule End: 00:00\n'
+      '⏰ Schedule Bonus: 20 points';
   static const _legacyScheduledTimeMarker = '⏰ Scheduled:';
   static const _scheduleStartMarker = '⏰ Schedule Start:';
   static const _scheduleEndMarker = '⏰ Schedule End:';
@@ -29,6 +34,9 @@ class HiveService {
   static const _defaultScheduleBonusPoints = 20;
   static const _journeyPrefix = '__journey__';
   static const _productivityPrefix = '__productivity_snapshot__';
+  static const _instructionPrefix = '__instruction__';
+  static const _rewardLedgerPrefix = '__reward_ledger__';
+  static const _rewardGoalPrefix = '__reward_goal__';
   static const _autoJourneyPrefix = 'auto_journey_';
   static const _schemaVersionKey = '__meta_schema_version__';
   static const _dashboardThemeKey = '__meta_dashboard_theme__';
@@ -215,16 +223,21 @@ class HiveService {
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
     final journal = getJournalEntryForDate(day);
-    final completed = journal != null;
+    final completed = journal?.hasReflection ?? false;
     final missed = !completed && day.isBefore(todayOnly);
+    final journalWordCount = journal == null ? 0 : _journalWordCount(journal.reflection);
 
     return Task(
       task: _dailyJournalTaskName,
       done: completed,
       description: completed
-          ? 'Built-in System Task • Journal saved successfully'
+          ? 'Built-in System Task • Journal saved successfully\n'
+              '📝 Reflection Words: $journalWordCount\n'
+              '⏰ Schedule Start: 22:00\n'
+              '⏰ Schedule End: 00:00\n'
+              '⏰ Schedule Bonus: 20 points'
           : _dailyJournalDescription,
-      dueDate: journal?.date ?? day,
+      dueDate: completed ? journal!.date : day,
       priority: 'Important',
       status: completed ? 'Completed' : missed ? 'Missed' : 'Not Completed',
       category: _dailyJournalCategory,
@@ -232,7 +245,7 @@ class HiveService {
       repeatFrequency: 'Daily',
       urgent: false,
       important: true,
-      estimatedMinutes: 15,
+      estimatedMinutes: completed ? _journalEstimatedMinutes(journal!.reflection) : 15,
       colorValue: 0xFF7E57C2,
       routineEnabled: true,
     );
@@ -241,6 +254,16 @@ class HiveService {
   bool _isDailyJournalTask(Task task) {
     return task.task.trim().toLowerCase() == _dailyJournalTaskName.toLowerCase() &&
         task.category.trim().toLowerCase() == _dailyJournalCategory.toLowerCase();
+  }
+
+  int _journalWordCount(String reflection) {
+    return RegExp(r"\b[\w']+\b").allMatches(reflection).length;
+  }
+
+  int _journalEstimatedMinutes(String reflection) {
+    final wordCount = _journalWordCount(reflection);
+    if (wordCount <= 0) return 0;
+    return (wordCount / 10).ceil().clamp(15, 120).toInt();
   }
 
   bool isDailyJournalTask(Task task) => _isDailyJournalTask(task);
@@ -978,6 +1001,308 @@ class HiveService {
     return LifetimeProductivityStats.fromSnapshots(getProductivitySnapshots());
   }
 
+
+
+  String _instructionKey(String id) => '$_instructionPrefix$id';
+
+  List<InstructionRule> getInstructions() {
+    final instructions = <InstructionRule>[];
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(_instructionPrefix)) continue;
+      final raw = _box.get(key);
+      if (raw == null) continue;
+      instructions.add(InstructionRule.fromStorageList(raw.cast<dynamic>()));
+    }
+    instructions.sort((a, b) {
+      if (a.enabled != b.enabled) return a.enabled ? -1 : 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return instructions;
+  }
+
+  List<InstructionRule> getStandaloneInstructions() {
+    return getInstructions().where((instruction) => instruction.isStandalone).toList();
+  }
+
+  List<InstructionRule> getTaskLinkedInstructions() {
+    return getInstructions().where((instruction) => instruction.isTaskLinked).toList();
+  }
+
+  Future<void> saveInstruction(InstructionRule instruction) async {
+    await _box.put(_instructionKey(instruction.id), instruction.toStorageList());
+  }
+
+  Future<void> deleteInstruction(String id) async {
+    await _box.delete(_instructionKey(id));
+  }
+
+  Future<void> setInstructionEnabled(InstructionRule instruction, bool enabled) async {
+    await saveInstruction(instruction.copyWith(enabled: enabled));
+  }
+
+  InstructionHistoryEntry? instructionEntryForDate(InstructionRule instruction, DateTime date) {
+    final occurrence = _instructionOccurrenceDate(instruction, date);
+    for (final entry in instruction.history) {
+      if (_isSameDate(_instructionOccurrenceDate(instruction, entry.date), occurrence)) return entry;
+    }
+    return null;
+  }
+
+  Future<void> updateInstructionStatus(InstructionRule instruction, DateTime date, String status, {String note = ''}) async {
+    final occurrence = _instructionOccurrenceDate(instruction, date);
+    final updatedHistory = instruction.history
+        .where((entry) => !_isSameDate(_instructionOccurrenceDate(instruction, entry.date), occurrence))
+        .toList();
+    final followed = status == InstructionHistoryEntry.statusFollowed;
+    updatedHistory.add(
+      InstructionHistoryEntry(
+        date: occurrence,
+        status: status,
+        bonusPoints: followed ? instruction.bonusPoints : 0,
+        xpEarned: followed ? instruction.xpEarned : 0,
+        note: note.trim(),
+      ),
+    );
+    await saveInstruction(instruction.copyWith(history: updatedHistory));
+    await recalculateProductivitySnapshotForDate(occurrence);
+  }
+
+  DateTime _instructionOccurrenceDate(InstructionRule instruction, DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    switch (instruction.repeatType.trim().toLowerCase()) {
+      case 'weekly':
+        return day.subtract(Duration(days: day.weekday - 1));
+      case 'monthly':
+        return DateTime(day.year, day.month, 1);
+      case 'yearly':
+        return DateTime(day.year, 1, 1);
+      case 'one-time':
+        return DateTime(instruction.createdAt.year, instruction.createdAt.month, instruction.createdAt.day);
+      case 'daily':
+      default:
+        return day;
+    }
+  }
+
+  DateTime? _previousInstructionOccurrence(InstructionRule instruction, DateTime occurrence) {
+    switch (instruction.repeatType.trim().toLowerCase()) {
+      case 'daily':
+        return occurrence.subtract(const Duration(days: 1));
+      case 'weekly':
+        return occurrence.subtract(const Duration(days: 7));
+      case 'monthly':
+        return DateTime(occurrence.year, occurrence.month - 1, 1);
+      case 'yearly':
+        return DateTime(occurrence.year - 1, 1, 1);
+      default:
+        return null;
+    }
+  }
+
+  int instructionCurrentStreak(InstructionRule instruction, DateTime date) {
+    if (!instruction.enabled || !instruction.streakTracking) return 0;
+    final followedOccurrences = instruction.history
+        .where((entry) => entry.followed)
+        .map((entry) => _instructionOccurrenceDate(instruction, entry.date))
+        .toSet();
+    final currentOccurrence = _instructionOccurrenceDate(instruction, date);
+    var cursor = followedOccurrences.contains(currentOccurrence)
+        ? currentOccurrence
+        : _previousInstructionOccurrence(instruction, currentOccurrence);
+    var streak = 0;
+    while (cursor != null && followedOccurrences.contains(cursor)) {
+      streak++;
+      cursor = _previousInstructionOccurrence(instruction, cursor);
+    }
+    return streak;
+  }
+
+  int instructionBestStreak(InstructionRule instruction) {
+    final followed = instruction.history
+        .where((entry) => entry.followed)
+        .map((entry) => _instructionOccurrenceDate(instruction, entry.date))
+        .toList()
+      ..sort();
+    var best = 0;
+    var current = 0;
+    DateTime? previous;
+    for (final occurrence in followed) {
+      final expected = previous == null ? null : _previousInstructionOccurrence(instruction, occurrence);
+      current = previous != null && expected != null && _isSameDate(expected, previous) ? current + 1 : 1;
+      if (current > best) best = current;
+      previous = occurrence;
+    }
+    return best;
+  }
+
+  int instructionBonusForDate(DateTime date, {bool standaloneOnly = false}) {
+    var total = 0;
+    final instructions = standaloneOnly ? getStandaloneInstructions() : getInstructions();
+    for (final instruction in instructions) {
+      final entry = instructionEntryForDate(instruction, date);
+      if (instruction.enabled && entry != null && entry.followed) total += entry.bonusPoints;
+    }
+    return total;
+  }
+
+  String _rewardLedgerKey(String id) => '$_rewardLedgerPrefix$id';
+  String _rewardGoalKey(String id) => '$_rewardGoalPrefix$id';
+
+  List<RewardLedgerEntry> getRewardLedgerEntries() {
+    final entries = <RewardLedgerEntry>[];
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(_rewardLedgerPrefix)) continue;
+      final raw = _box.get(key);
+      if (raw == null) continue;
+      entries.add(RewardLedgerEntry.fromStorageList(raw.cast<dynamic>()));
+    }
+    entries.sort((a, b) => b.date.compareTo(a.date));
+    return entries;
+  }
+
+  List<RewardGoal> getRewardGoals() {
+    final goals = <RewardGoal>[];
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(_rewardGoalPrefix)) continue;
+      final raw = _box.get(key);
+      if (raw == null) continue;
+      goals.add(RewardGoal.fromStorageList(raw.cast<dynamic>()));
+    }
+    goals.sort((a, b) {
+      if (a.isAchieved != b.isAchieved) return a.isAchieved ? 1 : -1;
+      return a.createdAt.compareTo(b.createdAt);
+    });
+    return goals;
+  }
+
+  RewardMoneySummary getRewardMoneySummary() {
+    final totalPoints = getLifetimeProductivityStats().totalPoints;
+    final earnedRupees = totalPoints ~/ rewardPointsPerRupee;
+    final ledger = getRewardLedgerEntries();
+    final withdrawn = ledger
+        .where((entry) => entry.type == RewardLedgerEntry.typeWithdrawal)
+        .fold<int>(0, (sum, entry) => sum + entry.amountRupees);
+    final goalFunded = ledger
+        .where((entry) => entry.type == RewardLedgerEntry.typeGoalFunding)
+        .fold<int>(0, (sum, entry) => sum + entry.amountRupees);
+    return RewardMoneySummary(
+      totalPoints: totalPoints,
+      earnedRupees: earnedRupees,
+      withdrawnRupees: withdrawn,
+      goalFundedRupees: goalFunded,
+      ledger: ledger,
+      goals: getRewardGoals(),
+    );
+  }
+
+  Future<void> saveRewardGoal(RewardGoal goal) async {
+    final existingRaw = _box.get(_rewardGoalKey(goal.id));
+    final existing = existingRaw == null ? null : RewardGoal.fromStorageList(existingRaw.cast<dynamic>());
+    var updated = _normalizeRewardGoal(goal);
+    final history = [...updated.history];
+    if (existing == null) {
+      history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Goal created', note: updated.name));
+    } else {
+      if (existing.imagePath != updated.imagePath) {
+        history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Goal image updated'));
+      }
+      if (existing.effectiveStatus != updated.effectiveStatus) {
+        history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Status changed', note: updated.effectiveStatus));
+      }
+      if (!existing.isAchieved && updated.isAchieved) {
+        history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: '🎉 Goal achieved', note: updated.name));
+      }
+    }
+    updated = updated.copyWith(history: history);
+    await _box.put(_rewardGoalKey(updated.id), updated.toStorageList());
+  }
+
+  Future<void> deleteRewardGoal(String id) async {
+    await _box.delete(_rewardGoalKey(id));
+  }
+
+  RewardGoal _normalizeRewardGoal(RewardGoal goal) {
+    if (goal.targetAmountRupees > 0 && goal.savedAmountRupees >= goal.targetAmountRupees) {
+      return goal.copyWith(status: RewardGoal.statusAchieved);
+    }
+    return goal;
+  }
+
+  Future<void> withdrawRewardMoney({
+    required int amountRupees,
+    required String reason,
+    String goalId = '',
+    String goalName = '',
+    String note = '',
+    DateTime? date,
+  }) async {
+    final cleanAmount = amountRupees.clamp(0, 1 << 31).toInt();
+    if (cleanAmount <= 0) return;
+    final summary = getRewardMoneySummary();
+    if (cleanAmount > summary.availableRupees) {
+      throw ArgumentError('Not enough reward balance available.');
+    }
+    final entry = RewardLedgerEntry(
+      id: 'reward_${DateTime.now().microsecondsSinceEpoch}',
+      date: date ?? DateTime.now(),
+      type: RewardLedgerEntry.typeWithdrawal,
+      amountRupees: cleanAmount,
+      reason: reason.trim().isEmpty ? 'Reward used' : reason.trim(),
+      goalId: goalId,
+      goalName: goalName,
+      note: note.trim(),
+      balanceAfter: summary.availableRupees - cleanAmount,
+    );
+    await _box.put(_rewardLedgerKey(entry.id), entry.toStorageList());
+  }
+
+  Future<void> fundRewardGoal({
+    required RewardGoal goal,
+    required int amountRupees,
+    String note = '',
+  }) async {
+    final cleanAmount = amountRupees.clamp(0, 1 << 31).toInt();
+    if (cleanAmount <= 0) return;
+    final summary = getRewardMoneySummary();
+    if (cleanAmount > summary.availableRupees) {
+      throw ArgumentError('Not enough reward balance available.');
+    }
+    final amountToApply = cleanAmount.clamp(0, goal.remainingAmountRupees).toInt();
+    if (amountToApply <= 0) return;
+    final newSavedAmount = goal.savedAmountRupees + amountToApply;
+    final history = [
+      ...goal.history,
+      RewardGoalHistoryEntry(
+        date: DateTime.now(),
+        title: '+ ₹$amountToApply added from reward balance',
+        amountRupees: amountToApply,
+        note: note.trim(),
+      ),
+      if (goal.targetAmountRupees > 0 && newSavedAmount >= goal.targetAmountRupees && !goal.isAchieved)
+        RewardGoalHistoryEntry(date: DateTime.now(), title: '🎉 Goal achieved', note: goal.name),
+    ];
+    final updatedGoal = _normalizeRewardGoal(
+      goal.copyWith(
+        savedAmountRupees: newSavedAmount,
+        status: goal.targetAmountRupees > 0 && newSavedAmount >= goal.targetAmountRupees ? RewardGoal.statusAchieved : goal.status,
+        history: history,
+      ),
+    );
+    final entry = RewardLedgerEntry(
+      id: 'reward_${DateTime.now().microsecondsSinceEpoch}',
+      date: DateTime.now(),
+      type: RewardLedgerEntry.typeGoalFunding,
+      amountRupees: amountToApply,
+      reason: 'Added to reward goal',
+      goalId: goal.id,
+      goalName: goal.name,
+      note: note.trim(),
+      balanceAfter: summary.availableRupees - amountToApply,
+    );
+    await _box.put(_rewardGoalKey(updatedGoal.id), updatedGoal.toStorageList());
+    await _box.put(_rewardLedgerKey(entry.id), entry.toStorageList());
+  }
+
   Future<void> refreshProductivitySnapshotsFromTasks() async {
     for (final date in getAllTasksByDate().keys) {
       await recalculateProductivitySnapshotForDate(date);
@@ -1008,6 +1333,53 @@ class HiveService {
     final pointEvents = <ProductivityPointEvent>[];
 
     for (final task in tasks) {
+      final phases = task.repeatTask ? const <TaskPhaseInfo>[] : parseTaskPhases(task.description);
+      if (phases.isNotEmpty) {
+        final completedPhases = phases.where((phase) => phase.isCompleted).toList();
+        if (completedPhases.isEmpty) continue;
+
+        var taskBasePoints = 0;
+        var taskRecordedMinutes = 0;
+        for (final phase in completedPhases) {
+          final minutes = phase.recordedMinutes;
+          taskRecordedMinutes += minutes;
+          taskBasePoints += _productivityPointsForFlags(
+            urgent: phase.urgent,
+            important: phase.important,
+            recordedMinutes: minutes,
+          );
+
+          if (phase.urgent && phase.important) {
+            bothMinutes += minutes;
+          } else if (phase.important) {
+            importantMinutes += minutes;
+          } else if (phase.urgent) {
+            urgentMinutes += minutes;
+          } else {
+            neitherMinutes += minutes;
+          }
+        }
+
+        final completedPhaseCount = completedPhases.length;
+        projectPhasesCompleted += completedPhaseCount;
+        if (_isCompletedTask(task)) completedTasks++;
+        completedTaskNames.add('${task.task} ($completedPhaseCount/${phases.length} phases)');
+
+        basePoints += taskBasePoints;
+        pointEvents.add(
+          ProductivityPointEvent(
+            title: '${task.task} Phase Progress',
+            basePoints: taskBasePoints,
+            streakBonusPoints: 0,
+            timingBonusPoints: 0,
+            xpBonus: 0,
+            totalPoints: taskBasePoints,
+            reason: '$completedPhaseCount project phase${completedPhaseCount == 1 ? '' : 's'} completed • ${taskRecordedMinutes} min recorded',
+          ),
+        );
+        continue;
+      }
+
       final recordedMinutes = taskRecordedMinutesForDay(task);
       if (recordedMinutes <= 0) continue;
 
@@ -1049,29 +1421,36 @@ class HiveService {
         }
       }
 
-      final phases = parseTaskPhases(task.description);
-      final completedPhaseCount = phases.where((phase) => phase.isCompleted).length;
-      projectPhasesCompleted += completedPhaseCount;
-      if (!_isCompletedTask(task) && completedPhaseCount > 0) {
-        completedTaskNames.add('${task.task} ($completedPhaseCount phases)');
-      }
-
       basePoints += taskBasePoints;
       streakBonusPoints += taskBonusPoints;
       timingBonusPoints += taskTimingBonusPoints;
       pointEvents.add(
         ProductivityPointEvent(
-          title: task.repeatTask
-              ? '${task.task} Completed'
-              : completedPhaseCount > 0
-                  ? '${task.task} Phase Progress'
-                  : '${task.task} Completed',
+          title: task.repeatTask ? '${task.task} Completed' : '${task.task} Completed',
           basePoints: taskBasePoints,
           streakBonusPoints: taskBonusPoints,
           timingBonusPoints: taskTimingBonusPoints,
           xpBonus: taskTimingXpBonus,
           totalPoints: taskBasePoints + taskBonusPoints + taskTimingBonusPoints,
-          reason: taskBonusPoints > 0 ? reason : (completedPhaseCount > 0 ? '$completedPhaseCount project phase${completedPhaseCount == 1 ? '' : 's'} completed' : reason),
+          reason: reason,
+        ),
+      );
+    }
+
+    for (final instruction in getInstructions()) {
+      if (!instruction.enabled) continue;
+      final entry = instructionEntryForDate(instruction, day);
+      if (entry == null || !entry.followed) continue;
+      timingBonusPoints += entry.bonusPoints;
+      pointEvents.add(
+        ProductivityPointEvent(
+          title: '✅ Instruction followed: ${instruction.name}',
+          basePoints: 0,
+          streakBonusPoints: 0,
+          timingBonusPoints: entry.bonusPoints,
+          xpBonus: entry.xpEarned,
+          totalPoints: entry.bonusPoints,
+          reason: instruction.description.isEmpty ? 'Instruction bonus' : instruction.description,
         ),
       );
     }
@@ -1112,6 +1491,21 @@ class HiveService {
 
   int _productivityPointsForTask(Task task, int recordedMinutes) {
     return (recordedMinutes / 60 * _productivityPointRate(task)).round();
+  }
+
+  int _productivityPointsForFlags({
+    required bool urgent,
+    required bool important,
+    required int recordedMinutes,
+  }) {
+    return (recordedMinutes / 60 * _productivityPointRateForFlags(urgent: urgent, important: important)).round();
+  }
+
+  int _productivityPointRateForFlags({required bool urgent, required bool important}) {
+    if (urgent && important) return 100;
+    if (important) return 80;
+    if (urgent) return 50;
+    return 10;
   }
 
   int _productivityPointRate(Task task) {
@@ -1201,6 +1595,24 @@ class HiveService {
   }
 
 
+  String? _routineMoodTimelineLine(Task task, DateTime day) {
+    if (!task.repeatTask || _isDailyJournalTask(task) || !_isCompletedTask(task)) return null;
+    final linkedInstructions = getTaskLinkedInstructions()
+        .where((instruction) => instruction.enabled && instruction.isLinkedToTask(task.task))
+        .toList();
+    if (linkedInstructions.isEmpty) return '😐 ${task.task} steady at Neutral Mood';
+
+    final followed = linkedInstructions.where((instruction) {
+      return instructionEntryForDate(instruction, day)?.followed ?? false;
+    }).length;
+    final ratio = followed / linkedInstructions.length;
+    if (ratio >= 1) return '🤩 ${task.task} reached Excellent Mood • all instructions followed';
+    if (ratio >= 0.75) return '😄 ${task.task} recovered to Happy Mood • $followed/${linkedInstructions.length} instructions followed';
+    if (ratio >= 0.5) return '🙂 ${task.task} reached Good Mood • $followed/${linkedInstructions.length} instructions followed';
+    if (followed > 0) return '😐 ${task.task} stayed Neutral • $followed/${linkedInstructions.length} instructions followed';
+    return '😕 ${task.task} completed but skipped linked instructions';
+  }
+
   int _streakBonusForLength(int streakLength) {
     const bonuses = {
       3: 10,
@@ -1272,11 +1684,14 @@ class HiveService {
           lines.add(
             '${task.repeatTask ? '✅ Routine' : '✅ Task'} ${task.task} completed • +$minutes min',
           );
+          final moodLine = _routineMoodTimelineLine(task, day);
+          if (moodLine != null) lines.add(moodLine);
         }
       } else if (task.repeatTask &&
           !_isDailyJournalTask(task) &&
           (status == 'missed' || status == 'overdue' || status == 'cancelled')) {
         lines.add("❌ ${task.task} ${status == 'cancelled' ? 'cancelled' : status}");
+        lines.add('😞 ${task.task} missed today');
       }
 
       for (final phase in parseTaskPhases(task.description).where((phase) => phase.isCompleted)) {

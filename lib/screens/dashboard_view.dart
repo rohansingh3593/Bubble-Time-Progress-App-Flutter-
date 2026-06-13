@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../constants/dashboard_themes.dart';
+import '../models/instruction.dart';
 import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
@@ -12,6 +13,9 @@ import '../utils/task_time_utils.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
+import 'goal_dashboard_view.dart';
+import 'instruction_dashboard_view.dart';
+import 'reward_money_history_view.dart';
 import 'journal_view.dart';
 import 'journey_timeline_view.dart';
 import 'productivity_timeline_view.dart';
@@ -163,9 +167,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 14),
               _buildDisabledRoutineBoard(disabledRoutineTasks),
               const SizedBox(height: 14),
-              _todaysProductivitySection(todayProductivityStats),
+              _todaysProductivitySection(todayProductivityStats, todayTaskRows),
               const SizedBox(height: 14),
               _todayTasksSection(todayTaskRows),
+              const SizedBox(height: 12),
+              _instructionProductivitySection(today),
               const SizedBox(height: 12),
               _productivityAnalyticsCenter(
                 tasks: analyticsTasks,
@@ -239,11 +245,49 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
   void _openJournal() {
-    Navigator.of(context).push(
-      JournalView.route(
-        hiveService: widget.hiveService,
-        onGoToDashboard: widget.onGoToDashboard,
-      ),
+    Navigator.of(context)
+        .push(
+          JournalView.route(
+            hiveService: widget.hiveService,
+            onGoToDashboard: widget.onGoToDashboard,
+          ),
+        )
+        .then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _openSettingsPanel() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close settings',
+      barrierColor: Colors.black.withOpacity(0.35),
+      transitionDuration: const Duration(milliseconds: 360),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: Material(
+            color: Colors.transparent,
+            child: FractionallySizedBox(
+              widthFactor: MediaQuery.of(context).size.width < 760 ? 1 : 0.58,
+              heightFactor: 1,
+              child: _DashboardSettingsPanel(
+                hiveService: widget.hiveService,
+                onClose: () => Navigator.of(context).pop(),
+                themeSelectorBuilder: (_) => _buildThemeSelector(),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
     );
   }
 
@@ -298,6 +342,41 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
 
+
+
+  void _openInstructionDashboard() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => InstructionDashboardView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+  void _openGoalDashboard() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => GoalDashboardView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+  void _openRewardMoneyHistory() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => RewardMoneyHistoryView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+  void _openProductivityTimeline() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProductivityTimelineView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+
   String _normalizedRepeatFrequency(Task task) {
     final normalized = task.repeatFrequency?.trim().toLowerCase();
     switch (normalized) {
@@ -313,18 +392,440 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
   void _openJournalForTask(Task task) {
-    Navigator.of(context).push(
-      JournalView.route(
-        hiveService: widget.hiveService,
-        onGoToDashboard: widget.onGoToDashboard,
-        initialDate: task.dueDate,
+    Navigator.of(context)
+        .push(
+          JournalView.route(
+            hiveService: widget.hiveService,
+            onGoToDashboard: widget.onGoToDashboard,
+            initialDate: task.dueDate,
+          ),
+        )
+        .then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  Future<void> _editTaskDetails(Task task) async {
+    if (isDailyJournalSystemTask(task)) {
+      _openJournalForTask(task);
+      return;
+    }
+
+    final updated = await showTaskFormDialog(
+      context,
+      date: task.dueDate,
+      initialTask: task,
+      title: isRoutineTask(task) ? 'Edit Routine Details' : 'Update Task',
+      actionLabel: isRoutineTask(task) ? 'Save Routine' : 'Save Task',
+      onDelete: isRoutineTask(task) ? null : () => widget.hiveService.deleteTaskByReference(task),
+    );
+
+    if (updated == null) return;
+    if (isRoutineTask(task)) {
+      await widget.hiveService.updateRecurringTaskSeriesByReference(task, updated.copyWith(repeatTask: true));
+    } else {
+      await widget.hiveService.updateTaskByReference(task, updated);
+    }
+  }
+
+  Future<void> _openTodayTaskQuickOccurrence(_DashboardTodayTask row) async {
+    final task = row.task;
+    if (isDailyJournalSystemTask(task)) {
+      await _showDailyJournalCompletionPrompt(
+        task,
+        message: 'Daily Journal is completed only by writing and saving your journal.',
+      );
+      return;
+    }
+
+    if (_isCompletedTask(task)) {
+      await _showTodayTaskLockedMessage(
+        '${task.task} is already completed today${_timeLabelForTask(task) == null ? '.' : ' at ${_timeLabelForTask(task)}.'}',
+      );
+      return;
+    }
+
+    if (task.status.trim().toLowerCase() == 'missed') {
+      await _showTodayTaskLockedMessage(
+        '${task.task} is already marked missed for today.',
+        actionLabel: 'View Details',
+        onAction: () => _editTaskDetails(task),
+      );
+      return;
+    }
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Have you done this task today?', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Text(task.task, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                title: const Text('Complete'),
+                onTap: () => Navigator.pop(context, 'complete'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
+                title: const Text('Missed'),
+                onTap: () => Navigator.pop(context, 'missed'),
+              ),
+              if (isRoutineTask(task))
+                ListTile(
+                  leading: const Icon(Icons.pause_circle_outline),
+                  title: const Text('Disable Routine'),
+                  onTap: () => Navigator.pop(context, 'disable'),
+                ),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: const Text('Close'),
+                onTap: () => Navigator.pop(context, 'close'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    switch (action) {
+      case 'complete':
+        final completedAt = DateTime.now();
+        final scheduleResult = _scheduleResultForCompletion(task, completedAt);
+        await widget.hiveService.updateTaskByReference(
+          task,
+          task.copyWith(
+            done: true,
+            status: 'Completed',
+            dueDate: DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day, completedAt.hour, completedAt.minute),
+          ),
+        );
+        if (!mounted) return;
+        if (scheduleResult != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(scheduleResult.message)),
+          );
+        }
+        break;
+      case 'missed':
+        await widget.hiveService.updateTaskByReference(task, task.copyWith(done: false, status: 'Missed'));
+        break;
+      case 'disable':
+        await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
+        break;
+    }
+  }
+
+  Future<void> _showTodayTaskLockedMessage(String message, {String actionLabel = 'OK', VoidCallback? onAction}) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onAction?.call();
+            },
+            child: Text(actionLabel),
+          ),
+        ],
       ),
     );
   }
 
+  Future<void> _showDailyJournalCompletionPrompt(Task task, {required String message}) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('📔 Daily Journal'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _openJournalForTask(task);
+            },
+            icon: const Icon(Icons.menu_book_rounded),
+            label: const Text('Go To Journal'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _DashboardScheduleResult? _scheduleResultForCompletion(Task task, DateTime completedAt) {
+    if (!task.repeatTask) return null;
+    final schedule = _dashboardRoutineScheduleForTask(task);
+    if (schedule == null) return null;
+    var completedMinutes = completedAt.hour * 60 + completedAt.minute;
+    final start = schedule.startMinutes;
+    var end = schedule.endMinutes;
+    if (end < start) {
+      end += 24 * 60;
+      if (completedMinutes < start) completedMinutes += 24 * 60;
+    }
+    final onTime = completedMinutes >= start && completedMinutes <= end;
+    return _DashboardScheduleResult(
+      onTime
+          ? 'Completed on time! +${schedule.bonusPoints} bonus points earned.'
+          : 'Task completed, but outside the scheduled time. No schedule bonus added.',
+      onTime ? schedule.bonusPoints : 0,
+    );
+  }
+
+  _DashboardRoutineSchedule? _dashboardRoutineScheduleForTask(Task task) {
+    int? start;
+    int? end;
+    int? bonus;
+    for (final line in task.description.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.startsWith('⏰ Schedule Start:')) {
+        start = _parseScheduleMinutes(trimmed.substring('⏰ Schedule Start:'.length).trim());
+      } else if (trimmed.startsWith('⏰ Schedule End:')) {
+        end = _parseScheduleMinutes(trimmed.substring('⏰ Schedule End:'.length).trim());
+      } else if (trimmed.startsWith('⏰ Schedule Bonus:')) {
+        bonus = int.tryParse(trimmed.substring('⏰ Schedule Bonus:'.length).replaceAll('points', '').trim());
+      }
+    }
+    if (start == null || end == null) return null;
+    return _DashboardRoutineSchedule(startMinutes: start, endMinutes: end, bonusPoints: bonus ?? 20);
+  }
+
+  int? _parseScheduleMinutes(String raw) {
+    final parts = raw.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return (hour * 60) + minute;
+  }
+
+  String? _timeLabelForTask(Task task) {
+    if (task.dueDate.hour == 0 && task.dueDate.minute == 0 && task.hourSlot == null) return null;
+    final hour = task.dueDate.hour;
+    final minute = task.dueDate.minute.toString().padLeft(2, '0');
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final period = hour >= 12 ? 'PM' : 'AM';
+    return '$displayHour:$minute $period';
+  }
+
+  void _showTaskListSheet(String title, List<Task> tasks) {
+    final style = _dashboardStyle();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.62,
+          minChildSize: 0.35,
+          maxChildSize: 0.9,
+          builder: (context, scrollController) => Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(color: style.textPrimary, fontSize: 20, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 8),
+                Text('${tasks.length} task${tasks.length == 1 ? '' : 's'}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: tasks.isEmpty
+                      ? const Center(child: Text('No tasks found for this filter.'))
+                      : ListView.separated(
+                          controller: scrollController,
+                          itemBuilder: (context, index) {
+                            final task = tasks[index];
+                            return ListTile(
+                              leading: CircleAvatar(backgroundColor: Color(task.colorValue).withOpacity(0.14), child: Icon(_isCompletedTask(task) ? Icons.check : Icons.task_alt, color: Color(task.colorValue))),
+                              title: Text(task.task, style: const TextStyle(fontWeight: FontWeight.w800)),
+                              subtitle: Text('${task.priority} • ${task.status} • ${_formatDueLabel(task)}'),
+                              trailing: Icon(_isCompletedTask(task) ? Icons.check_circle_outline : Icons.chevron_right, color: _isCompletedTask(task) ? Colors.green : style.primary),
+                              onTap: () {
+                                Navigator.pop(context);
+                                if (isDailyJournalSystemTask(task)) {
+                                  _showDailyJournalCompletionPrompt(
+                                    task,
+                                    message: _isCompletedTask(task)
+                                        ? 'Daily Journal is completed only by writing and saving your journal.'
+                                        : 'Write a journal to complete this task.',
+                                  );
+                                } else {
+                                  _editTaskDetails(task);
+                                }
+                              },
+                            );
+                          },
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemCount: tasks.length,
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showStandaloneInstructionActions(InstructionRule instruction, DateTime today) async {
+    if (instruction.isTaskLinked) {
+      await _showTodayTaskLockedMessage('This instruction is linked to a task. Update it from the related task occurrence.');
+      return;
+    }
+
+    final entry = widget.hiveService.instructionEntryForDate(instruction, today);
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+              subtitle: Text(entry == null ? 'Have you followed this instruction today?' : 'This instruction is already updated today.'),
+            ),
+            if (entry == null && instruction.enabled) ...[
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                title: const Text('Followed'),
+                onTap: () => Navigator.pop(context, 'followed'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cancel_outlined, color: Colors.red),
+                title: const Text('Missed'),
+                onTap: () => Navigator.pop(context, 'missed'),
+              ),
+            ] else
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text('This instruction is already updated today.', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+              ),
+            ListTile(
+              leading: Icon(instruction.enabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
+              title: Text(instruction.enabled ? 'Disable Instruction' : 'Enable Instruction'),
+              onTap: () => Navigator.pop(context, 'toggle'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.close),
+              title: const Text('Close'),
+              onTap: () => Navigator.pop(context, 'close'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null || action == 'close') return;
+    switch (action) {
+      case 'followed':
+        await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed);
+        break;
+      case 'missed':
+        await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusMissed);
+        break;
+      case 'toggle':
+        await widget.hiveService.setInstructionEnabled(instruction, !instruction.enabled);
+        break;
+    }
+  }
+
+  void _showInstructionFilterSheet(String title, List<InstructionRule> instructions, DateTime today) {
+    final style = _dashboardStyle();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: TextStyle(color: style.textPrimary, fontSize: 20, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              if (instructions.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No instructions found for this filter.'),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: instructions.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final instruction = instructions[index];
+                      final entry = widget.hiveService.instructionEntryForDate(instruction, today);
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Color(instruction.colorValue).withOpacity(0.14),
+                          child: Icon(Icons.rule_folder_outlined, color: Color(instruction.colorValue)),
+                        ),
+                        title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+                        subtitle: Text('${instruction.repeatType} • ${entry?.status ?? 'Pending'}'),
+                        trailing: Text('+${instruction.bonusPoints}', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.green)),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showStandaloneInstructionActions(instruction, today);
+                        },
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Task> _todayTasksForFilter(List<_DashboardTodayTask> rows, String filter) {
+    switch (filter) {
+      case 'completed':
+        return rows.where((row) => row.group == _TodayTaskGroup.completed).map((row) => row.task).toList();
+      case 'pending':
+        return rows.where((row) => row.group == _TodayTaskGroup.pending).map((row) => row.task).toList();
+      case 'overdue':
+        return rows.where((row) => row.group == _TodayTaskGroup.overdue).map((row) => row.task).toList();
+      default:
+        return rows.map((row) => row.task).toList();
+    }
+  }
+
+  List<Task> _analyticsTasksForFilter(List<Task> tasks, String filter) {
+    final today = _dateOnly(DateTime.now());
+    switch (filter) {
+      case 'completed':
+        return tasks.where(_isCompletedTask).toList();
+      case 'pending':
+        return tasks.where(_isPendingTask).toList();
+      case 'overdue':
+        return tasks.where((task) => _dateOnly(task.dueDate).isBefore(today) && _isPendingTask(task)).toList();
+      default:
+        return tasks;
+    }
+  }
+
+
   Future<void> _editTask(Task task) async {
     if (isRoutineTask(task)) {
-      final action = await showRoutineOccurrenceDialog(context: context, task: task);
+      final action = await showRoutineOccurrenceDialog(context: context, task: task, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {
@@ -669,21 +1170,142 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }
   }
 
+  List<InstructionRule> _linkedInstructionsForRoutine(Task task) {
+    return widget.hiveService
+        .getTaskLinkedInstructions()
+        .where((instruction) => instruction.enabled && instruction.isLinkedToTask(task.task))
+        .toList();
+  }
+
+  _RoutineMood _routineMoodForTask(Task task) {
+    final linkedInstructions = _linkedInstructionsForRoutine(task);
+    final missedCount = _routineConsecutiveMisses(task);
+    if (missedCount > 0) return _missedRoutineMood(missedCount);
+
+    final completed = _isCompletedTask(task);
+    if (!completed) {
+      return const _RoutineMood(emoji: '😐', label: 'Neutral', detail: 'Pending occurrence', score: 40);
+    }
+
+    if (linkedInstructions.isEmpty) {
+      return const _RoutineMood(emoji: '😐', label: 'Neutral', detail: 'No instructions attached', score: 50);
+    }
+
+    final followed = linkedInstructions.where((instruction) {
+      return widget.hiveService.instructionEntryForDate(instruction, task.dueDate)?.followed ?? false;
+    }).length;
+    final ratio = followed / linkedInstructions.length;
+    final streak = _routineCurrentStreak(task);
+    final score = (60 + (ratio * 30) + (math.min(streak, 10) / 10 * 10)).round().clamp(0, 100).toInt();
+    return _routineMoodFromScore(
+      score,
+      detail: '$followed/${linkedInstructions.length} instructions',
+    );
+  }
+
+  _RoutineMood _missedRoutineMood(int misses) {
+    if (misses >= 7) return _RoutineMood(emoji: '😵', label: 'Burned Out', detail: 'Missed $misses consecutive occurrences', score: 0);
+    if (misses >= 4) return _RoutineMood(emoji: '😫', label: 'Exhausted', detail: 'Missed $misses consecutive occurrences', score: 0);
+    if (misses >= 2) return _RoutineMood(emoji: '😠', label: 'Angry', detail: 'Missed $misses consecutive occurrences', score: 0);
+    return const _RoutineMood(emoji: '😞', label: 'Sad', detail: 'Missed today', score: 0);
+  }
+
+  _RoutineMood _routineMoodFromScore(int score, {required String detail}) {
+    if (score >= 90) return _RoutineMood(emoji: '🤩', label: 'Excellent', detail: detail, score: score);
+    if (score >= 75) return _RoutineMood(emoji: '😄', label: 'Happy', detail: detail, score: score);
+    if (score >= 60) return _RoutineMood(emoji: '🙂', label: 'Good', detail: detail, score: score);
+    if (score >= 40) return _RoutineMood(emoji: '😐', label: 'Neutral', detail: detail, score: score);
+    if (score >= 20) return _RoutineMood(emoji: '😕', label: 'Concerned', detail: detail, score: score);
+    return _RoutineMood(emoji: '😞', label: 'Sad', detail: detail, score: score);
+  }
+
+  int _routineConsecutiveMisses(Task task) {
+    final frequency = _normalizedRepeatFrequency(task);
+    if (!['daily', 'weekly', 'monthly', 'yearly'].contains(frequency)) return 0;
+    final occurrences = <DateTime, Task>{};
+    for (final candidate in widget.hiveService.getAllTasksByDate().values.expand((list) => list)) {
+      if (!_isSameRoutineSeries(candidate, task)) continue;
+      final occurrence = _routineOccurrenceDateFor(candidate, _dateOnly(candidate.dueDate));
+      occurrences[occurrence] = candidate;
+    }
+
+    var cursor = _routineOccurrenceDateFor(task, _dateOnly(DateTime.now()));
+    var misses = 0;
+    while (true) {
+      final occurrenceTask = occurrences[cursor];
+      if (occurrenceTask == null || _isCompletedTask(occurrenceTask)) break;
+      final status = occurrenceTask.status.trim().toLowerCase();
+      if (status == 'missed' || status == 'overdue' || status == 'cancelled') {
+        misses++;
+        final previous = _previousRoutineOccurrenceForFrequency(frequency, cursor);
+        if (previous == null) break;
+        cursor = previous;
+      } else {
+        break;
+      }
+    }
+    return misses;
+  }
+
   int _routineCurrentStreak(Task task) {
-    final allTasks = widget.hiveService.getAllTasksByDate().values.expand((list) => list).where((candidate) {
-      return candidate.repeatTask &&
-          candidate.task.trim().toLowerCase() == task.task.trim().toLowerCase() &&
-          _normalizedRepeatFrequency(candidate) == _normalizedRepeatFrequency(task);
-    }).toList()
-      ..sort((a, b) => b.dueDate.compareTo(a.dueDate));
+    final frequency = _normalizedRepeatFrequency(task);
+    if (!['daily', 'weekly', 'monthly', 'yearly'].contains(frequency)) return 0;
+
+    final completedOccurrences = <DateTime>{};
+    for (final candidate in widget.hiveService.getAllTasksByDate().values.expand((list) => list)) {
+      if (!_isSameRoutineSeries(candidate, task) || !_isCompletedTask(candidate)) continue;
+      final occurrence = _routineOccurrenceDateFor(candidate, _dateOnly(candidate.dueDate));
+      completedOccurrences.add(occurrence);
+    }
+
+    final todayOccurrence = _routineOccurrenceDateFor(task, _dateOnly(DateTime.now()));
+    var cursor = completedOccurrences.contains(todayOccurrence)
+        ? todayOccurrence
+        : _previousRoutineOccurrenceForFrequency(frequency, todayOccurrence);
 
     var streak = 0;
-    for (final record in allTasks) {
-      final completed = record.done || record.status.trim().toLowerCase() == 'completed';
-      if (!completed) break;
+    while (cursor != null && completedOccurrences.contains(cursor)) {
       streak++;
+      cursor = _previousRoutineOccurrenceForFrequency(frequency, cursor);
     }
     return streak;
+  }
+
+  bool _isSameRoutineSeries(Task a, Task b) {
+    return a.repeatTask &&
+        b.repeatTask &&
+        a.task.trim().toLowerCase() == b.task.trim().toLowerCase() &&
+        a.category.trim().toLowerCase() == b.category.trim().toLowerCase() &&
+        _normalizedRepeatFrequency(a) == _normalizedRepeatFrequency(b);
+  }
+
+  DateTime _routineOccurrenceDateFor(Task task, DateTime date) {
+    switch (_normalizedRepeatFrequency(task)) {
+      case 'weekly':
+        return date.subtract(Duration(days: date.weekday - 1));
+      case 'monthly':
+        return DateTime(date.year, date.month, 1);
+      case 'yearly':
+        return DateTime(date.year, 1, 1);
+      case 'daily':
+      default:
+        return date;
+    }
+  }
+
+  DateTime? _previousRoutineOccurrenceForFrequency(String frequency, DateTime occurrence) {
+    switch (frequency) {
+      case 'daily':
+        return occurrence.subtract(const Duration(days: 1));
+      case 'weekly':
+        return occurrence.subtract(const Duration(days: 7));
+      case 'monthly':
+        return DateTime(occurrence.year, occurrence.month - 1, 1);
+      case 'yearly':
+        return DateTime(occurrence.year - 1, 1, 1);
+      default:
+        return null;
+    }
   }
 
   int _prioritySortRank(String priority) {
@@ -732,6 +1354,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   DashboardThemeStyle _dashboardStyle() => DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
 
   String _formatShortDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
+
+  String _formatCompactNumber(int value) {
+    if (value >= 100000) return '${(value / 100000).toStringAsFixed(value % 100000 == 0 ? 0 : 1)}L';
+    if (value >= 1000) return '${(value / 1000).toStringAsFixed(value % 1000 == 0 ? 0 : 1)}K';
+    return '$value';
+  }
 
   String _formatDueLabel(Task task) {
     final dueDate = task.dueDate;
@@ -904,40 +1532,141 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _buildDashboardHeader(RankProfile profile) {
     final style = _dashboardStyle();
-    return Row(
+    final avatar = ProfileAvatar(
+      profile: widget.hiveService.getUserProfile(),
+      radius: 22,
+      accentColor: style.primary,
+      showGlow: false,
+      onTap: _openProductivityTimeline,
+    );
+    final greeting = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ProfileAvatar(
-          profile: widget.hiveService.getUserProfile(),
-          radius: 22,
-          accentColor: style.primary,
-          showGlow: false,
-          onTap: _openProductivityTimeline,
+        Text(
+          'Hello, ${profile.username}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: style.textPrimary),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
+        const SizedBox(height: 2),
+        Text('Focus. Plan. Achieve.', style: TextStyle(color: style.textMuted)),
+      ],
+    );
+    final actions = <Widget>[
+      _headerActionButton(
+        icon: Icons.notifications_none_rounded,
+        tooltip: 'Notifications',
+        style: style,
+        onTap: _openJournal,
+      ),
+      _instructionHeaderButton(style),
+      _goalHeaderButton(style),
+      _rewardMoneyBadge(style),
+      _headerActionButton(
+        icon: Icons.settings_rounded,
+        tooltip: 'Dashboard settings',
+        style: style,
+        onTap: _openSettingsPanel,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 620) {
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Hello, ${profile.username}', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: style.textPrimary)),
-              const SizedBox(height: 2),
-              Text('Focus. Plan. Achieve.', style: TextStyle(color: style.textMuted)),
+              Row(
+                children: [
+                  avatar,
+                  const SizedBox(width: 12),
+                  Expanded(child: greeting),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (var index = 0; index < actions.length; index++) ...[
+                      if (index > 0) const SizedBox(width: 8),
+                      actions[index],
+                    ],
+                  ],
+                ),
+              ),
             ],
+          );
+        }
+
+        return Row(
+          children: [
+            avatar,
+            const SizedBox(width: 12),
+            Expanded(child: greeting),
+            for (var index = 0; index < actions.length; index++) ...[
+              if (index > 0) const SizedBox(width: 8),
+              actions[index],
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+
+  Widget _instructionHeaderButton(DashboardThemeStyle style) {
+    return _headerActionButton(
+      icon: Icons.menu_book_rounded,
+      tooltip: 'Instruction dashboard',
+      style: style,
+      onTap: _openInstructionDashboard,
+    );
+  }
+
+
+  Widget _goalHeaderButton(DashboardThemeStyle style) {
+    return _headerActionButton(
+      icon: Icons.flag_circle_outlined,
+      tooltip: 'Goal dashboard',
+      style: style,
+      onTap: _openGoalDashboard,
+    );
+  }
+
+
+  Widget _rewardMoneyBadge(DashboardThemeStyle style) {
+    final rewardSummary = widget.hiveService.getRewardMoneySummary();
+    return Tooltip(
+      message: 'Reward money history',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: _openRewardMoneyHistory,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            decoration: BoxDecoration(
+              color: style.primary.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: style.primary.withOpacity(0.22)),
+              boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.account_balance_wallet_outlined, color: style.primary, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  '₹${_formatCompactNumber(rewardSummary.availableRupees)}',
+                  style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
           ),
         ),
-        _headerActionButton(
-          icon: Icons.notifications_none_rounded,
-          tooltip: 'Notifications',
-          style: style,
-          onTap: _openJournal,
-        ),
-        const SizedBox(width: 8),
-        _headerActionButton(
-          icon: Icons.settings_rounded,
-          tooltip: 'Dashboard settings',
-          style: style,
-          onTap: _openSettingsPanel,
-        ),
-      ],
+      ),
     );
   }
 
@@ -971,6 +1700,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
+  Color _selectorTextColor(bool selected, DashboardThemeStyle style) {
+    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
+    return _readableOn(chipColor);
+  }
 
   Widget _buildThemeSelector() {
     final style = _dashboardStyle();
@@ -980,32 +1713,19 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final selectedScale = widget.hiveService.getAppFontScale();
     final selectedWeight = widget.hiveService.getAppFontWeight();
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 350),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: style.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: style.primary.withOpacity(0.24)),
-        boxShadow: [
-          BoxShadow(
-            color: style.primary.withOpacity(style.dark ? 0.16 : 0.08),
-            blurRadius: style.animated ? 18 : 8,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.palette_outlined, color: style.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Settings • Dashboard Theme',
-                  style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 17),
+  Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
+    final size = compact ? 5.0 : 12.0;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: palette.colors
+          .map((color) => Container(
+                width: size,
+                height: size,
+                margin: const EdgeInsets.only(right: 2),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.black.withOpacity(0.12)),
                 ),
               ),
               Text('${selectedTheme.label} • ${selectedPalette.label}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
@@ -1717,21 +2437,41 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       else
         ...routines.map((task) {
           final taskColor = Color(task.colorValue);
+          final mood = _routineMoodForTask(task);
+          final linkedInstructions = _linkedInstructionsForRoutine(task);
+          final followedInstructions = linkedInstructions.where((instruction) {
+            return widget.hiveService.instructionEntryForDate(instruction, task.dueDate)?.followed ?? false;
+          }).length;
+          final instructionSummary = linkedInstructions.isEmpty
+              ? 'No instructions'
+              : '$followedInstructions/${linkedInstructions.length} Instructions';
           return InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () => _editTask(task),
+            onTap: () => _editTaskDetails(task),
             child: Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: const Color(0xFF1A2442), borderRadius: BorderRadius.circular(12)),
-              child: Row(children:[
-                Container(width: 10,height: 10,decoration: BoxDecoration(color: taskColor,shape: BoxShape.circle)),
+              child: Row(children: [
+                Text(mood.emoji, style: const TextStyle(fontSize: 24)),
                 const SizedBox(width: 10),
-                Expanded(child: Text(task.task, style: const TextStyle(color: Colors.white))),
+                Container(width: 10, height: 10, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(task.task, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 3),
+                      Text('${task.repeatFrequency ?? 'Daily'} • $instructionSummary', style: const TextStyle(color: Color(0xFFB9C6F3), fontSize: 12)),
+                      Text('Mood: ${mood.emoji} ${mood.label}', style: TextStyle(color: mood.color, fontSize: 12, fontWeight: FontWeight.w800)),
+                    ],
+                  ),
+                ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(task.repeatFrequency ?? 'Daily', style: const TextStyle(color: Color(0xFF9CB3FF))),
+                    const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB74D), size: 18),
                     Text('${_routineCurrentStreak(task)} streak', style: const TextStyle(color: Color(0xFFB9C6F3), fontSize: 11)),
                   ],
                 ),
@@ -2087,10 +2827,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _analyticsSummaryPill('Total Tasks', tasks.length, Icons.analytics_outlined),
-                  _analyticsSummaryPill('Completed', completed, Icons.check_circle_outline),
-                  _analyticsSummaryPill('Pending', pending, Icons.timelapse_outlined),
-                  _analyticsSummaryPill('Overdue', overdue, Icons.warning_amber_rounded),
+                  _analyticsSummaryPill('Total Tasks', tasks.length, Icons.analytics_outlined, onTap: () => _showTaskListSheet('All non-routine tasks', _analyticsTasksForFilter(tasks, 'all'))),
+                  _analyticsSummaryPill('Completed', completed, Icons.check_circle_outline, onTap: () => _showTaskListSheet('Completed non-routine tasks', _analyticsTasksForFilter(tasks, 'completed'))),
+                  _analyticsSummaryPill('Pending', pending, Icons.timelapse_outlined, onTap: () => _showTaskListSheet('Pending non-routine tasks', _analyticsTasksForFilter(tasks, 'pending'))),
+                  _analyticsSummaryPill('Overdue', overdue, Icons.warning_amber_rounded, onTap: () => _showTaskListSheet('Overdue non-routine tasks', _analyticsTasksForFilter(tasks, 'overdue'))),
                 ],
               ),
             ),
@@ -2152,10 +2892,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Widget _analyticsSummaryPill(String label, int value, IconData icon) {
+  Widget _analyticsSummaryPill(String label, int value, IconData icon, {VoidCallback? onTap}) {
     final style = _dashboardStyle();
-    return Container(
-      width: 150,
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        width: 150,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: style.elevatedSurface.withOpacity(style.dark ? 0.72 : 0.56),
@@ -2183,6 +2926,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -2456,7 +3200,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Widget _todaysProductivitySection(_TodayProductivityStats stats) {
+  Widget _todaysProductivitySection(_TodayProductivityStats stats, List<_DashboardTodayTask> todayRows) {
     final style = _dashboardStyle();
     final badge = _productivityBadge(stats.completionRate);
     const completedColor = Color(0xFF2ECC71);
@@ -2550,11 +3294,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _todayProductivityStat('Today\'s Tasks', stats.total),
-                        _todayProductivityStat('Completed', stats.completed),
-                        _todayProductivityStat('Pending', stats.pending),
-                        _todayProductivityStat('Overdue', stats.overdue),
-                        _todayProductivityStat('Completion Rate', stats.completionRate, suffix: '%'),
+                        _todayProductivityStat('Total Tasks', stats.total, onTap: () => _showTaskListSheet("All today's tasks", _todayTasksForFilter(todayRows, 'all'))),
+                        _todayProductivityStat('Completed', stats.completed, onTap: () => _showTaskListSheet("Completed today", _todayTasksForFilter(todayRows, 'completed'))),
+                        _todayProductivityStat('Pending', stats.pending, onTap: () => _showTaskListSheet("Pending today", _todayTasksForFilter(todayRows, 'pending'))),
+                        _todayProductivityStat('Overdue', stats.overdue, onTap: () => _showTaskListSheet("Overdue today", _todayTasksForFilter(todayRows, 'overdue'))),
+                        _todayProductivityStat('Completion Rate', stats.completionRate, suffix: '%', onTap: () => _showTaskListSheet("All today's tasks", _todayTasksForFilter(todayRows, 'all'))),
                       ],
                     ),
                   ],
@@ -2590,10 +3334,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Widget _todayProductivityStat(String label, int value, {String suffix = ''}) {
+  Widget _todayProductivityStat(String label, int value, {String suffix = '', VoidCallback? onTap}) {
     final style = _dashboardStyle();
-    return Container(
-      width: 150,
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        width: 150,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: style.elevatedSurface.withOpacity(style.dark ? 0.72 : 0.52),
@@ -2613,6 +3360,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -2622,6 +3370,93 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     if (rate <= 50) return const _ProductivityBadge(label: 'Getting Started', emoji: '🟠', color: Color(0xFFFFA726));
     if (rate <= 75) return const _ProductivityBadge(label: 'Productive', emoji: '🟢', color: Color(0xFF2ECC71));
     return const _ProductivityBadge(label: 'Excellent', emoji: '🔥', color: Color(0xFFFF7043));
+  }
+
+  Widget _instructionProductivitySection(DateTime today) {
+    final style = _dashboardStyle();
+    final instructions = widget.hiveService.getStandaloneInstructions();
+    final enabled = instructions.where((instruction) => instruction.enabled).toList();
+    final followed = enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).length;
+    final missed = enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.missed ?? false).length;
+    final pending = enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today) == null).length;
+    final score = enabled.isEmpty ? 0 : ((followed / enabled.length) * 100).round();
+    final bonus = widget.hiveService.instructionBonusForDate(today, standaloneOnly: true);
+
+    return _panel(
+      title: 'INSTRUCTION PRODUCTIVITY',
+      headerColor: style.primary.withOpacity(style.dark ? 0.24 : 0.14),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _instructionProductivityStat('Standalone Instructions', instructions.length, style.primary, onTap: () => _showInstructionFilterSheet('All standalone instructions', enabled, today)),
+              _instructionProductivityStat('😀 Followed Today', followed, Colors.green, onTap: () => _showInstructionFilterSheet('Followed instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).toList(), today)),
+              _instructionProductivityStat('😞 Missed', missed, Colors.redAccent, onTap: () => _showInstructionFilterSheet('Missed instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.missed ?? false).toList(), today)),
+              _instructionProductivityStat('😐 Pending', pending, Colors.orangeAccent, onTap: () => _showInstructionFilterSheet('Pending instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today) == null).toList(), today)),
+              _instructionProductivityStat('⭐ Completion', score, style.primary, suffix: '%', onTap: () => _showInstructionFilterSheet('All standalone instructions', enabled, today)),
+              _instructionProductivityStat('🎁 Bonus Points', bonus, Colors.green, prefix: '+', onTap: () => _showInstructionFilterSheet('Bonus-earning instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).toList(), today)),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Center(child: _InstructionDonutChart(followed: followed, pending: pending, missed: missed)),
+            const SizedBox(height: 12),
+            if (enabled.isEmpty)
+              Text('No standalone instructions yet. Add one from the Instruction Dashboard.', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700))
+            else
+              ...enabled.take(6).map((instruction) {
+              final entry = widget.hiveService.instructionEntryForDate(instruction, today);
+              final statusColor = entry?.followed == true
+                  ? Colors.green
+                  : entry?.missed == true
+                      ? Colors.redAccent
+                      : Colors.grey;
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor: Color(instruction.colorValue).withOpacity(0.14),
+                  child: Icon(Icons.rule_folder_outlined, color: Color(instruction.colorValue)),
+                ),
+                title: Text(instruction.name, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
+                subtitle: Text('${instruction.repeatType} • +${instruction.bonusPoints} points • ${widget.hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: style.textMuted)),
+                trailing: Text(entry?.status ?? 'Pending', style: TextStyle(color: statusColor, fontWeight: FontWeight.w900)),
+                onTap: () => _showStandaloneInstructionActions(instruction, today),
+              );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _instructionProductivityStat(String label, int value, Color color, {String prefix = '', String suffix = '', VoidCallback? onTap}) {
+    final style = _dashboardStyle();
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Container(
+        width: 156,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(style.dark ? 0.18 : 0.10),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: color.withOpacity(0.18)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800, fontSize: 12)),
+            const SizedBox(height: 4),
+            Text('$prefix$value$suffix', style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 22)),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _todayTasksSection(List<_DashboardTodayTask> tasks) {
@@ -2683,7 +3518,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       rows.add(
         ListTile(
           dense: true,
-          onTap: () => _editTask(task),
+          onTap: () => _openTodayTaskQuickOccurrence(row),
           title: Text(task.task, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w700)),
           subtitle: Text('${task.priority} • ${row.displayStatus} • ${_formatDueLabel(task)}', style: TextStyle(color: style.textMuted)),
           trailing: Icon(
@@ -2960,6 +3795,98 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
+}
+
+
+class _RoutineMood {
+  final String emoji;
+  final String label;
+  final String detail;
+  final int score;
+
+  const _RoutineMood({required this.emoji, required this.label, required this.detail, required this.score});
+
+  Color get color {
+    if (score >= 75) return Colors.greenAccent;
+    if (score >= 60) return const Color(0xFFB2FF59);
+    if (score >= 40) return const Color(0xFFFFF176);
+    if (score >= 20) return const Color(0xFFFFB74D);
+    return const Color(0xFFFF8A80);
+  }
+}
+
+class _InstructionDonutChart extends StatelessWidget {
+  final int followed;
+  final int pending;
+  final int missed;
+
+  const _InstructionDonutChart({required this.followed, required this.pending, required this.missed});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = followed + pending + missed;
+    if (total == 0) return const SizedBox.shrink();
+    return SizedBox(
+      width: 128,
+      height: 128,
+      child: CustomPaint(
+        painter: _InstructionDonutPainter(followed: followed, pending: pending, missed: missed),
+        child: Center(
+          child: Text('$total\nRules', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900)),
+        ),
+      ),
+    );
+  }
+}
+
+class _InstructionDonutPainter extends CustomPainter {
+  final int followed;
+  final int pending;
+  final int missed;
+
+  const _InstructionDonutPainter({required this.followed, required this.pending, required this.missed});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = followed + pending + missed;
+    if (total <= 0) return;
+    final rect = Offset.zero & size;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 16
+      ..strokeCap = StrokeCap.round;
+    var start = -math.pi / 2;
+    void draw(int value, Color color) {
+      if (value <= 0) return;
+      final sweep = (value / total) * math.pi * 2;
+      paint.color = color;
+      canvas.drawArc(rect.deflate(12), start, sweep, false, paint);
+      start += sweep;
+    }
+    draw(followed, Colors.green);
+    draw(pending, Colors.amber);
+    draw(missed, Colors.redAccent);
+  }
+
+  @override
+  bool shouldRepaint(covariant _InstructionDonutPainter oldDelegate) {
+    return oldDelegate.followed != followed || oldDelegate.pending != pending || oldDelegate.missed != missed;
+  }
+}
+
+class _DashboardRoutineSchedule {
+  final int startMinutes;
+  final int endMinutes;
+  final int bonusPoints;
+
+  const _DashboardRoutineSchedule({required this.startMinutes, required this.endMinutes, required this.bonusPoints});
+}
+
+class _DashboardScheduleResult {
+  final String message;
+  final int bonusPoints;
+
+  const _DashboardScheduleResult(this.message, this.bonusPoints);
 }
 
 enum _TodayTaskGroup {

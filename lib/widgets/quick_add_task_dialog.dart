@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/instruction.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../utils/task_time_utils.dart';
@@ -103,6 +104,9 @@ Future<Task?> showTaskFormDialog(
                   controller: nameController,
                   decoration: InputDecoration(labelText: 'Task Name *', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
                   autofocus: !isEditing,
+                  onChanged: (_) {
+                    if (isEditing) setDialogState(() {});
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -338,6 +342,7 @@ Future<Task?> showTaskFormDialog(
                               TextField(
                                 controller: phase.nameController,
                                 decoration: InputDecoration(labelText: 'Phase ${index + 1} Name', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                                onChanged: (_) => setDialogState(() {}),
                               ),
                               const SizedBox(height: 8),
                               TextField(
@@ -351,17 +356,80 @@ Future<Task?> showTaskFormDialog(
                                 decoration: InputDecoration(labelText: 'Phase Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
                                 items: _projectPhaseStatusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
                                 onChanged: (value) {
-                                  if (value != null) setDialogState(() => phase.status = value);
+                                  if (value != null) {
+                                    setDialogState(() {
+                                      phase.status = value;
+                                      if (value == 'Completed') {
+                                        phase.completedAt ??= DateTime.now();
+                                        phase.actualMinutes ??= phase.durationMinutes;
+                                      }
+                                    });
+                                  }
                                 },
+                              ),
+                              const SizedBox(height: 8),
+                              _PhaseBooleanPicker(
+                                label: 'Urgent *',
+                                value: phase.urgent,
+                                onChanged: (value) => setDialogState(() => phase.urgent = value),
+                              ),
+                              const SizedBox(height: 8),
+                              _PhaseBooleanPicker(
+                                label: 'Important *',
+                                value: phase.important,
+                                onChanged: (value) => setDialogState(() => phase.important = value),
                               ),
                               const SizedBox(height: 8),
                               DropdownButtonFormField<int>(
                                 value: phase.durationMinutes,
-                                decoration: InputDecoration(labelText: 'Phase Time', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                                decoration: InputDecoration(labelText: 'Estimated Time', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
                                 items: taskDurationOptions.map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
                                 onChanged: (value) {
                                   if (value != null) setDialogState(() => phase.durationMinutes = value);
                                 },
+                              ),
+                              if (phase.status == 'Completed') ...[
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<int>(
+                                  value: phase.actualMinutes ?? phase.durationMinutes,
+                                  decoration: InputDecoration(labelText: 'Actual Time Taken', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                                  items: taskDurationOptions.map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
+                                  onChanged: (value) {
+                                    if (value != null) setDialogState(() => phase.actualMinutes = value);
+                                  },
+                                ),
+                                const SizedBox(height: 6),
+                                Text('Completed: ${_formatPhaseCompletedAt(phase.completedAt)}'),
+                              ],
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: index == 0 ? null : () => setDialogState(() {
+                                      final item = projectPhases.removeAt(index);
+                                      projectPhases.insert(index - 1, item);
+                                    }),
+                                    icon: const Icon(Icons.arrow_upward, size: 16),
+                                    label: const Text('Up'),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: index >= projectPhases.length - 1 ? null : () => setDialogState(() {
+                                      final item = projectPhases.removeAt(index);
+                                      projectPhases.insert(index + 1, item);
+                                    }),
+                                    icon: const Icon(Icons.arrow_downward, size: 16),
+                                    label: const Text('Down'),
+                                  ),
+                                  const Spacer(),
+                                  TextButton.icon(
+                                    onPressed: projectPhases.length <= 1 ? null : () => setDialogState(() {
+                                      final removed = projectPhases.removeAt(index);
+                                      removed.dispose();
+                                    }),
+                                    icon: const Icon(Icons.delete_outline, size: 16),
+                                    label: const Text('Delete'),
+                                  ),
+                                ],
                               ),
                             ]),
                           );
@@ -378,6 +446,16 @@ Future<Task?> showTaskFormDialog(
                     ),
                   ),
                   const SizedBox(height: 12),
+                ],
+                if (isEditing) ...[
+                  const SizedBox(height: 12),
+                  _TaskInstructionSection(
+                    hiveService: hiveService,
+                    taskName: nameController.text.trim().isEmpty ? (initialTask?.task ?? '') : nameController.text.trim(),
+                    isRoutine: repeatTask,
+                    phaseNames: repeatTask ? const <String>[] : projectPhases.map((phase) => phase.nameController.text.trim()).where((name) => name.isNotEmpty).toList(),
+                    onChanged: () => setDialogState(() {}),
+                  ),
                 ],
                 if (!repeatTask) ...[
                   DropdownButtonFormField<String>(
@@ -565,6 +643,271 @@ Future<Task?> showTaskFormDialog(
 }
 
 
+
+class _TaskInstructionSection extends StatelessWidget {
+  final HiveService hiveService;
+  final String taskName;
+  final bool isRoutine;
+  final List<String> phaseNames;
+  final VoidCallback onChanged;
+
+  const _TaskInstructionSection({
+    required this.hiveService,
+    required this.taskName,
+    required this.isRoutine,
+    required this.phaseNames,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final linked = _linkedInstructionsForTask(hiveService, taskName);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F4FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(child: Text('Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+              Text('${linked.length} linked', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            isRoutine ? 'Configure routine rules here. Update them from the occurrence popup.' : 'Attach rules to the whole task or a phase. Status updates happen during completion.',
+            style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 10),
+          if (linked.isEmpty)
+            const Text('No instructions linked yet.', style: TextStyle(color: Colors.black54))
+          else
+            ...linked.map((instruction) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(radius: 13, backgroundColor: Color(instruction.colorValue).withOpacity(0.16), child: Icon(Icons.rule_rounded, color: Color(instruction.colorValue), size: 15)),
+                  title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: Text('Bonus: +${instruction.bonusPoints}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}'),
+                )),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: taskName.trim().isEmpty ? null : () async {
+                  await _showAddInstructionForTaskDialog(context, hiveService, taskName, phaseNames);
+                  onChanged();
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Add Instruction'),
+              ),
+              OutlinedButton.icon(
+                onPressed: taskName.trim().isEmpty ? null : () async {
+                  await _showLinkInstructionDialog(context, hiveService, taskName, phaseNames);
+                  onChanged();
+                },
+                icon: const Icon(Icons.link_rounded),
+                label: const Text('Link Existing Instruction'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, String taskName) {
+  final normalizedName = taskName.trim();
+  if (normalizedName.isEmpty) return const <InstructionRule>[];
+  return hiveService.getInstructions().where((instruction) => instruction.isLinkedToTask(normalizedName)).toList();
+}
+
+Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames) async {
+  final nameController = TextEditingController();
+  final descriptionController = TextEditingController();
+  final bonusController = TextEditingController(text: '20');
+  final xpController = TextEditingController(text: '5');
+  var repeatType = InstructionRule.repeatDaily;
+  var enabled = true;
+  var streakTracking = true;
+  var colorValue = 0xFF43A047;
+  var linkedPhase = '';
+  final instruction = await showDialog<InstructionRule>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Add Instruction'),
+        content: SingleChildScrollView(
+          child: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
+                TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+                if (phaseNames.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: linkedPhase.isEmpty ? '__whole_task__' : linkedPhase,
+                    decoration: const InputDecoration(labelText: 'Attach To'),
+                    items: [
+                      const DropdownMenuItem(value: '__whole_task__', child: Text('Whole Task')),
+                      ...phaseNames.map((phase) => DropdownMenuItem(value: phase, child: Text('Phase: $phase'))),
+                    ],
+                    onChanged: (value) => setDialogState(() => linkedPhase = value == '__whole_task__' ? '' : value ?? ''),
+                  ),
+                ],
+                DropdownButtonFormField<String>(
+                  value: repeatType,
+                  decoration: const InputDecoration(labelText: 'Repeat Type'),
+                  items: const [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly, InstructionRule.repeatOneTime]
+                      .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                      .toList(),
+                  onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
+                ),
+                TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+                TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final color in const [0xFF43A047, 0xFF1E88E5, 0xFFFF9800, 0xFF8E24AA, 0xFFE53935])
+                      ChoiceChip(
+                        selected: colorValue == color,
+                        label: const Text(''),
+                        avatar: CircleAvatar(backgroundColor: Color(color)),
+                        onSelected: (_) => setDialogState(() => colorValue = color),
+                      ),
+                  ],
+                ),
+                SwitchListTile(value: enabled, onChanged: (value) => setDialogState(() => enabled = value), title: const Text('Enable Instruction')),
+                SwitchListTile(value: streakTracking, onChanged: (value) => setDialogState(() => streakTracking = value), title: const Text('Streak Tracking')),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(
+              context,
+              InstructionRule(
+                id: 'instruction_${DateTime.now().microsecondsSinceEpoch}',
+                name: nameController.text.trim().isEmpty ? 'Instruction' : nameController.text.trim(),
+                description: descriptionController.text.trim(),
+                linkedTask: InstructionRule.encodeLinks([taskName]),
+                linkedPhase: linkedPhase.trim(),
+                repeatType: repeatType,
+                bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
+                xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
+                colorValue: colorValue,
+                enabled: enabled,
+                streakTracking: streakTracking,
+                createdAt: DateTime.now(),
+              ),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (instruction != null) await hiveService.saveInstruction(instruction);
+}
+
+Future<void> _showLinkInstructionDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames) async {
+  final searchController = TextEditingController();
+  var selectedIds = <String>{};
+  var linkedPhase = '';
+  final selected = await showDialog<Set<String>>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        final query = searchController.text.trim().toLowerCase();
+        final instructions = hiveService.getInstructions().where((instruction) {
+          if (instruction.isLinkedToTask(taskName)) return false;
+          if (query.isEmpty) return true;
+          return instruction.name.toLowerCase().contains(query) || instruction.description.toLowerCase().contains(query);
+        }).toList();
+        return AlertDialog(
+          title: const Text('Link Existing Instruction'),
+          content: SizedBox(
+            width: 460,
+            height: 460,
+            child: Column(
+              children: [
+                TextField(
+                  controller: searchController,
+                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search instructions...'),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+                if (phaseNames.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: linkedPhase.isEmpty ? '__whole_task__' : linkedPhase,
+                    decoration: const InputDecoration(labelText: 'Attach To'),
+                    items: [
+                      const DropdownMenuItem(value: '__whole_task__', child: Text('Whole Task')),
+                      ...phaseNames.map((phase) => DropdownMenuItem(value: phase, child: Text('Phase: $phase'))),
+                    ],
+                    onChanged: (value) => setDialogState(() => linkedPhase = value == '__whole_task__' ? '' : value ?? ''),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Expanded(
+                  child: instructions.isEmpty
+                      ? const Center(child: Text('No matching instructions found.'))
+                      : ListView(
+                          children: instructions.map((instruction) {
+                            final checked = selectedIds.contains(instruction.id);
+                            return CheckboxListTile(
+                              value: checked,
+                              title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                              subtitle: Text('+${instruction.bonusPoints} bonus points'),
+                              onChanged: (value) => setDialogState(() {
+                                selectedIds = {...selectedIds};
+                                if (value == true) {
+                                  selectedIds.add(instruction.id);
+                                } else {
+                                  selectedIds.remove(instruction.id);
+                                }
+                              }),
+                            );
+                          }).toList(),
+                        ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(onPressed: selectedIds.isEmpty ? null : () => Navigator.pop(context, selectedIds), child: const Text('Link Selected')),
+          ],
+        );
+      },
+    ),
+  );
+  if (selected == null || selected.isEmpty) return;
+  for (final instruction in hiveService.getInstructions()) {
+    if (!selected.contains(instruction.id)) continue;
+    final linkedTasks = [...instruction.linkedTasks, taskName];
+    await hiveService.saveInstruction(
+      instruction.copyWith(
+        linkedTask: InstructionRule.encodeLinks(linkedTasks),
+        linkedPhase: linkedPhase.trim().isEmpty ? instruction.linkedPhase : linkedPhase.trim(),
+      ),
+    );
+  }
+}
+
 class _ScheduleDraft {
   final bool enabled;
   final TimeOfDay? start;
@@ -689,9 +1032,79 @@ Future<bool> showQuickAddTaskDialog(
   return false;
 }
 
+
+
+class _PhaseBooleanPicker extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _PhaseBooleanPicker({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F4FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Row(
+            children: [
+              Expanded(
+                child: RadioListTile<bool>(
+                  value: true,
+                  groupValue: value,
+                  title: const Text('Yes'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (next) => onChanged(next ?? false),
+                ),
+              ),
+              Expanded(
+                child: RadioListTile<bool>(
+                  value: false,
+                  groupValue: value,
+                  title: const Text('No'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (next) => onChanged(next ?? false),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatPhaseCompletedAt(DateTime? completedAt) {
+  if (completedAt == null) return 'Saved when you save this task';
+  final hour = completedAt.hour;
+  final minute = completedAt.minute.toString().padLeft(2, '0');
+  final period = hour >= 12 ? 'PM' : 'AM';
+  final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+  return '${completedAt.month}/${completedAt.day}/${completedAt.year} • $displayHour:$minute $period';
+}
+
 class _ProjectPhaseDraft {
   String status;
   int durationMinutes;
+  bool urgent;
+  bool important;
+  int? actualMinutes;
+  DateTime? completedAt;
   final TextEditingController nameController;
   final TextEditingController descriptionController;
 
@@ -700,6 +1113,10 @@ class _ProjectPhaseDraft {
     required this.durationMinutes,
     required this.nameController,
     required this.descriptionController,
+    this.urgent = false,
+    this.important = false,
+    this.actualMinutes,
+    this.completedAt,
   });
 
   void dispose() {
@@ -727,6 +1144,10 @@ class _ProjectPhaseDraft {
         _ProjectPhaseDraft(
           status: parts[2].trim().isEmpty ? 'Not Started' : parts[2].trim(),
           durationMinutes: _parseDuration(parts.length > 3 ? parts[3] : null),
+          urgent: _parseBool(parts.length > 4 ? parts[4] : null),
+          important: _parseBool(parts.length > 5 ? parts[5] : null),
+          actualMinutes: parts.length > 6 ? _parseOptionalDuration(parts[6]) : null,
+          completedAt: parts.length > 7 ? DateTime.tryParse(parts[7].trim()) : null,
           nameController: TextEditingController(text: parts[0].trim()),
           descriptionController: TextEditingController(text: parts[1].trim()),
         ),
@@ -739,17 +1160,23 @@ class _ProjectPhaseDraft {
     final cleanBase = baseDescription.split(taskPhaseMarker).first.trim();
     final serializedPhases = phases
         .where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty)
-        .map((phase) => serializeTaskPhase(
-              name: phase.nameController.text,
-              description: phase.descriptionController.text,
-              status: phase.status,
-              minutes: phase.durationMinutes,
-            ))
+        .map((phase) {
+          final completedAt = phase.status == 'Completed' ? (phase.completedAt ?? DateTime.now()) : null;
+          return serializeTaskPhase(
+            name: phase.nameController.text,
+            description: phase.descriptionController.text,
+            status: phase.status,
+            minutes: phase.durationMinutes,
+            urgent: phase.urgent,
+            important: phase.important,
+            actualMinutes: phase.status == 'Completed' ? (phase.actualMinutes ?? phase.durationMinutes) : null,
+            completedAt: completedAt,
+          );
+        })
         .join('\n');
     if (serializedPhases.isEmpty) return cleanBase;
     return '$cleanBase\n\n$taskPhaseMarker\n$serializedPhases'.trim();
   }
-
 
   static String inferTaskStatus(List<_ProjectPhaseDraft> phases, String fallbackStatus) {
     final active = phases
@@ -770,6 +1197,22 @@ class _ProjectPhaseDraft {
     final activePhases = phases.where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty).toList();
     final source = activePhases.isEmpty ? phases : activePhases;
     return source.fold<int>(0, (sum, phase) => sum + normalizeTaskDuration(phase.durationMinutes));
+  }
+
+  static bool _parseBool(String? rawValue) {
+    final normalized = (rawValue ?? '').trim().toLowerCase();
+    return normalized == 'true' || normalized == 'yes' || normalized == '1';
+  }
+
+  static int _parseDuration(String? rawValue) {
+    final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
+    return normalizeTaskDuration(parsed);
+  }
+
+  static int? _parseOptionalDuration(String? rawValue) {
+    final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
+    if (parsed == null) return null;
+    return normalizeTaskDuration(parsed);
   }
 
   static int _parseDuration(String? rawValue) {

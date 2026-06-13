@@ -9,15 +9,24 @@ class TaskPhaseInfo {
   final String description;
   final String status;
   final int minutes;
+  final bool urgent;
+  final bool important;
+  final int? actualMinutes;
+  final DateTime? completedAt;
 
   const TaskPhaseInfo({
     required this.name,
     required this.description,
     required this.status,
     required this.minutes,
+    this.urgent = false,
+    this.important = false,
+    this.actualMinutes,
+    this.completedAt,
   });
 
   bool get isCompleted => status.trim().toLowerCase() == 'completed';
+  int get recordedMinutes => normalizeTaskDuration(actualMinutes ?? minutes);
 }
 
 int normalizeTaskDuration(int? minutes) {
@@ -42,6 +51,10 @@ List<TaskPhaseInfo> parseTaskPhases(String description) {
         description: parts[1].trim(),
         status: parts[2].trim().isEmpty ? 'Not Started' : parts[2].trim(),
         minutes: _parseDuration(parts.length > 3 ? parts[3] : null),
+        urgent: _parseBool(parts.length > 4 ? parts[4] : null),
+        important: _parseBool(parts.length > 5 ? parts[5] : null),
+        actualMinutes: parts.length > 6 ? _parseOptionalDuration(parts[6]) : null,
+        completedAt: parts.length > 7 ? DateTime.tryParse(parts[7].trim()) : null,
       ),
     );
   }
@@ -54,8 +67,14 @@ String serializeTaskPhase({
   required String description,
   required String status,
   required int minutes,
+  bool urgent = false,
+  bool important = false,
+  int? actualMinutes,
+  DateTime? completedAt,
 }) {
-  return '${name.trim()} | ${description.trim()} | $status | ${normalizeTaskDuration(minutes)}';
+  final actual = actualMinutes == null ? '' : '${normalizeTaskDuration(actualMinutes)}';
+  final completed = completedAt?.toIso8601String() ?? '';
+  return '${name.trim()} | ${description.trim()} | $status | ${normalizeTaskDuration(minutes)} | ${urgent ? 'true' : 'false'} | ${important ? 'true' : 'false'} | $actual | $completed';
 }
 
 int taskPlannedMinutes(Task task) {
@@ -78,7 +97,7 @@ int taskRecordedMinutesForDay(Task task) {
   if (phases.isNotEmpty) {
     return phases
         .where((phase) => phase.isCompleted)
-        .fold<int>(0, (sum, phase) => sum + normalizeTaskDuration(phase.minutes));
+        .fold<int>(0, (sum, phase) => sum + phase.recordedMinutes);
   }
 
   return _isCompletedTask(task) ? taskPlannedMinutes(task) : 0;
@@ -88,8 +107,18 @@ bool _isCompletedTask(Task task) {
   return task.done || task.status.trim().toLowerCase() == 'completed';
 }
 
+bool _parseBool(String? rawValue) {
+  final normalized = (rawValue ?? '').trim().toLowerCase();
+  return normalized == 'true' || normalized == 'yes' || normalized == '1';
+}
 
 int _parseDuration(String? rawValue) {
   final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
+  return normalizeTaskDuration(parsed);
+}
+
+int? _parseOptionalDuration(String? rawValue) {
+  final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
+  if (parsed == null) return null;
   return normalizeTaskDuration(parsed);
 }

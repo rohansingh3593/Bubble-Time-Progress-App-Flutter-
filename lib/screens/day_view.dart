@@ -77,7 +77,7 @@ class _DayViewState extends State<DayView> {
 
   Future<void> _editTask(Task task, {int? index}) async {
     if (isRoutineTask(task)) {
-      final action = await showRoutineOccurrenceDialog(context: context, task: task);
+      final action = await showRoutineOccurrenceDialog(context: context, task: task, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {
@@ -202,14 +202,7 @@ class _DayViewState extends State<DayView> {
     return 'Poor ❌';
   }
 
-  String _formatHours(double hours) {
-    if (hours == 0) return '0 hrs';
-    final wholeHours = hours.floor();
-    final minutes = ((hours - wholeHours) * 60).round();
-    if (wholeHours == 0) return '$minutes min';
-    if (minutes == 0) return '$wholeHours hrs';
-    return '$wholeHours hrs $minutes min';
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -307,110 +300,236 @@ class _DayViewState extends State<DayView> {
   }
 
   Widget _metricsPanel(Map<String, double> matrix) {
-    Widget cell({
-      required String label,
-      required String key,
-      required Color color,
-    }) {
-      final hours = matrix['${key}Hours'] ?? 0;
-      final percentage = matrix[key] ?? 0;
-      final points = matrix['${key}Points'] ?? 0;
-      return Container(
-        alignment: Alignment.center,
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(border: Border.all(color: Colors.black54), color: color.withOpacity(0.08)),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(label, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-              const SizedBox(height: 3),
-              Text(_formatHours(hours), style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text('${percentage.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12)),
-              Text('${points.round()} pts', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-            ],
-          ),
-        ),
-      );
-    }
-
     final productivityScore = matrix['productivityScore'] ?? 0;
     final totalPoints = matrix['totalPoints'] ?? 0;
+    final focusedHours = matrix['focusedHours'] ?? 0;
 
     return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(border: Border.all(color: Colors.black45), borderRadius: BorderRadius.circular(12), color: Colors.white),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.black.withOpacity(0.08)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 18, offset: const Offset(0, 10))],
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Total hours recorded: ${matrix['totalHours']!.toStringAsFixed(1)}'),
-          const SizedBox(height: 8),
+          Center(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: matrix['totalHours'] ?? 0.0),
+              duration: const Duration(milliseconds: 650),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) => Text(
+                'Total hours recorded: ${value.toStringAsFixed(1)}',
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = (constraints.maxWidth - 12) / 2;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _matrixSummaryCard(width: cardWidth, emoji: '📈', label: 'Score', value: productivityScore, suffix: '%', decimals: 0, color: const Color(0xFF8E8CFF)),
+                  _matrixSummaryTextCard(width: cardWidth, emoji: '💪', label: 'Rating', value: _productivityRating(productivityScore), color: const Color(0xFF7E57C2)),
+                  _matrixSummaryCard(width: cardWidth, emoji: '⭐', label: 'Points', value: totalPoints, suffix: ' / 1600', decimals: 0, color: const Color(0xFFFF9800)),
+                  _matrixSummaryCard(width: cardWidth, emoji: '🎯', label: 'Focus', value: focusedHours, suffix: ' hrs', decimals: 1, color: const Color(0xFF2196F3)),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 18),
+          const Text('Daily Productivity Matrix', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+          const SizedBox(height: 4),
+          Text('Completed time, percentage share, and points by urgency/importance.', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w600, fontSize: 12)),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 620;
+              final cardWidth = wide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _matrixQuadrantCard(width: cardWidth, emoji: '🔥', title: 'Both', rate: '100 pts/hr', keyPrefix: 'ui', color: const Color(0xFFE91E63), matrix: matrix),
+                  _matrixQuadrantCard(width: cardWidth, emoji: '💙', title: 'Important Only', rate: '80 pts/hr', keyPrefix: 'ni', color: const Color(0xFF2196F3), matrix: matrix),
+                  _matrixQuadrantCard(width: cardWidth, emoji: '⚡', title: 'Urgent Only', rate: '50 pts/hr', keyPrefix: 'uu', color: const Color(0xFFFFC107), matrix: matrix),
+                  _matrixQuadrantCard(width: cardWidth, emoji: '🌫️', title: 'Neither', rate: '10 pts/hr', keyPrefix: 'nu', color: const Color(0xFF9E9E9E), matrix: matrix),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 14),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
-            child: Wrap(
-              spacing: 16,
-              runSpacing: 8,
-              children: [
-                Text('Productivity Score: ${productivityScore.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.w800)),
-                Text('Rating: ${_productivityRating(productivityScore)}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                Text('Total Points: ${totalPoints.round()} / 1600'),
-                Text('Focused Hours: ${_formatHours(matrix['focusedHours'] ?? 0)}'),
-                Text('Distraction Hours: ${_formatHours(matrix['distractionHours'] ?? 0)}'),
-              ],
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F7FF),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFF8E8CFF).withOpacity(0.22)),
             ),
-          ),
-          const SizedBox(height: 10),
-          const Text('Daily Productivity Matrix (by completed time, % and points)'),
-          const SizedBox(height: 6),
-          SizedBox(
-            height: 240,
-            child: Row(
-              children: [
-                const RotatedBox(quarterTurns: 3, child: Text('Urgent')),
-                Expanded(
-                  child: Column(
-                    children: [
-                      const Row(
-                        children: [
-                          Expanded(child: Center(child: Text('Important: No', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)))),
-                          Expanded(child: Center(child: Text('Important: Yes', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)))),
-                        ],
-                      ),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Expanded(child: cell(label: 'Urgent Only\n50 pts/hr', key: 'uu', color: Colors.amber)),
-                            Expanded(child: cell(label: 'Both\n100 pts/hr', key: 'ui', color: Colors.redAccent)),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Expanded(child: cell(label: 'Neither\n10 pts/hr', key: 'nu', color: Colors.grey)),
-                            Expanded(child: cell(label: 'Important Only\n80 pts/hr', key: 'ni', color: Colors.blueAccent)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            child: Text(
+              _matrixInsight(matrix),
+              style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF263238)),
             ),
-          ),
-          const Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [Text('Not Important'), Text('Important')]),
-          const SizedBox(height: 6),
-          Text(
-            'Ideal target: Both 6–8 hrs • Important only 3–5 hrs • Urgent only 1–2 hrs • Neither ≤1 hr',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[700], fontSize: 12),
           ),
         ],
       ),
     );
+  }
+
+  Widget _matrixSummaryCard({
+    required double width,
+    required String emoji,
+    required String label,
+    required double value,
+    required String suffix,
+    required int decimals,
+    required Color color,
+  }) {
+    return SizedBox(
+      width: width,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.0, end: value),
+        duration: const Duration(milliseconds: 750),
+        curve: Curves.easeOutCubic,
+        builder: (context, animatedValue, _) => Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: color.withOpacity(0.18)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('$emoji  $label', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w900, fontSize: 12)),
+              const SizedBox(height: 7),
+              Text('${animatedValue.toStringAsFixed(decimals)}$suffix', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 19)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _matrixSummaryTextCard({
+    required double width,
+    required String emoji,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return SizedBox(
+      width: width,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: color.withOpacity(0.18)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$emoji  $label', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w900, fontSize: 12)),
+            const SizedBox(height: 7),
+            Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 19)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _matrixQuadrantCard({
+    required double width,
+    required String emoji,
+    required String title,
+    required String rate,
+    required String keyPrefix,
+    required Color color,
+    required Map<String, double> matrix,
+  }) {
+    final hours = matrix['${keyPrefix}Hours'] ?? 0;
+    final percentage = matrix[keyPrefix] ?? 0;
+    final points = matrix['${keyPrefix}Points'] ?? 0;
+    return SizedBox(
+      width: width,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.0, end: 1.0),
+        duration: const Duration(milliseconds: 700),
+        curve: Curves.easeOutCubic,
+        builder: (context, progress, child) => Opacity(
+          opacity: progress,
+          child: Transform.translate(offset: Offset(0, 10 * (1 - progress)), child: child),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [color.withOpacity(0.18), Colors.white], begin: Alignment.topLeft, end: Alignment.bottomRight),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: color.withOpacity(0.28)),
+            boxShadow: [BoxShadow(color: color.withOpacity(0.08), blurRadius: 14, offset: const Offset(0, 8))],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: color.withOpacity(0.18), borderRadius: BorderRadius.circular(14)),
+                    child: Text(emoji, style: const TextStyle(fontSize: 18)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(rate, style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w800)),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: _animatedSmallMetric(label: 'Hours', value: hours, suffix: 'h', decimals: 1)),
+                  Expanded(child: _animatedSmallMetric(label: 'Share', value: percentage, suffix: '%', decimals: 0)),
+                  Expanded(child: _animatedSmallMetric(label: 'Points', value: points, suffix: ' pts', decimals: 0)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _animatedSmallMetric({required String label, required double value, required String suffix, required int decimals}) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: value),
+      duration: const Duration(milliseconds: 700),
+      curve: Curves.easeOutCubic,
+      builder: (context, animatedValue, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${animatedValue.toStringAsFixed(decimals)}$suffix', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+          Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 10, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+
+  String _matrixInsight(Map<String, double> matrix) {
+    final neitherHours = matrix['nuHours'] ?? 0;
+    final importantOnlyHours = matrix['niHours'] ?? 0;
+    final bothHours = matrix['uiHours'] ?? 0;
+    final urgentOnlyHours = matrix['uuHours'] ?? 0;
+    if (neitherHours > 1) return 'Tip: Keep Neither below 1 hour and move low-value work into focused blocks.';
+    if (importantOnlyHours < 3 && bothHours < 6) return 'Tip: Increase Important Only work and keep Neither below 1 hour.';
+    if (urgentOnlyHours > bothHours + importantOnlyHours) return 'Tip: Reduce urgent-only firefighting by planning important work earlier.';
+    return 'Tip: Great balance — protect deep work and keep low-value tasks capped.';
   }
 
   Widget _todayTasksPanel(List<Task> tasks) {
@@ -450,7 +569,7 @@ class _DayViewState extends State<DayView> {
                           dense: true,
                           onTap: () => _editTask(task),
                           title: Text(task.task),
-                          subtitle: Text('${task.priority} • ${task.status} • ${taskPlannedMinutes(task)} min'),
+                          subtitle: Text(_taskSubtitle(task)),
                         );
                       },
                     ),
@@ -459,6 +578,26 @@ class _DayViewState extends State<DayView> {
         ],
       ),
     );
+  }
+
+
+  String _taskSubtitle(Task task) {
+    final phases = parseTaskPhases(task.description);
+    if (!task.repeatTask && phases.isNotEmpty) {
+      final completed = phases.where((phase) => phase.isCompleted).length;
+      TaskPhaseInfo? nextPhase;
+      for (final phase in phases) {
+        if (!phase.isCompleted && phase.status.toLowerCase() != 'cancelled') {
+          nextPhase = phase;
+          break;
+        }
+      }
+      final nextLabel = nextPhase == null
+          ? 'All phases complete'
+          : 'Next: ${nextPhase.name.isEmpty ? 'Phase' : nextPhase.name} • ${nextPhase.minutes} min';
+      return '$completed/${phases.length} phases • $nextLabel';
+    }
+    return '${task.priority} • ${task.status} • ${taskPlannedMinutes(task)} min';
   }
 
   Widget _reflectionPanel() {

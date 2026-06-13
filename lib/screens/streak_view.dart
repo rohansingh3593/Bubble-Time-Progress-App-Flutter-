@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
+import '../models/instruction.dart';
 import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/rank_profile.dart';
@@ -83,6 +84,8 @@ class StreakView extends StatelessWidget {
                 const SizedBox(height: 14),
                 _RecurringTaskListView(hiveService: hiveService, habits: habits, today: stats.today),
                 const SizedBox(height: 14),
+                _InstructionStreakPanel(hiveService: hiveService, today: stats.today),
+                const SizedBox(height: 14),
                 _HabitTrackerSection(
                   hiveService: hiveService,
                   habits: habits,
@@ -100,6 +103,110 @@ class StreakView extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+
+class _InstructionStreakPanel extends StatelessWidget {
+  final HiveService hiveService;
+  final DateTime today;
+
+  const _InstructionStreakPanel({required this.hiveService, required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    final instructions = hiveService.getStandaloneInstructions().where((instruction) => instruction.enabled).toList();
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.primary.withOpacity(0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('📘 Instruction Streaks', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          const SizedBox(height: 10),
+          if (instructions.isEmpty)
+            const Text('No active standalone instructions yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+          else
+            ...instructions.map((instruction) {
+              final entry = hiveService.instructionEntryForDate(instruction, today);
+              final color = entry?.followed == true
+                  ? Colors.green
+                  : entry?.missed == true
+                      ? Colors.red
+                      : Color(instruction.colorValue);
+              final bubbleDates = _instructionBubbleDates(today);
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: color.withOpacity(0.10), borderRadius: BorderRadius.circular(16)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.rule_folder_outlined, color: color),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary))),
+                        Text('${hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: bubbleDates.map((date) {
+                          final dateEntry = hiveService.instructionEntryForDate(instruction, date);
+                          return _InstructionDateBubble(date: date, completed: dateEntry?.followed == true);
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+}
+
+
+List<DateTime> _instructionBubbleDates(DateTime today) {
+  final normalizedToday = DateTime(today.year, today.month, today.day);
+  return List<DateTime>.generate(14, (index) => normalizedToday.subtract(Duration(days: 13 - index)));
+}
+
+class _InstructionDateBubble extends StatelessWidget {
+  final DateTime date;
+  final bool completed;
+
+  const _InstructionDateBubble({required this.date, required this.completed});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = completed ? Colors.green : Colors.red;
+    final label = completed ? 'Completed' : 'Missed';
+    return Tooltip(
+      message: '${date.day}/${date.month}/${date.year} • $label',
+      child: Container(
+        width: 28,
+        height: 28,
+        margin: const EdgeInsets.only(right: 6),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color.withOpacity(0.16),
+          border: Border.all(color: color.withOpacity(0.55), width: 1.2),
+          boxShadow: [
+            BoxShadow(color: color.withOpacity(0.12), blurRadius: 8, offset: const Offset(0, 3)),
+          ],
+        ),
+        child: Icon(completed ? Icons.check_rounded : Icons.close_rounded, size: 16, color: color),
       ),
     );
   }
@@ -760,6 +867,32 @@ class _WeeklyDateIndicator extends StatelessWidget {
 }
 
 
+class _StreakEmojiLegend extends StatelessWidget {
+  const _StreakEmojiLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    const items = [
+      ('🤩', 'Perfect'),
+      ('😊', 'Completed'),
+      ('😞', 'Missed'),
+      ('😠', 'Repeated'),
+      ('➖', 'Future'),
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: items.map((item) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(999), border: Border.all(color: Colors.black12)),
+          child: Text('${item.$1} ${item.$2}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+        );
+      }).toList(),
+    );
+  }
+}
+
 class _RecurringTaskListView extends StatelessWidget {
   final HiveService hiveService;
   final List<_HabitTracker> habits;
@@ -782,9 +915,11 @@ class _RecurringTaskListView extends StatelessWidget {
           const Text('Daily Streak Board', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
           const Text(
-            'Active daily and weekly recurring habits. Completed days use the selected task color, missed or cancelled days stay red, and future or unset days stay neutral.',
+            'A living emoji habit map. Completed days use the selected task color, missed days stay red, and future/unset days stay neutral.',
             style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
           ),
+          const SizedBox(height: 10),
+          const _StreakEmojiLegend(),
           const SizedBox(height: 14),
           if (boardHabits.isEmpty)
             const _EmptyState(message: 'No active daily or weekly recurring habits yet. Add a repeating task to build a streak board.')
@@ -1009,7 +1144,14 @@ class _DailyStreakBoardState extends State<_DailyStreakBoard> {
                   children: [
                     _StreakBoardDateHeader(dates: widget.dates, today: widget.today, layout: layout),
                     SizedBox(height: layout.rowSpacing),
-                    ...widget.habits.map((habit) => _StreakBoardActivityRow(habit: habit, dates: widget.dates, today: widget.today, layout: layout)),
+                    ...widget.habits.asMap().entries.map((entry) => _StreakBoardActivityRow(
+                          hiveService: widget.hiveService,
+                          habit: entry.value,
+                          rowIndex: entry.key,
+                          dates: widget.dates,
+                          today: widget.today,
+                          layout: layout,
+                        )),
                   ],
                 ),
               ),
@@ -1070,13 +1212,13 @@ class _StreakBoardLayout {
     final targetVisibleDates = isLarge ? 12.0 : isSmall ? 5.0 : 7.0;
     final cellSpacing = isTiny ? 2.0 : isSmall ? 2.5 : isLarge ? 4.0 : 3.0;
     final blockSize = _clampDouble((gridWidth / targetVisibleDates) - (cellSpacing * 2), isTiny ? 28 : 32, isLarge ? 48 : 42);
-    final rowSpacing = habitCount > 8 || isTiny ? 5.0 : 8.0;
+    final rowSpacing = habitCount > 8 || isTiny ? 8.0 : 12.0;
 
     return _StreakBoardLayout(
       taskColumnWidth: taskColumnWidth,
       blockSize: blockSize,
-      rowHeight: math.max(36, blockSize),
-      headerHeight: blockSize + (isTiny ? 8 : 12),
+      rowHeight: math.max(54, blockSize + 12),
+      headerHeight: blockSize + (isTiny ? 18 : 22),
       dateCellWidth: blockSize,
       cellSpacing: cellSpacing,
       rowSpacing: rowSpacing,
@@ -1085,7 +1227,7 @@ class _StreakBoardLayout {
       streakFontSize: isTiny ? 9 : 10,
       dateFontSize: isTiny ? 9.5 : 11,
       dayFontSize: isTiny ? 11.5 : 13,
-      iconSize: _clampDouble(blockSize * 0.38, 12, 16),
+      iconSize: _clampDouble(blockSize * 0.48, 14, 20),
       radius: _clampDouble(blockSize * 0.30, 9, 14),
     );
   }
@@ -1129,14 +1271,21 @@ class _StreakBoardDateHeader extends StatelessWidget {
             color: isToday ? AppColors.accent.withOpacity(0.14) : Colors.transparent,
             borderRadius: BorderRadius.circular(layout.radius),
             border: Border.all(color: isToday ? AppColors.accent : Colors.transparent, width: 1.4),
+            boxShadow: isToday
+                ? [BoxShadow(color: AppColors.accent.withOpacity(0.24), blurRadius: 14, spreadRadius: 1)]
+                : null,
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(_weekdayLabel(date), style: TextStyle(fontSize: layout.dateFontSize, color: isToday ? AppColors.accent : Colors.black54, fontWeight: FontWeight.w800)),
-              SizedBox(height: layout.cellSpacing / 2),
-              Text('${date.day}', style: TextStyle(fontSize: layout.dayFontSize, color: isToday ? AppColors.accent : Colors.black87, fontWeight: FontWeight.w900)),
-            ],
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(_weekdayLabel(date), style: TextStyle(fontSize: layout.dateFontSize, color: isToday ? AppColors.accent : Colors.black54, fontWeight: FontWeight.w800)),
+                SizedBox(height: layout.cellSpacing / 2),
+                Text('${date.day}', style: TextStyle(fontSize: layout.dayFontSize, color: isToday ? AppColors.accent : Colors.black87, fontWeight: FontWeight.w900)),
+              ],
+            ),
           ),
         );
       }).toList(),
@@ -1162,7 +1311,12 @@ class _StreakBoardTaskNameCell extends StatelessWidget {
         height: layout.rowHeight,
         margin: EdgeInsets.only(bottom: layout.rowSpacing, right: layout.cellSpacing * 2),
         padding: EdgeInsets.symmetric(horizontal: layout.horizontalPadding),
-        decoration: BoxDecoration(color: taskColor.withOpacity(0.08), borderRadius: BorderRadius.circular(layout.radius), border: Border.all(color: taskColor.withOpacity(0.16))),
+        decoration: BoxDecoration(
+          color: taskColor.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(layout.radius + 6),
+          border: Border.all(color: taskColor.withOpacity(0.18)),
+          boxShadow: [BoxShadow(color: taskColor.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
         child: Row(
           children: [
             Container(width: layout.iconSize * 0.7, height: layout.iconSize * 0.7, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
@@ -1173,7 +1327,7 @@ class _StreakBoardTaskNameCell extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(habit.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w900, fontSize: layout.titleFontSize)),
-                  Text('${habit.currentStreak} ${habit.repeatFrequency == 'Weekly' ? 'wk' : 'day'} streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700, fontSize: layout.streakFontSize)),
+                  Text('${habit.repeatFrequency} • ${habit.currentStreak} ${habit.repeatFrequency == 'Weekly' ? 'wk' : 'day'} streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700, fontSize: layout.streakFontSize)),
                 ],
               ),
             ),
@@ -1185,40 +1339,61 @@ class _StreakBoardTaskNameCell extends StatelessWidget {
 }
 
 class _StreakBoardActivityRow extends StatelessWidget {
+  final HiveService hiveService;
   final _HabitTracker habit;
+  final int rowIndex;
   final List<DateTime> dates;
   final DateTime today;
   final _StreakBoardLayout layout;
 
-  const _StreakBoardActivityRow({required this.habit, required this.dates, required this.today, required this.layout});
+  const _StreakBoardActivityRow({required this.hiveService, required this.habit, required this.rowIndex, required this.dates, required this.today, required this.layout});
 
   @override
   Widget build(BuildContext context) {
     final taskColor = Color(habit.template.colorValue);
-    return SizedBox(
-      height: layout.rowHeight + layout.rowSpacing,
-      child: Row(
-        children: dates.map((date) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: Duration(milliseconds: 420 + (rowIndex * 55)),
+      curve: Curves.easeOutCubic,
+      builder: (context, progress, child) => Opacity(
+        opacity: progress,
+        child: Transform.translate(offset: Offset(0, 10 * (1 - progress)), child: child),
+      ),
+      child: SizedBox(
+        height: layout.rowHeight + layout.rowSpacing,
+        child: Row(
+          children: dates.map((date) {
           final status = _boardStatusFor(habit, date, today);
           final blockColor = _habitActivityBlockColor(habit, date, status, taskColor);
+          final emoji = _habitMoodEmojiForDate(hiveService, habit, date, today, status);
           final isToday = _isSameDate(date, today);
           return Tooltip(
-            message: '${habit.title} • ${_formatBoardDate(date)} • ${_statusLabel(status)}',
-            child: Container(
-              width: layout.blockSize,
-              height: layout.blockSize,
-              margin: EdgeInsets.symmetric(horizontal: layout.cellSpacing),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: blockColor,
-                borderRadius: BorderRadius.circular(layout.radius),
-                border: Border.all(color: isToday ? taskColor : Colors.transparent, width: isToday ? 2 : 1),
-                boxShadow: status == _HabitDayStatus.completed ? [BoxShadow(color: blockColor.withOpacity(0.22), blurRadius: 8, offset: const Offset(0, 3))] : null,
+            message: '${habit.title} • ${_formatBoardDate(date)} • ${_statusLabel(status)} • $emoji',
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.86, end: 1.0),
+              duration: Duration(milliseconds: 220 + (dates.indexOf(date) * 12)),
+              curve: Curves.easeOutBack,
+              builder: (context, scale, child) => Transform.scale(scale: isToday ? scale * 1.04 : scale, child: child),
+              child: Container(
+                width: layout.blockSize,
+                height: layout.blockSize,
+                margin: EdgeInsets.symmetric(horizontal: layout.cellSpacing),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: blockColor,
+                  borderRadius: BorderRadius.circular(layout.radius + 4),
+                  border: Border.all(color: isToday ? const Color(0xFFFFA726) : Colors.white.withOpacity(0.16), width: isToday ? 2.4 : 1),
+                  boxShadow: [
+                    if (isToday) BoxShadow(color: const Color(0xFF8E24AA).withOpacity(0.36), blurRadius: 16, spreadRadius: 1),
+                    if (status == _HabitDayStatus.completed) BoxShadow(color: blockColor.withOpacity(0.22), blurRadius: 8, offset: const Offset(0, 3)),
+                  ],
+                ),
+                child: Text(emoji, style: TextStyle(fontSize: layout.iconSize + 2)),
               ),
-              child: Icon(_statusIcon(status), size: layout.iconSize, color: status == _HabitDayStatus.none ? Colors.white30 : Colors.white),
             ),
           );
-        }).toList(),
+          }).toList(),
+        ),
       ),
     );
   }
@@ -1248,6 +1423,44 @@ _HabitDayStatus _boardStatusFor(_HabitTracker habit, DateTime date, DateTime tod
   final day = _dateOnly(date);
   if (day.isAfter(_dateOnly(today)) || day.isBefore(_dateOnly(habit.firstTrackedDate))) return _HabitDayStatus.none;
   return habit.statusFor(day);
+}
+
+String _habitMoodEmojiForDate(HiveService hiveService, _HabitTracker habit, DateTime date, DateTime today, _HabitDayStatus status) {
+  final day = _dateOnly(date);
+  if (status == _HabitDayStatus.none || day.isAfter(_dateOnly(today))) return '➖';
+  if (status == _HabitDayStatus.completed) {
+    final linkedInstructions = hiveService
+        .getTaskLinkedInstructions()
+        .where((instruction) => instruction.enabled && instruction.isLinkedToTask(habit.title))
+        .toList();
+    if (linkedInstructions.isEmpty) return '🙂';
+    final followed = linkedInstructions.where((instruction) {
+      return hiveService.instructionEntryForDate(instruction, day)?.followed ?? false;
+    }).length;
+    if (followed == linkedInstructions.length) return '🤩';
+    if (followed / linkedInstructions.length >= 0.75) return '😊';
+    return '😐';
+  }
+  final missedCount = _habitMissedRunEndingAt(habit, day);
+  if (missedCount >= 7) return '😵';
+  if (missedCount >= 4) return '😫';
+  if (missedCount >= 2) return '😠';
+  return '😞';
+}
+
+int _habitMissedRunEndingAt(_HabitTracker habit, DateTime date) {
+  var cursor = _dateOnly(date);
+  var count = 0;
+  while (!cursor.isBefore(_dateOnly(habit.firstTrackedDate))) {
+    final status = habit.statusFor(cursor);
+    if (status == _HabitDayStatus.missed || status == _HabitDayStatus.cancelled) {
+      count++;
+      cursor = cursor.subtract(const Duration(days: 1));
+      continue;
+    }
+    break;
+  }
+  return count;
 }
 
 String _weekdayLabel(DateTime date) => const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][date.weekday - 1];
@@ -1296,7 +1509,7 @@ class _HabitTrackerSection extends StatelessWidget {
           else
             ...habits.asMap().entries.map(
               (entry) => TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: 1),
+                tween: Tween(begin: 0.0, end: 1.0),
                 duration: Duration(milliseconds: 380 + (entry.key * 120)),
                 curve: Curves.easeOutCubic,
                 builder: (context, value, child) => Opacity(
@@ -1335,7 +1548,7 @@ class _HabitCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(22),
       onTap: () => _openTaskPerformanceDetail(context, hiveService, habit, today),
       child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0.97, end: 1),
+        tween: Tween(begin: 0.97, end: 1.0),
         duration: const Duration(milliseconds: 420),
         curve: Curves.easeOutBack,
         builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
@@ -1527,7 +1740,7 @@ class _HabitActivityGrid extends StatelessWidget {
             return Tooltip(
               message: '${date.month}/${date.day}: ${_statusLabel(status)}',
               child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0.85, end: 1),
+                tween: Tween(begin: 0.85, end: 1.0),
                 duration: Duration(milliseconds: 250 + (index * 14)),
                 curve: Curves.easeOutCubic,
                 builder: (context, value, child) => Transform.scale(
