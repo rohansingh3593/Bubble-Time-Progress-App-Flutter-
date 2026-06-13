@@ -579,7 +579,7 @@ Future<Task?> showTaskFormDialog(
                     if (context.mounted) Navigator.of(context).pop();
                   }
                 },
-                child: const Text('Delete Task', style: TextStyle(color: themeStyle.accent)),
+                child: Text('Delete Task', style: TextStyle(color: themeStyle.accent)),
               ),
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
             ElevatedButton(
@@ -1019,6 +1019,7 @@ class _PhaseBooleanPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = DashboardThemeStyle.of(HiveService.instance.getDashboardTheme(), palette: HiveService.instance.getDashboardPalette());
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),

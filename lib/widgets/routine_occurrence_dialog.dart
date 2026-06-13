@@ -198,8 +198,8 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                   const Text('📋 Instructions', style: TextStyle(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 8),
                   if (linkedInstructions.isNotEmpty && !taskCompleted)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
                         '🔒 Complete the task first to unlock instructions.',
                         style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700),
@@ -270,8 +270,8 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                         const SizedBox(height: 4),
                         Text('Current Emoji  ${currentEmoji.emoji} ${currentEmoji.label}', style: TextStyle(color: currentEmoji.color, fontWeight: FontWeight.w900)),
                         if (taskCompleted && linkedInstructions.isNotEmpty && followedCount < linkedInstructions.length)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
                             child: Text('Potential Reward: 🤩 Complete all instructions for bonus XP', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
                           ),
                         const SizedBox(height: 8),
@@ -287,8 +287,8 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                     ),
                   ),
                   if (!readOnly && taskCompleted && linkedInstructions.isNotEmpty && !allInstructionsSelected)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
                       child: Text('Select Followed or Missed for every instruction before saving.', style: TextStyle(color: style.accent, fontWeight: FontWeight.w800)),
                     ),
                 ],
