@@ -3450,7 +3450,11 @@ Color _themeDerivedTaskColor(HiveService hiveService, int storedColorValue) {
 
 
 BoxDecoration _softTaskDecoration(Color taskColor, {required double radius, double borderOpacity = 0.24, DashboardThemeStyle? style}) {
-  final fill = style?.elevatedSurface ?? taskColor.withOpacity(0.10);
+  final fill = style == null
+      ? taskColor.withOpacity(0.10)
+      : style.dark
+          ? (Color.lerp(taskColor, style.textPrimary, 0.88) ?? style.textPrimary)
+          : (Color.lerp(style.surface, taskColor, 0.08) ?? style.surface);
   final borderColor = style == null ? taskColor.withOpacity(borderOpacity) : Color.lerp(style.primary, taskColor, 0.42)!.withOpacity(borderOpacity + 0.10);
   return BoxDecoration(
     color: fill,
