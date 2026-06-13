@@ -1713,19 +1713,32 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final selectedScale = widget.hiveService.getAppFontScale();
     final selectedWeight = widget.hiveService.getAppFontWeight();
 
-  Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
-    final size = compact ? 5.0 : 12.0;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: palette.colors
-          .map((color) => Container(
-                width: size,
-                height: size,
-                margin: const EdgeInsets.only(right: 2),
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black.withOpacity(0.12)),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 350),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: style.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: style.primary.withOpacity(0.24)),
+        boxShadow: [
+          BoxShadow(
+            color: style.primary.withOpacity(style.dark ? 0.16 : 0.08),
+            blurRadius: style.animated ? 18 : 8,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.palette_outlined, color: style.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Settings • Dashboard Theme',
+                  style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 17),
                 ),
               ),
               Text('${selectedTheme.label} • ${selectedPalette.label}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
