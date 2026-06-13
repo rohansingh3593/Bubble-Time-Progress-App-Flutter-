@@ -1020,6 +1020,14 @@ class HiveService {
     return instructions;
   }
 
+  List<InstructionRule> getStandaloneInstructions() {
+    return getInstructions().where((instruction) => instruction.isStandalone).toList();
+  }
+
+  List<InstructionRule> getTaskLinkedInstructions() {
+    return getInstructions().where((instruction) => instruction.isTaskLinked).toList();
+  }
+
   Future<void> saveInstruction(InstructionRule instruction) async {
     await _box.put(_instructionKey(instruction.id), instruction.toStorageList());
   }
@@ -1127,9 +1135,10 @@ class HiveService {
     return best;
   }
 
-  int instructionBonusForDate(DateTime date) {
+  int instructionBonusForDate(DateTime date, {bool standaloneOnly = false}) {
     var total = 0;
-    for (final instruction in getInstructions()) {
+    final instructions = standaloneOnly ? getStandaloneInstructions() : getInstructions();
+    for (final instruction in instructions) {
       final entry = instructionEntryForDate(instruction, date);
       if (instruction.enabled && entry != null && entry.followed) total += entry.bonusPoints;
     }

@@ -63,7 +63,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   }
 
   Widget _filterChips() {
-    const filters = ['All', 'Active', 'Followed', 'Missed', 'Pending', 'Disabled'];
+    const filters = ['All', 'Standalone', 'Task-Linked', 'Active', 'Followed', 'Missed', 'Pending', 'Disabled'];
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -84,6 +84,10 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     return instructions.where((instruction) {
       final entry = widget.hiveService.instructionEntryForDate(instruction, today);
       switch (_filter) {
+        case 'Standalone':
+          return instruction.isStandalone;
+        case 'Task-Linked':
+          return instruction.isTaskLinked;
         case 'Active':
           return instruction.enabled;
         case 'Followed':
@@ -115,7 +119,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
               title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
               subtitle: Text(entry == null ? 'Pending for current period' : 'Already updated: ${entry.status}'),
             ),
-            if (instruction.linkedTasks.isNotEmpty || instruction.linkedPhase.trim().isNotEmpty)
+            if (instruction.isTaskLinked)
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Text(
@@ -528,11 +532,13 @@ class _InstructionSummaryPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final followedToday = instructions.where((i) => hiveService.instructionEntryForDate(i, today)?.followed ?? false).length;
-    final missedToday = instructions.where((i) => hiveService.instructionEntryForDate(i, today)?.missed ?? false).length;
-    final active = instructions.where((i) => i.enabled).length;
-    final bonus = hiveService.instructionBonusForDate(today);
-    final bestStreak = instructions.fold<int>(0, (best, i) {
+    final standalone = instructions.where((i) => i.isStandalone).toList();
+    final followedToday = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.followed ?? false).length;
+    final missedToday = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.missed ?? false).length;
+    final active = standalone.where((i) => i.enabled).length;
+    final pendingToday = standalone.where((i) => i.enabled && hiveService.instructionEntryForDate(i, today) == null).length;
+    final bonus = hiveService.instructionBonusForDate(today, standaloneOnly: true);
+    final bestStreak = standalone.fold<int>(0, (best, i) {
       final streak = hiveService.instructionCurrentStreak(i, today);
       return streak > best ? streak : best;
     });
@@ -542,15 +548,16 @@ class _InstructionSummaryPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📘 Instruction Summary', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          const Text('📘 Standalone Instruction Summary', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
             runSpacing: 10,
             children: [
-              _InstructionStat(label: 'Total Instructions', value: '${instructions.length}'),
+              _InstructionStat(label: 'Standalone Instructions', value: '${standalone.length}'),
               _InstructionStat(label: 'Followed Today', value: '$followedToday', color: Colors.green),
               _InstructionStat(label: 'Missed Today', value: '$missedToday', color: Colors.red),
+              _InstructionStat(label: 'Pending Today', value: '$pendingToday'),
               _InstructionStat(label: 'Active Instructions', value: '$active'),
               _InstructionStat(label: 'Instruction Streak', value: '$bestStreak'),
               _InstructionStat(label: 'Bonus Points Earned', value: '+$bonus'),
@@ -591,7 +598,7 @@ class _InstructionCard extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
-                Text('${instruction.repeatType} • +${instruction.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                Text('${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • +${instruction.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
                 if (instruction.linkedTasks.isNotEmpty) Text('Linked: ${_linkedTaskSummary(instruction)}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: const TextStyle(fontSize: 12, color: Colors.black45)),
               ]),
             ),

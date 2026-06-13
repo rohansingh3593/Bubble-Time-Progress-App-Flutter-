@@ -117,7 +117,7 @@ class _InstructionStreakPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final instructions = hiveService.getInstructions().where((instruction) => instruction.enabled).toList();
+    final instructions = hiveService.getStandaloneInstructions().where((instruction) => instruction.enabled).toList();
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -131,7 +131,7 @@ class _InstructionStreakPanel extends StatelessWidget {
           const Text('📘 Instruction Streaks', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
           const SizedBox(height: 10),
           if (instructions.isEmpty)
-            const Text('No active instructions yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+            const Text('No active standalone instructions yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
           else
             ...instructions.map((instruction) {
               final entry = hiveService.instructionEntryForDate(instruction, today);

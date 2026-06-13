@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../constants/dashboard_themes.dart';
+import '../models/instruction.dart';
 import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
@@ -169,6 +170,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               _todaysProductivitySection(todayProductivityStats, todayTaskRows),
               const SizedBox(height: 14),
               _todayTasksSection(todayTaskRows),
+              const SizedBox(height: 12),
+              _instructionProductivitySection(today),
               const SizedBox(height: 12),
               _productivityAnalyticsCenter(
                 tasks: analyticsTasks,
@@ -634,6 +637,69 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         ),
       ),
     );
+  }
+
+  Future<void> _showStandaloneInstructionActions(InstructionRule instruction, DateTime today) async {
+    if (instruction.isTaskLinked) {
+      await _showTodayTaskLockedMessage('This instruction is linked to a task. Update it from the related task occurrence.');
+      return;
+    }
+
+    final entry = widget.hiveService.instructionEntryForDate(instruction, today);
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+              subtitle: Text(entry == null ? 'Have you followed this instruction today?' : 'This instruction is already updated today.'),
+            ),
+            if (entry == null && instruction.enabled) ...[
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                title: const Text('Followed'),
+                onTap: () => Navigator.pop(context, 'followed'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cancel_outlined, color: Colors.red),
+                title: const Text('Missed'),
+                onTap: () => Navigator.pop(context, 'missed'),
+              ),
+            ] else
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text('This instruction is already updated today.', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+              ),
+            ListTile(
+              leading: Icon(instruction.enabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
+              title: Text(instruction.enabled ? 'Disable Instruction' : 'Enable Instruction'),
+              onTap: () => Navigator.pop(context, 'toggle'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.close),
+              title: const Text('Close'),
+              onTap: () => Navigator.pop(context, 'close'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null || action == 'close') return;
+    switch (action) {
+      case 'followed':
+        await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed);
+        break;
+      case 'missed':
+        await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusMissed);
+        break;
+      case 'toggle':
+        await widget.hiveService.setInstructionEnabled(instruction, !instruction.enabled);
+        break;
+    }
   }
 
   List<Task> _todayTasksForFilter(List<_DashboardTodayTask> rows, String filter) {
@@ -3123,6 +3189,84 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     if (rate <= 50) return const _ProductivityBadge(label: 'Getting Started', emoji: '🟠', color: Color(0xFFFFA726));
     if (rate <= 75) return const _ProductivityBadge(label: 'Productive', emoji: '🟢', color: Color(0xFF2ECC71));
     return const _ProductivityBadge(label: 'Excellent', emoji: '🔥', color: Color(0xFFFF7043));
+  }
+
+  Widget _instructionProductivitySection(DateTime today) {
+    final style = _dashboardStyle();
+    final instructions = widget.hiveService.getStandaloneInstructions();
+    final enabled = instructions.where((instruction) => instruction.enabled).toList();
+    final followed = enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).length;
+    final missed = enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.missed ?? false).length;
+    final pending = enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today) == null).length;
+    final score = enabled.isEmpty ? 0 : ((followed / enabled.length) * 100).round();
+    final bonus = widget.hiveService.instructionBonusForDate(today, standaloneOnly: true);
+
+    return _sectionContainer(
+      title: 'INSTRUCTION PRODUCTIVITY',
+      style: style,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _instructionProductivityStat('Standalone Instructions', instructions.length, style.primary),
+              _instructionProductivityStat('Followed', followed, Colors.green),
+              _instructionProductivityStat('Missed', missed, Colors.redAccent),
+              _instructionProductivityStat('Pending', pending, Colors.orangeAccent),
+              _instructionProductivityStat('Score', score, style.primary, suffix: '%'),
+              _instructionProductivityStat('Bonus', bonus, Colors.green, prefix: '+'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (enabled.isEmpty)
+            Text('No standalone instructions yet. Add one from the Instruction Dashboard.', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700))
+          else
+            ...enabled.take(6).map((instruction) {
+              final entry = widget.hiveService.instructionEntryForDate(instruction, today);
+              final statusColor = entry?.followed == true
+                  ? Colors.green
+                  : entry?.missed == true
+                      ? Colors.redAccent
+                      : Colors.grey;
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor: Color(instruction.colorValue).withOpacity(0.14),
+                  child: Icon(Icons.rule_folder_outlined, color: Color(instruction.colorValue)),
+                ),
+                title: Text(instruction.name, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
+                subtitle: Text('${instruction.repeatType} • +${instruction.bonusPoints} points • ${widget.hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: style.textMuted)),
+                trailing: Text(entry?.status ?? 'Pending', style: TextStyle(color: statusColor, fontWeight: FontWeight.w900)),
+                onTap: () => _showStandaloneInstructionActions(instruction, today),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _instructionProductivityStat(String label, int value, Color color, {String prefix = '', String suffix = ''}) {
+    final style = _dashboardStyle();
+    return Container(
+      width: 156,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(style.dark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withOpacity(0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800, fontSize: 12)),
+          const SizedBox(height: 4),
+          Text('$prefix$value$suffix', style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 22)),
+        ],
+      ),
+    );
   }
 
   Widget _todayTasksSection(List<_DashboardTodayTask> tasks) {

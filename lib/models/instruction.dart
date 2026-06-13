@@ -83,6 +83,10 @@ class InstructionRule {
 
   List<String> get linkedPhases => splitLinks(linkedPhase);
 
+  bool get isTaskLinked => linkedTasks.isNotEmpty || linkedPhases.isNotEmpty;
+
+  bool get isStandalone => !isTaskLinked;
+
   bool isLinkedToTask(String taskName) {
     final normalizedTaskName = _normalizeLink(taskName);
     if (normalizedTaskName.isEmpty) return false;
