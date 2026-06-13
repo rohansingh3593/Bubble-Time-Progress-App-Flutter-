@@ -3201,10 +3201,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final score = enabled.isEmpty ? 0 : ((followed / enabled.length) * 100).round();
     final bonus = widget.hiveService.instructionBonusForDate(today, standaloneOnly: true);
 
-    return _sectionContainer(
+    return _panel(
       title: 'INSTRUCTION PRODUCTIVITY',
-      style: style,
-      child: Column(
+      headerColor: style.primary.withOpacity(style.dark ? 0.24 : 0.14),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Wrap(
@@ -3243,7 +3245,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 onTap: () => _showStandaloneInstructionActions(instruction, today),
               );
             }),
-        ],
+          ],
+        ),
       ),
     );
   }
