@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../constants/dashboard_themes.dart';
 import '../models/instruction.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
@@ -28,15 +29,25 @@ const String _scheduleBonusMarker = '⏰ Schedule Bonus:';
 const int _defaultScheduleBonusPoints = 20;
 const List<int> _scheduleBonusOptions = [5, 10, 20, 30, 50, 75, 100];
 
-const Map<String, int> _taskColorOptions = {
-  'Yellow': 0xFFFFC107,
-  'Green': 0xFF43A047,
-  'Blue': 0xFF1E88E5,
-  'Red': 0xFFE53935,
-  'Purple': 0xFF7E57C2,
-  'Orange': 0xFFFF8F00,
-  'Pink': 0xFFE91E63,
-};
+Map<String, int> _themeTaskColorOptions(DashboardThemeStyle style) {
+  final color1 = style.primary;
+  final color2 = style.secondary;
+  final color3 = style.accent;
+  final success = Color.lerp(style.primary, style.accent, 0.35) ?? style.primary;
+  final warning = Color.lerp(style.secondary, style.accent, 0.42) ?? style.secondary;
+  final danger = Color.lerp(style.accent, style.primary, 0.62) ?? style.accent;
+  return {
+    'Theme Color 1': color1.value,
+    'Theme Color 2': color2.value,
+    'Theme Color 3': color3.value,
+    'Theme Accent': style.heroGradient.isNotEmpty ? style.heroGradient.last.value : style.accent.value,
+    'Theme Success': success.value,
+    'Theme Warning': warning.value,
+    'Theme Danger': danger.value,
+  };
+}
+
+Color _readableOn(Color color, DashboardThemeStyle style) => color.computeLuminance() < 0.45 ? style.surface : style.textPrimary;
 
 Future<Task?> showTaskFormDialog(
   BuildContext context, {
@@ -55,6 +66,11 @@ Future<Task?> showTaskFormDialog(
     text: _stripSchedule(initialDescription),
   );
   final hiveService = HiveService.instance;
+  final themeStyle = DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
+  final fieldFill = themeStyle.elevatedSurface;
+  final panelFill = themeStyle.surface;
+  final borderColor = themeStyle.primary.withOpacity(0.20);
+  final taskColorOptions = _themeTaskColorOptions(themeStyle);
   final categories = hiveService.getCategories().toList();
   final delegates = hiveService.getDelegates().toList();
 
@@ -74,7 +90,7 @@ Future<Task?> showTaskFormDialog(
   bool selectedUrgent = initialTask?.urgent ?? false;
   bool selectedImportant = initialTask?.important ?? false;
   bool routineEnabled = initialTask?.routineEnabled ?? true;
-  int selectedColorValue = initialTask?.colorValue ?? _taskColorOptions['Blue']!;
+  int selectedColorValue = initialTask?.colorValue ?? taskColorOptions.values.first;
   int selectedRoutineMinutes = normalizeTaskDuration(initialTask?.estimatedMinutes);
   final projectPhases = _ProjectPhaseDraft.parseFromDescription(initialTask?.description ?? '');
   void syncStatusForTaskType() {
@@ -102,14 +118,14 @@ Future<Task?> showTaskFormDialog(
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: InputDecoration(labelText: 'Task Name *', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                  decoration: InputDecoration(labelText: 'Task Name *', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                   autofocus: !isEditing,
                   onChanged: (_) => setDialogState(() {}),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: descriptionController,
-                  decoration: InputDecoration(labelText: 'Description (Optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                  decoration: InputDecoration(labelText: 'Description (Optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                   maxLines: 2,
                 ),
                 const SizedBox(height: 12),
@@ -133,7 +149,7 @@ Future<Task?> showTaskFormDialog(
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                    decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -154,14 +170,14 @@ Future<Task?> showTaskFormDialog(
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: _taskColorOptions.entries.map((entry) {
+                          children: taskColorOptions.entries.map((entry) {
                             final selected = selectedColorValue == entry.value;
                             final color = Color(entry.value);
                             return ChoiceChip(
                               selected: selected,
-                              label: Text(entry.key),
+                              label: Text(entry.key, style: TextStyle(color: selected ? _readableOn(color, themeStyle) : themeStyle.textPrimary, fontWeight: FontWeight.w700)),
                               avatar: CircleAvatar(backgroundColor: color, radius: 8),
-                              selectedColor: color.withOpacity(0.22),
+                              selectedColor: color,
                               onSelected: (_) => setDialogState(() => selectedColorValue = entry.value),
                             );
                           }).toList(),
@@ -178,7 +194,7 @@ Future<Task?> showTaskFormDialog(
                         const SizedBox(height: 12),
                         Container(
                           padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
+                          decoration: BoxDecoration(color: panelFill, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor)),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -261,13 +277,13 @@ Future<Task?> showTaskFormDialog(
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                    decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                     child: Text('Time Slot: ${_formatHour(hourSlot!)}'),
                   ),
                 if (hourSlot != null && !repeatTask) const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                  decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                   child: Row(
                     children: [
                       Expanded(child: Text('Due Date: ${dueDate.month}/${dueDate.day}/${dueDate.year}')),
@@ -285,7 +301,7 @@ Future<Task?> showTaskFormDialog(
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                  decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -303,7 +319,7 @@ Future<Task?> showTaskFormDialog(
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                  decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -322,7 +338,7 @@ Future<Task?> showTaskFormDialog(
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                    decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                     child: const Text('Non-repeating tasks use phase-based progress. Estimated time is hidden; use phases below.'),
                   ),
                   const SizedBox(height: 12),
@@ -331,7 +347,7 @@ Future<Task?> showTaskFormDialog(
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                    decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -343,7 +359,7 @@ Future<Task?> showTaskFormDialog(
                           return Container(
                             margin: const EdgeInsets.only(bottom: 10),
                             padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
+                            decoration: BoxDecoration(color: panelFill, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor)),
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               TextField(
                                 controller: phase.nameController,
@@ -456,7 +472,7 @@ Future<Task?> showTaskFormDialog(
                 if (!repeatTask) ...[
                   DropdownButtonFormField<String>(
                     value: selectedPriority,
-                    decoration: InputDecoration(labelText: 'Priority', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                    decoration: InputDecoration(labelText: 'Priority', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                     items: _priorityOptions.map((priority) => DropdownMenuItem<String>(value: priority, child: Text(priority))).toList(),
                     onChanged: (value) {
                       if (value != null) setDialogState(() => selectedPriority = value);
@@ -465,7 +481,7 @@ Future<Task?> showTaskFormDialog(
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: selectedStatus,
-                    decoration: InputDecoration(labelText: 'Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                    decoration: InputDecoration(labelText: 'Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                     items: _statusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
                     onChanged: (value) {
                       if (value != null) setDialogState(() => selectedStatus = value);
@@ -475,7 +491,7 @@ Future<Task?> showTaskFormDialog(
                 ],
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
-                  decoration: InputDecoration(labelText: 'Category', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                  decoration: InputDecoration(labelText: 'Category', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                   items: [...categories.map((c) => DropdownMenuItem<String>(value: c, child: Text(c))), const DropdownMenuItem<String>(value: '__add_category__', child: Text('➕ Add Category'))],
                   onChanged: (value) async {
                     if (value == null) return;
@@ -502,7 +518,7 @@ Future<Task?> showTaskFormDialog(
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: selectedDelegate ?? '__none__',
-                    decoration: InputDecoration(labelText: 'Delegate (Optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                    decoration: InputDecoration(labelText: 'Delegate (Optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                     items: [const DropdownMenuItem<String>(value: '__none__', child: Text('Unassigned')), ...delegates.map((d) => DropdownMenuItem<String>(value: d, child: Text(d))), const DropdownMenuItem<String>(value: '__add_delegate__', child: Text('➕ Add Delegate'))],
                     onChanged: (value) async {
                       if (value == null) return;
@@ -532,7 +548,7 @@ Future<Task?> showTaskFormDialog(
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: Color(0xFFF8F4FF), borderRadius: BorderRadius.all(Radius.circular(14)), border: Border.fromBorderSide(BorderSide(color: Colors.black12))),
+                    decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.all(Radius.circular(14)), border: Border.fromBorderSide(BorderSide(color: borderColor))),
                     child: Text('Routine tasks are tracked in Habit/Streak, so delegate scheduling is hidden.'),
                   ),
                 ],
@@ -551,7 +567,7 @@ Future<Task?> showTaskFormDialog(
                       actions: [
                         TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
                         ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                          style: ElevatedButton.styleFrom(backgroundColor: themeStyle.accent),
                           onPressed: () => Navigator.of(context).pop(true),
                           child: const Text('Delete'),
                         ),
@@ -563,7 +579,7 @@ Future<Task?> showTaskFormDialog(
                     if (context.mounted) Navigator.of(context).pop();
                   }
                 },
-                child: const Text('Delete Task', style: TextStyle(color: Colors.redAccent)),
+                child: const Text('Delete Task', style: TextStyle(color: themeStyle.accent)),
               ),
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
             ElevatedButton(
@@ -664,32 +680,33 @@ class _TaskInstructionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
     final linked = _linkedInstructionsForTask(hiveService, taskName);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F4FF),
+        color: style.elevatedSurface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black12),
+        border: Border.all(color: style.primary.withOpacity(0.20)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Expanded(child: Text('📋 Task Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
-              Text('${linked.length} linked', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+              Expanded(child: Text('📋 Task Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: style.textPrimary))),
+              Text('${linked.length} linked', style: TextStyle(fontWeight: FontWeight.w700, color: style.textMuted)),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             isRoutine ? 'Configure routine rules here. Update them from the occurrence popup.' : 'Attach rules to the whole task or a phase. Status updates happen during completion.',
-            style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 12, color: style.textMuted, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 10),
           if (linked.isEmpty)
-            const Text('No instructions added yet.', style: TextStyle(color: Colors.black54))
+            Text('No instructions added yet.', style: TextStyle(color: style.textMuted))
           else
             ...linked.asMap().entries.map((entry) {
               final index = entry.key;
@@ -698,8 +715,8 @@ class _TaskInstructionSection extends StatelessWidget {
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 leading: CircleAvatar(radius: 13, backgroundColor: Color(instruction.colorValue).withOpacity(0.16), child: Text('${index + 1}', style: TextStyle(color: Color(instruction.colorValue), fontWeight: FontWeight.w900, fontSize: 12))),
-                title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                subtitle: Text('Bonus: +${instruction.bonusPoints} pts • +${instruction.xpEarned} XP${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}'),
+                title: Text(instruction.name, style: TextStyle(fontWeight: FontWeight.w800, color: style.textPrimary)),
+                subtitle: Text('Bonus: +${instruction.bonusPoints} pts • +${instruction.xpEarned} XP${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: TextStyle(color: style.textMuted)),
                 trailing: Wrap(
                   spacing: 4,
                   children: [
@@ -775,7 +792,9 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
   var repeatType = existing?.repeatType ?? InstructionRule.repeatDaily;
   var enabled = existing?.enabled ?? true;
   var streakTracking = existing?.streakTracking ?? true;
-  var colorValue = existing?.colorValue ?? 0xFF43A047;
+  final style = DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
+  final instructionColors = _themeTaskColorOptions(style);
+  var colorValue = existing?.colorValue ?? instructionColors.values.first;
   var linkedPhase = existing?.linkedPhase ?? '';
   var requiredInstruction = true;
   final instruction = await showDialog<InstructionRule>(
@@ -815,17 +834,18 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                 Wrap(
                   spacing: 8,
                   children: [
-                    for (final color in const [0xFF43A047, 0xFF1E88E5, 0xFFFF9800, 0xFF8E24AA, 0xFFE53935])
+                    for (final entry in instructionColors.entries)
                       ChoiceChip(
-                        selected: colorValue == color,
-                        label: const Text(''),
-                        avatar: CircleAvatar(backgroundColor: Color(color)),
-                        onSelected: (_) => setDialogState(() => colorValue = color),
+                        selected: colorValue == entry.value,
+                        label: Text(entry.key, style: TextStyle(color: colorValue == entry.value ? _readableOn(Color(entry.value), style) : style.textPrimary, fontWeight: FontWeight.w700)),
+                        avatar: CircleAvatar(backgroundColor: Color(entry.value)),
+                        selectedColor: Color(entry.value),
+                        onSelected: (_) => setDialogState(() => colorValue = entry.value),
                       ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Text('Task-linked instructions are managed only from this task and unlock after the task is completed.', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black54)),
+                Text('Task-linked instructions are managed only from this task and unlock after the task is completed.', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: style.textMuted)),
               ],
             ),
           ),
@@ -1003,9 +1023,9 @@ class _PhaseBooleanPicker extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F4FF),
+        color: style.elevatedSurface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black12),
+        border: Border.all(color: style.primary.withOpacity(0.20)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../constants/dashboard_themes.dart';
 import '../models/instruction.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
@@ -96,6 +97,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
   }
 
   final routineTask = isRoutineTask(task);
+  final style = DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
   final occurrenceUpdated = isRoutineOccurrenceUpdated(task);
   final existingCompleted = task.done || _normalizedStatus(task) == 'completed';
   final existingMissed = _normalizedStatus(task) == 'missed' || _normalizedStatus(task) == 'overdue';
@@ -127,7 +129,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
           final status = selectedStatuses[instruction.id];
           return status == InstructionHistoryEntry.statusFollowed || status == InstructionHistoryEntry.statusMissed;
         });
-        final currentEmoji = _routineDialogMood(taskCompleted, taskMissed, followedCount, linkedInstructions.length);
+        final currentEmoji = _routineDialogMood(style, taskCompleted, taskMissed, followedCount, linkedInstructions.length);
         final instructionProgressLabel = linkedInstructions.isEmpty ? 'No linked instructions' : '$followedCount / ${linkedInstructions.length} Completed';
         final reward = _routineDialogReward(task, linkedInstructions, selectedStatuses, taskCompleted: taskCompleted);
         final canSaveCompleted = taskCompleted && allInstructionsSelected;
@@ -187,7 +189,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                       taskCompleted
                           ? 'Task marked complete in this popup. Instructions are unlocked; choose Followed or Missed for each one, then Save & Finish.'
                           : 'Instructions are locked until you complete the task first.',
-                      style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                      style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700),
                     ),
                   ],
                   const SizedBox(height: 14),
@@ -200,11 +202,11 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                       padding: EdgeInsets.only(bottom: 8),
                       child: Text(
                         '🔒 Complete the task first to unlock instructions.',
-                        style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                        style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700),
                       ),
                     ),
                   if (linkedInstructions.isEmpty)
-                    const Text('No instructions are linked to this task yet.', style: TextStyle(color: Colors.black54))
+                    Text('No instructions are linked to this task yet.', style: TextStyle(color: style.textMuted))
                   else
                     ...linkedInstructions.map((instruction) {
                       final selected = taskMissed ? '' : selectedStatuses[instruction.id] ?? '';
@@ -223,7 +225,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                             if (instruction.description.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
-                                child: Text(instruction.description, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                                child: Text(instruction.description, style: TextStyle(color: style.textMuted, fontSize: 12)),
                               ),
                             const SizedBox(height: 6),
                             Wrap(
@@ -235,6 +237,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                                   value: InstructionHistoryEntry.statusFollowed,
                                   selected: selected,
                                   enabled: instructionChoicesEnabled,
+                                  style: style,
                                   onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusFollowed),
                                 ),
                                 _instructionRadioOption(
@@ -242,6 +245,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                                   value: InstructionHistoryEntry.statusMissed,
                                   selected: selected,
                                   enabled: instructionChoicesEnabled,
+                                  style: style,
                                   onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusMissed),
                                 ),
                               ],
@@ -268,7 +272,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                         if (taskCompleted && linkedInstructions.isNotEmpty && followedCount < linkedInstructions.length)
                           const Padding(
                             padding: EdgeInsets.only(top: 4),
-                            child: Text('Potential Reward: 🤩 Complete all instructions for bonus XP', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+                            child: Text('Potential Reward: 🤩 Complete all instructions for bonus XP', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
                           ),
                         const SizedBox(height: 8),
                         Text(
@@ -277,7 +281,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                         ),
                         Text(
                           'Base +${reward.baseXp} XP • Instructions +${reward.instructionXp} XP • Timing +${reward.timingXp} XP • Streak +${reward.streakXp} XP',
-                          style: const TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.w700),
+                          style: TextStyle(color: style.textMuted, fontSize: 12, fontWeight: FontWeight.w700),
                         ),
                       ],
                     ),
@@ -285,7 +289,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                   if (!readOnly && taskCompleted && linkedInstructions.isNotEmpty && !allInstructionsSelected)
                     const Padding(
                       padding: EdgeInsets.only(top: 8),
-                      child: Text('Select Followed or Missed for every instruction before saving.', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.w800)),
+                      child: Text('Select Followed or Missed for every instruction before saving.', style: TextStyle(color: style.accent, fontWeight: FontWeight.w800)),
                     ),
                 ],
               ),
@@ -351,16 +355,16 @@ class _RoutineDialogMood {
   const _RoutineDialogMood({required this.emoji, required this.label, required this.color});
 }
 
-_RoutineDialogMood _routineDialogMood(bool taskCompleted, bool taskMissed, int followed, int total) {
-  if (taskMissed) return const _RoutineDialogMood(emoji: '😞', label: 'Missed Today', color: Colors.redAccent);
-  if (!taskCompleted) return const _RoutineDialogMood(emoji: '😐', label: 'Task Pending', color: Colors.blueGrey);
-  if (total == 0) return const _RoutineDialogMood(emoji: '🙂', label: 'Task Complete', color: Colors.green);
+_RoutineDialogMood _routineDialogMood(DashboardThemeStyle style, bool taskCompleted, bool taskMissed, int followed, int total) {
+  if (taskMissed) return _RoutineDialogMood(emoji: '😞', label: 'Missed Today', color: style.accent);
+  if (!taskCompleted) return _RoutineDialogMood(emoji: '😐', label: 'Task Pending', color: style.textMuted);
+  if (total == 0) return _RoutineDialogMood(emoji: '🙂', label: 'Task Complete', color: style.primary);
   final ratio = followed / total;
-  if (ratio >= 1) return const _RoutineDialogMood(emoji: '🤩', label: 'Perfect', color: Colors.green);
-  if (ratio >= 0.75) return const _RoutineDialogMood(emoji: '😄', label: 'Excellent', color: Colors.lightGreen);
-  if (ratio >= 0.5) return const _RoutineDialogMood(emoji: '😊', label: 'Good', color: Colors.amber);
-  if (ratio >= 0.25) return const _RoutineDialogMood(emoji: '🙂', label: 'Can Improve', color: Colors.blueAccent);
-  return const _RoutineDialogMood(emoji: '😐', label: 'Instructions Ignored', color: Colors.blueGrey);
+  if (ratio >= 1) return _RoutineDialogMood(emoji: '🤩', label: 'Perfect', color: style.primary);
+  if (ratio >= 0.75) return _RoutineDialogMood(emoji: '😄', label: 'Excellent', color: Color.lerp(style.primary, style.accent, 0.35) ?? style.primary);
+  if (ratio >= 0.5) return _RoutineDialogMood(emoji: '😊', label: 'Good', color: style.secondary);
+  if (ratio >= 0.25) return _RoutineDialogMood(emoji: '🙂', label: 'Can Improve', color: style.accent);
+  return _RoutineDialogMood(emoji: '😐', label: 'Instructions Ignored', color: style.textMuted);
 }
 
 Widget _instructionRadioOption({
@@ -368,6 +372,7 @@ Widget _instructionRadioOption({
   required String value,
   required String selected,
   required bool enabled,
+  required DashboardThemeStyle style,
   required VoidCallback onSelected,
 }) {
   return InkWell(
@@ -379,8 +384,8 @@ Widget _instructionRadioOption({
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: selected == value ? Colors.green : Colors.black12),
-          color: selected == value ? Colors.green.withOpacity(0.10) : Colors.white,
+          border: Border.all(color: selected == value ? style.primary : style.primary.withOpacity(0.18)),
+          color: selected == value ? style.primary.withOpacity(0.14) : style.surface,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -392,7 +397,7 @@ Widget _instructionRadioOption({
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               visualDensity: VisualDensity.compact,
             ),
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text(label, style: TextStyle(fontWeight: FontWeight.w800, color: style.textPrimary)),
           ],
         ),
       ),
