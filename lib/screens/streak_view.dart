@@ -1116,7 +1116,7 @@ class _DailyStreakBoardState extends State<_DailyStreakBoard> {
                   children: [
                     _StreakBoardDateHeader(dates: widget.dates, today: widget.today, layout: layout),
                     SizedBox(height: layout.rowSpacing),
-                    ...widget.habits.map((habit) => _StreakBoardActivityRow(habit: habit, dates: widget.dates, today: widget.today, layout: layout)),
+                    ...widget.habits.map((habit) => _StreakBoardActivityRow(hiveService: widget.hiveService, habit: habit, dates: widget.dates, today: widget.today, layout: layout)),
                   ],
                 ),
               ),
@@ -1292,12 +1292,13 @@ class _StreakBoardTaskNameCell extends StatelessWidget {
 }
 
 class _StreakBoardActivityRow extends StatelessWidget {
+  final HiveService hiveService;
   final _HabitTracker habit;
   final List<DateTime> dates;
   final DateTime today;
   final _StreakBoardLayout layout;
 
-  const _StreakBoardActivityRow({required this.habit, required this.dates, required this.today, required this.layout});
+  const _StreakBoardActivityRow({required this.hiveService, required this.habit, required this.dates, required this.today, required this.layout});
 
   @override
   Widget build(BuildContext context) {
@@ -1308,9 +1309,10 @@ class _StreakBoardActivityRow extends StatelessWidget {
         children: dates.map((date) {
           final status = _boardStatusFor(habit, date, today);
           final blockColor = _habitActivityBlockColor(habit, date, status, taskColor);
+          final emoji = _habitMoodEmojiForDate(hiveService, habit, date, today, status);
           final isToday = _isSameDate(date, today);
           return Tooltip(
-            message: '${habit.title} • ${_formatBoardDate(date)} • ${_statusLabel(status)}',
+            message: '${habit.title} • ${_formatBoardDate(date)} • ${_statusLabel(status)} • $emoji',
             child: Container(
               width: layout.blockSize,
               height: layout.blockSize,
@@ -1322,7 +1324,7 @@ class _StreakBoardActivityRow extends StatelessWidget {
                 border: Border.all(color: isToday ? taskColor : Colors.transparent, width: isToday ? 2 : 1),
                 boxShadow: status == _HabitDayStatus.completed ? [BoxShadow(color: blockColor.withOpacity(0.22), blurRadius: 8, offset: const Offset(0, 3))] : null,
               ),
-              child: Icon(_statusIcon(status), size: layout.iconSize, color: status == _HabitDayStatus.none ? Colors.white30 : Colors.white),
+              child: Text(emoji, style: TextStyle(fontSize: layout.iconSize + 2)),
             ),
           );
         }).toList(),
@@ -1355,6 +1357,44 @@ _HabitDayStatus _boardStatusFor(_HabitTracker habit, DateTime date, DateTime tod
   final day = _dateOnly(date);
   if (day.isAfter(_dateOnly(today)) || day.isBefore(_dateOnly(habit.firstTrackedDate))) return _HabitDayStatus.none;
   return habit.statusFor(day);
+}
+
+String _habitMoodEmojiForDate(HiveService hiveService, _HabitTracker habit, DateTime date, DateTime today, _HabitDayStatus status) {
+  final day = _dateOnly(date);
+  if (status == _HabitDayStatus.none || day.isAfter(_dateOnly(today))) return '➖';
+  if (status == _HabitDayStatus.completed) {
+    final linkedInstructions = hiveService
+        .getTaskLinkedInstructions()
+        .where((instruction) => instruction.enabled && instruction.isLinkedToTask(habit.title))
+        .toList();
+    if (linkedInstructions.isEmpty) return '🙂';
+    final followed = linkedInstructions.where((instruction) {
+      return hiveService.instructionEntryForDate(instruction, day)?.followed ?? false;
+    }).length;
+    if (followed == linkedInstructions.length) return '🤩';
+    if (followed / linkedInstructions.length >= 0.75) return '😊';
+    return '😐';
+  }
+  final missedCount = _habitMissedRunEndingAt(habit, day);
+  if (missedCount >= 7) return '😵';
+  if (missedCount >= 4) return '😫';
+  if (missedCount >= 2) return '😠';
+  return '😞';
+}
+
+int _habitMissedRunEndingAt(_HabitTracker habit, DateTime date) {
+  var cursor = _dateOnly(date);
+  var count = 0;
+  while (!cursor.isBefore(_dateOnly(habit.firstTrackedDate))) {
+    final status = habit.statusFor(cursor);
+    if (status == _HabitDayStatus.missed || status == _HabitDayStatus.cancelled) {
+      count++;
+      cursor = cursor.subtract(const Duration(days: 1));
+      continue;
+    }
+    break;
+  }
+  return count;
 }
 
 String _weekdayLabel(DateTime date) => const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][date.weekday - 1];
