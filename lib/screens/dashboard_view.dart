@@ -2453,16 +2453,21 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
   Widget _buildDisabledRoutineBoard(List<_DisabledRoutineTask> disabledTasks) {
+    final theme = _dashboardThemeColors();
+    final style = _dashboardStyle();
+    final cardBackground = theme.card;
+    final onCard = AppThemeColors.readableTextOn(cardBackground, style);
+    final iconBackground = theme.warning.withOpacity(0.14);
     return _darkSection(
       'Disabled Routine Tasks',
       Column(
         children: [
           if (disabledTasks.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(8),
+            Padding(
+              padding: const EdgeInsets.all(8),
               child: Text(
                 'No disabled routines. Disable a routine to pause active tracking without losing history.',
-                style: TextStyle(color: Color(0xFFB9C6F3)),
+                style: TextStyle(color: theme.textSecondary),
               ),
             )
           else
@@ -2472,35 +2477,36 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A2442),
+                  color: cardBackground,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFFFA726).withOpacity(0.35)),
+                  border: Border.all(color: theme.border),
+                  boxShadow: [BoxShadow(color: theme.shadow, blurRadius: 10, offset: const Offset(0, 5))],
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(9),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFA726).withOpacity(0.14),
+                        color: iconBackground,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.pause_circle_outline, color: Color(0xFFFFB74D)),
+                      child: Icon(Icons.pause_circle_outline, color: AppThemeColors.readableTextOn(iconBackground, style)),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(task.task, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                          Text(task.task, style: TextStyle(color: onCard, fontWeight: FontWeight.w800)),
                           const SizedBox(height: 4),
                           Text(
                             '${task.repeatFrequency ?? 'Daily'} • ${task.category}',
-                            style: const TextStyle(color: Color(0xFFB9C6F3)),
+                            style: TextStyle(color: theme.textSecondary),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Previous streak: ${item.previousStreak} • Last updated: ${_formatShortDate(item.lastUpdated)}',
-                            style: const TextStyle(color: Color(0xFF7F8EB9), fontSize: 12),
+                            style: TextStyle(color: theme.textMuted, fontSize: 12),
                           ),
                         ],
                       ),
@@ -2510,8 +2516,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                       icon: const Icon(Icons.play_arrow, size: 18),
                       label: const Text('Enable'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF34C759),
-                        foregroundColor: Colors.white,
+                        backgroundColor: theme.success,
+                        foregroundColor: AppThemeColors.readableTextOn(theme.success, style),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                       ),
                     ),
