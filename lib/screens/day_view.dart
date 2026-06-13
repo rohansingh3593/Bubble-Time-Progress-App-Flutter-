@@ -214,20 +214,34 @@ class _DayViewState extends State<DayView> {
     return Scaffold(
       appBar: AppBar(
         title: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.chevron_left),
-              onPressed: () {
-                setState(() => _currentDay = _currentDay.subtract(const Duration(days: 1)));
-              },
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () {
+                  setState(() => _currentDay = _currentDay.subtract(const Duration(days: 1)));
+                },
+              ),
             ),
-            Text('${_currentDay.month}/${_currentDay.day}/${_currentDay.year}'),
-            IconButton(
-              icon: const Icon(Icons.chevron_right),
-              onPressed: () {
-                setState(() => _currentDay = _currentDay.add(const Duration(days: 1)));
-              },
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('${_currentDay.month}/${_currentDay.day}/${_currentDay.year}'),
+              ),
+            ),
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () {
+                  setState(() => _currentDay = _currentDay.add(const Duration(days: 1)));
+                },
+              ),
             ),
           ],
         ),
