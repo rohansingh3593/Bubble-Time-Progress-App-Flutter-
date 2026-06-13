@@ -2054,32 +2054,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Color _selectorTextColor(bool selected, DashboardThemeStyle style) {
-    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
-    return _readableOn(chipColor);
-  }
-
   Color _readableOn(Color color) {
     return color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF17211D);
-  }
-
-  Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
-    final size = compact ? 5.0 : 12.0;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: palette.colors
-          .map((color) => Container(
-                width: size,
-                height: size,
-                margin: const EdgeInsets.only(right: 2),
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black.withOpacity(0.12)),
-                ),
-              ))
-          .toList(),
-    );
   }
 
   IconData _themeIcon(DashboardThemeType theme) {

@@ -1595,7 +1595,7 @@ class _HabitCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          _HabitActivityGrid(habit: habit, today: today),
+          _HabitActivityGrid(hiveService: hiveService, habit: habit, today: today),
           const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -1710,10 +1710,11 @@ class _HabitCard extends StatelessWidget {
 }
 
 class _HabitActivityGrid extends StatelessWidget {
+  final HiveService hiveService;
   final _HabitTracker habit;
   final DateTime today;
 
-  const _HabitActivityGrid({required this.habit, required this.today});
+  const _HabitActivityGrid({required this.hiveService, required this.habit, required this.today});
 
   @override
   Widget build(BuildContext context) {
@@ -2400,7 +2401,7 @@ class _TaskPerformanceHero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: _softTaskDecoration(color, radius: 26, borderOpacity: 0.34, style: _streakThemeStyle(hiveService)),
+      decoration: _softTaskDecoration(color, radius: 26, borderOpacity: 0.34),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
