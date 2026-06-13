@@ -106,7 +106,11 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) {
         final savedCompleted = task.done || _normalizedStatus(task) == 'completed';
-        final showCompletionSummary = occurrenceUpdated && savedCompleted && linkedInstructions.isNotEmpty;
+        final savedMissed = _normalizedStatus(task) == 'missed' || _normalizedStatus(task) == 'cancelled' || _normalizedStatus(task) == 'overdue';
+        final savedInstructionResults = linkedInstructions.any(
+          (instruction) => hiveService.instructionEntryForDate(instruction, task.dueDate) != null,
+        );
+        final showCompletionSummary = linkedInstructions.isNotEmpty && !savedMissed && (savedCompleted || savedInstructionResults);
         final taskCompleted = showCompletionSummary || occurrenceStatus == 'completed';
         final taskMissed = occurrenceStatus == 'missed';
         final instructionChoicesEnabled = !occurrenceUpdated && taskCompleted;
