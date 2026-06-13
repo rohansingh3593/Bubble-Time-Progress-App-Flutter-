@@ -291,40 +291,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  void _openSettingsPanel() {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Close settings',
-      barrierColor: Colors.black.withOpacity(0.35),
-      transitionDuration: const Duration(milliseconds: 360),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return Align(
-          alignment: Alignment.centerRight,
-          child: Material(
-            color: Colors.transparent,
-            child: FractionallySizedBox(
-              widthFactor: MediaQuery.of(context).size.width < 760 ? 1 : 0.58,
-              heightFactor: 1,
-              child: _DashboardSettingsPanel(
-                hiveService: widget.hiveService,
-                onClose: () => Navigator.of(context).pop(),
-                themeSelectorBuilder: (_) => _buildThemeSelector(),
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
-        return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
-          child: FadeTransition(opacity: curved, child: child),
-        );
-      },
-    );
-  }
-
   void _openJourneyTimeline() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -367,15 +333,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       ),
     );
   }
-
-  void _openProductivityTimeline() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ProductivityTimelineView(hiveService: widget.hiveService),
-      ),
-    );
-  }
-
 
   String _normalizedRepeatFrequency(Task task) {
     final normalized = task.repeatFrequency?.trim().toLowerCase();
@@ -2125,7 +2082,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final progress = completed / total;
 
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
+      tween: Tween(begin: 0.0, end: 1.0),
       duration: const Duration(milliseconds: 850),
       curve: Curves.easeOutCubic,
       builder: (context, intro, _) {
@@ -2302,7 +2259,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               final percent = values['percent'] ?? 0;
               final remaining = values['remaining'] ?? 0;
               return TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: 1),
+                tween: Tween(begin: 0.0, end: 1.0),
                 duration: Duration(milliseconds: 420 + (cards.indexOf(label) * 180)),
                 curve: Curves.easeOut,
                 builder: (context, t, child) => Opacity(
@@ -2652,7 +2609,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   Widget _summaryHeader(Map<String, int> summary) {
     final style = _dashboardStyle();
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
+      tween: Tween(begin: 0.0, end: 1.0),
       duration: const Duration(milliseconds: 420),
       curve: Curves.easeOutCubic,
       builder: (context, intro, child) => Opacity(
@@ -2703,7 +2660,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   Widget _scopeTaskHeader(Map<String, int> scopedCounts) {
     final style = _dashboardStyle();
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
+      tween: Tween(begin: 0.0, end: 1.0),
       duration: const Duration(milliseconds: 520),
       curve: Curves.easeOutCubic,
       builder: (context, intro, child) => Opacity(opacity: intro, child: Transform.translate(offset: Offset(-18 * (1 - intro), 0), child: child)),
@@ -2812,7 +2769,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       title: 'PRODUCTIVITY ANALYTICS',
       headerColor: style.primary,
       child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: 1),
+        tween: Tween(begin: 0.0, end: 1.0),
         duration: Duration(milliseconds: style.animated ? 420 : 180),
         curve: Curves.easeOutCubic,
         builder: (context, intro, child) => Opacity(
@@ -3142,7 +3099,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final index = indexMap[label] ?? 0;
 
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
+      tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: 400 + (index * 150)),
       curve: Curves.easeOut,
       builder: (context, intro, child) => Opacity(
@@ -3211,7 +3168,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       title: "TODAY'S PRODUCTIVITY",
       headerColor: style.primary,
       child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: 1),
+        tween: Tween(begin: 0.0, end: 1.0),
         duration: Duration(milliseconds: style.animated ? 500 : 180),
         curve: Curves.easeOutCubic,
         builder: (context, animationValue, child) {
@@ -3718,7 +3675,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }) {
     final style = _dashboardStyle();
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
+      tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: style.animated ? 380 : 180),
       curve: Curves.easeOutCubic,
       builder: (context, intro, panelChild) => Opacity(
@@ -3779,7 +3736,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         itemCount: children.length,
         separatorBuilder: (context, index) => Divider(height: 1, color: style.primary.withOpacity(0.16)),
         itemBuilder: (context, index) => TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
+          tween: Tween(begin: 0.0, end: 1.0),
           duration: Duration(milliseconds: style.animated ? 240 + (index * 35) : 120),
           curve: Curves.easeOut,
           builder: (context, value, child) => Opacity(
@@ -3798,6 +3755,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 }
 
 
+}
 class _RoutineMood {
   final String emoji;
   final String label;

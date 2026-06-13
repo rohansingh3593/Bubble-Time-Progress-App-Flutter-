@@ -1215,9 +1215,6 @@ class _ProjectPhaseDraft {
     return normalizeTaskDuration(parsed);
   }
 
-  static int _parseDuration(String? rawValue) {
-    final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
-    return normalizeTaskDuration(parsed);
-  }
+
 
 }
