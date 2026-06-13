@@ -291,10 +291,52 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
+  void _openSettingsPanel() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close settings',
+      barrierColor: Colors.black.withOpacity(0.35),
+      transitionDuration: const Duration(milliseconds: 360),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: Material(
+            color: Colors.transparent,
+            child: FractionallySizedBox(
+              widthFactor: MediaQuery.of(context).size.width < 760 ? 1 : 0.58,
+              heightFactor: 1,
+              child: _DashboardSettingsPanel(
+                hiveService: widget.hiveService,
+                onClose: () => Navigator.of(context).pop(),
+                themeSelectorBuilder: (_) => _buildThemeSelector(),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
+    );
+  }
+
   void _openJourneyTimeline() {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => JourneyTimelineView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+  void _openProductivityTimeline() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProductivityTimelineView(hiveService: widget.hiveService),
       ),
     );
   }
@@ -1658,6 +1700,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
+  Color _selectorTextColor(bool selected, DashboardThemeStyle style) {
+    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
+    return _readableOn(chipColor);
+  }
 
   Widget _buildThemeSelector() {
     final style = _dashboardStyle();
@@ -1667,32 +1713,19 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final selectedScale = widget.hiveService.getAppFontScale();
     final selectedWeight = widget.hiveService.getAppFontWeight();
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 350),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: style.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: style.primary.withOpacity(0.24)),
-        boxShadow: [
-          BoxShadow(
-            color: style.primary.withOpacity(style.dark ? 0.16 : 0.08),
-            blurRadius: style.animated ? 18 : 8,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.palette_outlined, color: style.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Settings • Dashboard Theme',
-                  style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 17),
+  Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
+    final size = compact ? 5.0 : 12.0;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: palette.colors
+          .map((color) => Container(
+                width: size,
+                height: size,
+                margin: const EdgeInsets.only(right: 2),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.black.withOpacity(0.12)),
                 ),
               ),
               Text('${selectedTheme.label} • ${selectedPalette.label}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
