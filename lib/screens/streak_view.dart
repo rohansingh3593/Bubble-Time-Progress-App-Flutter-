@@ -679,6 +679,7 @@ class _YearProgressPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = _streakThemeStyle(hiveService);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: _panelDecoration(),
@@ -1481,6 +1482,7 @@ class _HabitTrackerSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = _streakThemeStyle(hiveService);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: _panelDecoration(),
@@ -1491,16 +1493,16 @@ class _HabitTrackerSection extends StatelessWidget {
             children: [
               Icon(Icons.track_changes, color: habits.isEmpty ? _themeAccent(hiveService) : _themeDerivedTaskColor(hiveService, habits.first.template.colorValue)),
               const SizedBox(width: 8),
-              const Expanded(
-                child: Text('Habit & Routine Tracker', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              Expanded(
+                child: Text('Habit & Routine Tracker', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: style.textPrimary)),
               ),
-              Text('${habits.length} habits', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+              Text('${habits.length} habits', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Consistency is built one completed day at a time.',
-            style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
+            style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 14),
           if (habits.isEmpty)
@@ -1542,6 +1544,7 @@ class _HabitCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = _streakThemeStyle(hiveService);
     final todayStatus = habit.statusFor(today);
     final taskColor = _themeDerivedTaskColor(hiveService, habit.template.colorValue);
 
@@ -1580,13 +1583,13 @@ class _HabitCard extends StatelessWidget {
                       children: [
                         Container(width: 10, height: 10, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
                         const SizedBox(width: 6),
-                        Expanded(child: Text(habit.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
+                        Expanded(child: Text(habit.title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: style.textPrimary))),
                       ],
                     ),
                     const SizedBox(height: 3),
                     Text(
                       "Streak: ${habit.currentStreak} ${habit.repeatFrequency == 'Weekly' ? 'Weeks' : 'Days'} • ${habit.repeatFrequency} • ${habit.category}",
-                      style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                      style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
@@ -1613,6 +1616,7 @@ class _HabitCard extends StatelessWidget {
                       selected: todayStatus == _HabitDayStatus.completed,
                       fontSize: buttonFontSize,
                       horizontalPadding: horizontalPadding,
+                      style: style,
                       onPressed: () => _setTodayStatus(context, _HabitDayStatus.completed),
                     ),
                   ),
@@ -1621,10 +1625,11 @@ class _HabitCard extends StatelessWidget {
                     child: _HabitStatusButton(
                       label: 'Missed',
                       icon: Icons.remove_circle,
-                      color: Colors.redAccent,
+                      color: style.accent,
                       selected: todayStatus == _HabitDayStatus.missed,
                       fontSize: buttonFontSize,
                       horizontalPadding: horizontalPadding,
+                      style: style,
                       onPressed: () => _setTodayStatus(context, _HabitDayStatus.missed),
                     ),
                   ),
@@ -1723,7 +1728,7 @@ class _HabitActivityGrid extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('28-day activity', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.black54)),
+        Text('28-day activity', style: TextStyle(fontWeight: FontWeight.w800, color: _streakThemeStyle(hiveService).textMuted)),
         const SizedBox(height: 8),
         GridView.builder(
           shrinkWrap: true,
@@ -1783,6 +1788,7 @@ class _HabitStatusButton extends StatelessWidget {
   final bool selected;
   final double fontSize;
   final double horizontalPadding;
+  final DashboardThemeStyle style;
   final VoidCallback onPressed;
 
   const _HabitStatusButton({
@@ -1792,6 +1798,7 @@ class _HabitStatusButton extends StatelessWidget {
     required this.selected,
     required this.fontSize,
     required this.horizontalPadding,
+    required this.style,
     required this.onPressed,
   });
 
@@ -1811,8 +1818,8 @@ class _HabitStatusButton extends StatelessWidget {
         ),
       ),
       style: OutlinedButton.styleFrom(
-        foregroundColor: selected ? Colors.white : color,
-        backgroundColor: selected ? color : Colors.white,
+        foregroundColor: selected ? _readableThemeOn(color, style) : color,
+        backgroundColor: selected ? color : style.surface,
         side: BorderSide(color: color.withOpacity(0.7)),
         minimumSize: const Size.fromHeight(50),
         padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 12),
@@ -3416,6 +3423,8 @@ class _InsightRow extends StatelessWidget {
   }
 }
 
+
+Color _readableThemeOn(Color color, DashboardThemeStyle style) => color.computeLuminance() < 0.45 ? style.surface : style.textPrimary;
 
 DashboardThemeStyle _streakThemeStyle(HiveService hiveService) {
   return DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
