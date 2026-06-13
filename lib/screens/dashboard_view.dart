@@ -1671,8 +1671,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Color _selectorTextColor(bool selected, DashboardThemeStyle style) {
-    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
-    return _readableOn(chipColor);
+    final theme = AppThemeColors.fromDashboardStyle(style);
+    final chipColor = selected ? theme.selectedBackground : theme.chipBackground;
+    return AppThemeColors.readableTextOn(chipColor, style);
   }
 
   Widget _buildThemeSelector() {
@@ -1773,7 +1774,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 decoration: BoxDecoration(
                   color: color,
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black.withOpacity(0.12)),
+                  border: Border.all(color: AppThemeColors.fromDashboardStyle(_dashboardStyle()).border),
                 ),
               ))
           .toList(),
@@ -1887,9 +1888,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: style.elevatedSurface,
+            color: AppThemeColors.fromDashboardStyle(style).card,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: style.primary.withOpacity(0.18)),
+            border: Border.all(color: AppThemeColors.fromDashboardStyle(style).border),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1917,8 +1918,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     required AppFontScale scale,
     required AppFontWeightChoice weight,
   }) {
-    final cardColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.38 : 0.18)! : style.elevatedSurface;
-    final foreground = _readableOn(cardColor);
+    final theme = AppThemeColors.fromDashboardStyle(style);
+    final cardColor = selected ? theme.selectedBackground : theme.card;
+    final foreground = AppThemeColors.readableTextOn(cardColor, style);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1931,7 +1933,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           decoration: BoxDecoration(
             color: cardColor,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: selected ? foreground.withOpacity(0.78) : style.primary.withOpacity(0.18), width: selected ? 1.5 : 1),
+            border: Border.all(color: selected ? theme.selectedBorder : theme.border, width: selected ? 1.5 : 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2029,8 +2031,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     required DashboardThemeStyle style,
     required VoidCallback onTap,
   }) {
-    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
-    final foreground = _readableOn(chipColor);
+    final theme = AppThemeColors.fromDashboardStyle(style);
+    final chipColor = selected ? theme.selectedBackground : theme.chipBackground;
+    final foreground = AppThemeColors.readableTextOn(chipColor, style);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -2043,7 +2046,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           decoration: BoxDecoration(
             color: chipColor,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: selected ? foreground.withOpacity(0.72) : style.primary.withOpacity(0.22), width: selected ? 1.4 : 1),
+            border: Border.all(color: selected ? theme.selectedBorder : theme.border, width: selected ? 1.4 : 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -2068,7 +2071,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Color _readableOn(Color color) {
-    return color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF17211D);
+    return AppThemeColors.readableTextOn(color, _dashboardStyle());
   }
 
   IconData _themeIcon(DashboardThemeType theme) {

@@ -1594,7 +1594,7 @@ class _HabitCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _StatusBadge(status: todayStatus, taskColor: taskColor),
+              _StatusBadge(status: todayStatus, taskColor: taskColor, style: style),
             ],
           ),
           const SizedBox(height: 14),
@@ -1833,16 +1833,19 @@ class _HabitStatusButton extends StatelessWidget {
 class _StatusBadge extends StatelessWidget {
   final _HabitDayStatus status;
   final Color? taskColor;
+  final DashboardThemeStyle? style;
 
-  const _StatusBadge({required this.status, this.taskColor});
+  const _StatusBadge({required this.status, this.taskColor, this.style});
 
   @override
   Widget build(BuildContext context) {
+    final resolvedStyle = style ?? DashboardThemeStyle.of(DashboardThemeType.light);
+    final theme = AppThemeColors.fromDashboardStyle(resolvedStyle);
     final color = switch (status) {
-      _HabitDayStatus.completed => taskColor ?? AppColors.taskCompleted,
-      _HabitDayStatus.cancelled => Colors.redAccent,
-      _HabitDayStatus.missed => Colors.redAccent,
-      _HabitDayStatus.none => AppColors.taskNone,
+      _HabitDayStatus.completed => taskColor ?? theme.success,
+      _HabitDayStatus.cancelled => theme.danger,
+      _HabitDayStatus.missed => theme.danger,
+      _HabitDayStatus.none => theme.surfaceVariant,
     };
 
     return Container(
@@ -1850,7 +1853,7 @@ class _StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(color: color.withOpacity(0.14), borderRadius: BorderRadius.circular(99)),
       child: Text(
         _statusLabel(status),
-        style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 11),
+        style: TextStyle(color: AppThemeColors.readableTextOn(color.withOpacity(0.14), resolvedStyle), fontWeight: FontWeight.w900, fontSize: 11),
       ),
     );
   }
@@ -3424,11 +3427,13 @@ class _InsightRow extends StatelessWidget {
 }
 
 
-Color _readableThemeOn(Color color, DashboardThemeStyle style) => color.computeLuminance() < 0.45 ? style.surface : style.textPrimary;
+Color _readableThemeOn(Color color, DashboardThemeStyle style) => AppThemeColors.readableTextOn(color, style);
 
 DashboardThemeStyle _streakThemeStyle(HiveService hiveService) {
   return DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
 }
+
+AppThemeColors _streakThemeColors(HiveService hiveService) => AppThemeColors.fromDashboardStyle(_streakThemeStyle(hiveService));
 
 Color _themeAccent(HiveService hiveService) => _streakThemeStyle(hiveService).accent;
 
@@ -3459,19 +3464,20 @@ Color _themeDerivedTaskColor(HiveService hiveService, int storedColorValue) {
 
 
 BoxDecoration _softTaskDecoration(Color taskColor, {required double radius, double borderOpacity = 0.24, DashboardThemeStyle? style}) {
-  final fill = style == null
+  final theme = style == null ? null : AppThemeColors.fromDashboardStyle(style);
+  final fill = theme == null
       ? taskColor.withOpacity(0.10)
-      : style.dark
-          ? (Color.lerp(taskColor, style.textPrimary, 0.88) ?? style.textPrimary)
-          : (Color.lerp(style.surface, taskColor, 0.08) ?? style.surface);
-  final borderColor = style == null ? taskColor.withOpacity(borderOpacity) : Color.lerp(style.primary, taskColor, 0.42)!.withOpacity(borderOpacity + 0.10);
+      : style!.dark
+          ? theme.cardDark
+          : Color.lerp(theme.card, taskColor, 0.06) ?? theme.card;
+  final borderColor = theme == null ? taskColor.withOpacity(borderOpacity) : Color.lerp(theme.border, taskColor, 0.42)!.withOpacity(borderOpacity + 0.10);
   return BoxDecoration(
     color: fill,
     borderRadius: BorderRadius.circular(radius),
     border: Border.all(color: borderColor),
     boxShadow: [
       BoxShadow(
-        color: taskColor.withOpacity(0.06),
+        color: theme?.shadow ?? taskColor.withOpacity(0.06),
         blurRadius: 12,
         offset: const Offset(0, 6),
       ),
