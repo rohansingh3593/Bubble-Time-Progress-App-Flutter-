@@ -76,7 +76,7 @@ class _DayViewState extends State<DayView> {
   }
 
   Future<void> _editTask(Task task, {int? index}) async {
-    if (isRoutineTask(task)) {
+    if (isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task)) {
       final action = await showRoutineOccurrenceDialog(context: context, task: task, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
@@ -92,11 +92,15 @@ class _DayViewState extends State<DayView> {
             context,
             date: task.dueDate,
             initialTask: task,
-            title: 'Edit Routine Details',
-            actionLabel: 'Save Routine',
+            title: isRoutineTask(task) ? 'Edit Routine Details' : 'Update Task',
+            actionLabel: isRoutineTask(task) ? 'Save Routine' : 'Save Task',
           );
           if (edited != null) {
-            await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+            if (isRoutineTask(task)) {
+              await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+            } else {
+              await widget.hiveService.updateTaskByReference(task, edited);
+            }
           }
           return;
         case RoutineOccurrenceAction.missOccurrence:
@@ -106,6 +110,8 @@ class _DayViewState extends State<DayView> {
         case RoutineOccurrenceAction.completeOccurrence:
           final updated = task.copyWith(done: true, status: 'Completed');
           await widget.hiveService.updateTaskByReference(task, updated);
+          return;
+        case RoutineOccurrenceAction.savedOccurrence:
           return;
         case RoutineOccurrenceAction.close:
           return;
@@ -214,20 +220,34 @@ class _DayViewState extends State<DayView> {
     return Scaffold(
       appBar: AppBar(
         title: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.chevron_left),
-              onPressed: () {
-                setState(() => _currentDay = _currentDay.subtract(const Duration(days: 1)));
-              },
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () {
+                  setState(() => _currentDay = _currentDay.subtract(const Duration(days: 1)));
+                },
+              ),
             ),
-            Text('${_currentDay.month}/${_currentDay.day}/${_currentDay.year}'),
-            IconButton(
-              icon: const Icon(Icons.chevron_right),
-              onPressed: () {
-                setState(() => _currentDay = _currentDay.add(const Duration(days: 1)));
-              },
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('${_currentDay.month}/${_currentDay.day}/${_currentDay.year}'),
+              ),
+            ),
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () {
+                  setState(() => _currentDay = _currentDay.add(const Duration(days: 1)));
+                },
+              ),
             ),
           ],
         ),

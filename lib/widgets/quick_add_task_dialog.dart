@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../constants/dashboard_themes.dart';
 import '../models/instruction.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
@@ -28,15 +29,25 @@ const String _scheduleBonusMarker = '⏰ Schedule Bonus:';
 const int _defaultScheduleBonusPoints = 20;
 const List<int> _scheduleBonusOptions = [5, 10, 20, 30, 50, 75, 100];
 
-const Map<String, int> _taskColorOptions = {
-  'Yellow': 0xFFFFC107,
-  'Green': 0xFF43A047,
-  'Blue': 0xFF1E88E5,
-  'Red': 0xFFE53935,
-  'Purple': 0xFF7E57C2,
-  'Orange': 0xFFFF8F00,
-  'Pink': 0xFFE91E63,
-};
+Map<String, int> _themeTaskColorOptions(DashboardThemeStyle style) {
+  final color1 = style.primary;
+  final color2 = style.secondary;
+  final color3 = style.accent;
+  final success = Color.lerp(style.primary, style.accent, 0.35) ?? style.primary;
+  final warning = Color.lerp(style.secondary, style.accent, 0.42) ?? style.secondary;
+  final danger = Color.lerp(style.accent, style.primary, 0.62) ?? style.accent;
+  return {
+    'Theme Color 1': color1.value,
+    'Theme Color 2': color2.value,
+    'Theme Color 3': color3.value,
+    'Theme Accent': style.heroGradient.isNotEmpty ? style.heroGradient.last.value : style.accent.value,
+    'Theme Success': success.value,
+    'Theme Warning': warning.value,
+    'Theme Danger': danger.value,
+  };
+}
+
+Color _readableOn(Color color, DashboardThemeStyle style) => color.computeLuminance() < 0.45 ? style.surface : style.textPrimary;
 
 Future<Task?> showTaskFormDialog(
   BuildContext context, {
@@ -55,6 +66,11 @@ Future<Task?> showTaskFormDialog(
     text: _stripSchedule(initialDescription),
   );
   final hiveService = HiveService.instance;
+  final themeStyle = DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
+  final fieldFill = themeStyle.elevatedSurface;
+  final panelFill = themeStyle.surface;
+  final borderColor = themeStyle.primary.withOpacity(0.20);
+  final taskColorOptions = _themeTaskColorOptions(themeStyle);
   final categories = hiveService.getCategories().toList();
   final delegates = hiveService.getDelegates().toList();
 
@@ -74,7 +90,7 @@ Future<Task?> showTaskFormDialog(
   bool selectedUrgent = initialTask?.urgent ?? false;
   bool selectedImportant = initialTask?.important ?? false;
   bool routineEnabled = initialTask?.routineEnabled ?? true;
-  int selectedColorValue = initialTask?.colorValue ?? _taskColorOptions['Blue']!;
+  int selectedColorValue = initialTask?.colorValue ?? taskColorOptions.values.first;
   int selectedRoutineMinutes = normalizeTaskDuration(initialTask?.estimatedMinutes);
   final projectPhases = _ProjectPhaseDraft.parseFromDescription(initialTask?.description ?? '');
   void syncStatusForTaskType() {
@@ -102,16 +118,14 @@ Future<Task?> showTaskFormDialog(
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: InputDecoration(labelText: 'Task Name *', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                  decoration: InputDecoration(labelText: 'Task Name *', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                   autofocus: !isEditing,
-                  onChanged: (_) {
-                    if (isEditing) setDialogState(() {});
-                  },
+                  onChanged: (_) => setDialogState(() {}),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: descriptionController,
-                  decoration: InputDecoration(labelText: 'Description (Optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                  decoration: InputDecoration(labelText: 'Description (Optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                   maxLines: 2,
                 ),
                 const SizedBox(height: 12),
@@ -135,7 +149,7 @@ Future<Task?> showTaskFormDialog(
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                    decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -156,14 +170,14 @@ Future<Task?> showTaskFormDialog(
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: _taskColorOptions.entries.map((entry) {
+                          children: taskColorOptions.entries.map((entry) {
                             final selected = selectedColorValue == entry.value;
                             final color = Color(entry.value);
                             return ChoiceChip(
                               selected: selected,
-                              label: Text(entry.key),
+                              label: Text(entry.key, style: TextStyle(color: selected ? _readableOn(color, themeStyle) : themeStyle.textPrimary, fontWeight: FontWeight.w700)),
                               avatar: CircleAvatar(backgroundColor: color, radius: 8),
-                              selectedColor: color.withOpacity(0.22),
+                              selectedColor: color,
                               onSelected: (_) => setDialogState(() => selectedColorValue = entry.value),
                             );
                           }).toList(),
@@ -180,7 +194,7 @@ Future<Task?> showTaskFormDialog(
                         const SizedBox(height: 12),
                         Container(
                           padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
+                          decoration: BoxDecoration(color: panelFill, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor)),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -251,17 +265,25 @@ Future<Task?> showTaskFormDialog(
                     ),
                   ),
                 const SizedBox(height: 12),
+                _TaskInstructionSection(
+                  hiveService: hiveService,
+                  taskName: nameController.text.trim().isEmpty ? (initialTask?.task ?? '') : nameController.text.trim(),
+                  isRoutine: repeatTask,
+                  phaseNames: repeatTask ? const <String>[] : projectPhases.map((phase) => phase.nameController.text.trim()).where((name) => name.isNotEmpty).toList(),
+                  onChanged: () => setDialogState(() {}),
+                ),
+                const SizedBox(height: 12),
                 if (hourSlot != null && !repeatTask)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                    decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                     child: Text('Time Slot: ${_formatHour(hourSlot!)}'),
                   ),
                 if (hourSlot != null && !repeatTask) const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                  decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                   child: Row(
                     children: [
                       Expanded(child: Text('Due Date: ${dueDate.month}/${dueDate.day}/${dueDate.year}')),
@@ -279,7 +301,7 @@ Future<Task?> showTaskFormDialog(
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                  decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -297,7 +319,7 @@ Future<Task?> showTaskFormDialog(
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                  decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -316,7 +338,7 @@ Future<Task?> showTaskFormDialog(
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                    decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                     child: const Text('Non-repeating tasks use phase-based progress. Estimated time is hidden; use phases below.'),
                   ),
                   const SizedBox(height: 12),
@@ -325,7 +347,7 @@ Future<Task?> showTaskFormDialog(
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: const Color(0xFFF8F4FF), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.black12)),
+                    decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.circular(14), border: Border.all(color: borderColor)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -337,7 +359,7 @@ Future<Task?> showTaskFormDialog(
                           return Container(
                             margin: const EdgeInsets.only(bottom: 10),
                             padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
+                            decoration: BoxDecoration(color: panelFill, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor)),
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               TextField(
                                 controller: phase.nameController,
@@ -447,20 +469,10 @@ Future<Task?> showTaskFormDialog(
                   ),
                   const SizedBox(height: 12),
                 ],
-                if (isEditing) ...[
-                  const SizedBox(height: 12),
-                  _TaskInstructionSection(
-                    hiveService: hiveService,
-                    taskName: nameController.text.trim().isEmpty ? (initialTask?.task ?? '') : nameController.text.trim(),
-                    isRoutine: repeatTask,
-                    phaseNames: repeatTask ? const <String>[] : projectPhases.map((phase) => phase.nameController.text.trim()).where((name) => name.isNotEmpty).toList(),
-                    onChanged: () => setDialogState(() {}),
-                  ),
-                ],
                 if (!repeatTask) ...[
                   DropdownButtonFormField<String>(
                     value: selectedPriority,
-                    decoration: InputDecoration(labelText: 'Priority', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                    decoration: InputDecoration(labelText: 'Priority', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                     items: _priorityOptions.map((priority) => DropdownMenuItem<String>(value: priority, child: Text(priority))).toList(),
                     onChanged: (value) {
                       if (value != null) setDialogState(() => selectedPriority = value);
@@ -469,7 +481,7 @@ Future<Task?> showTaskFormDialog(
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: selectedStatus,
-                    decoration: InputDecoration(labelText: 'Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                    decoration: InputDecoration(labelText: 'Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                     items: _statusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
                     onChanged: (value) {
                       if (value != null) setDialogState(() => selectedStatus = value);
@@ -479,7 +491,7 @@ Future<Task?> showTaskFormDialog(
                 ],
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
-                  decoration: InputDecoration(labelText: 'Category', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                  decoration: InputDecoration(labelText: 'Category', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                   items: [...categories.map((c) => DropdownMenuItem<String>(value: c, child: Text(c))), const DropdownMenuItem<String>(value: '__add_category__', child: Text('➕ Add Category'))],
                   onChanged: (value) async {
                     if (value == null) return;
@@ -506,7 +518,7 @@ Future<Task?> showTaskFormDialog(
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: selectedDelegate ?? '__none__',
-                    decoration: InputDecoration(labelText: 'Delegate (Optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
+                    decoration: InputDecoration(labelText: 'Delegate (Optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: fieldFill),
                     items: [const DropdownMenuItem<String>(value: '__none__', child: Text('Unassigned')), ...delegates.map((d) => DropdownMenuItem<String>(value: d, child: Text(d))), const DropdownMenuItem<String>(value: '__add_delegate__', child: Text('➕ Add Delegate'))],
                     onChanged: (value) async {
                       if (value == null) return;
@@ -536,7 +548,7 @@ Future<Task?> showTaskFormDialog(
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: Color(0xFFF8F4FF), borderRadius: BorderRadius.all(Radius.circular(14)), border: Border.fromBorderSide(BorderSide(color: Colors.black12))),
+                    decoration: BoxDecoration(color: fieldFill, borderRadius: BorderRadius.all(Radius.circular(14)), border: Border.fromBorderSide(BorderSide(color: borderColor))),
                     child: Text('Routine tasks are tracked in Habit/Streak, so delegate scheduling is hidden.'),
                   ),
                 ],
@@ -555,7 +567,7 @@ Future<Task?> showTaskFormDialog(
                       actions: [
                         TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
                         ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                          style: ElevatedButton.styleFrom(backgroundColor: themeStyle.accent),
                           onPressed: () => Navigator.of(context).pop(true),
                           child: const Text('Delete'),
                         ),
@@ -567,12 +579,12 @@ Future<Task?> showTaskFormDialog(
                     if (context.mounted) Navigator.of(context).pop();
                   }
                 },
-                child: const Text('Delete Task', style: TextStyle(color: Colors.redAccent)),
+                child: Text('Delete Task', style: TextStyle(color: themeStyle.accent)),
               ),
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              onPressed: () {
+              onPressed: () async {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task name is required')));
@@ -606,6 +618,13 @@ Future<Task?> showTaskFormDialog(
                         scheduleStart!.minute,
                       )
                     : dueDate;
+
+                await _relinkTaskInstructionsIfRenamed(
+                  hiveService: hiveService,
+                  oldName: initialTask?.task ?? '',
+                  newName: name,
+                );
+                if (!context.mounted) return;
 
                 Navigator.of(context).pop(Task(
                   task: name,
@@ -661,40 +680,66 @@ class _TaskInstructionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
     final linked = _linkedInstructionsForTask(hiveService, taskName);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F4FF),
+        color: style.elevatedSurface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black12),
+        border: Border.all(color: style.primary.withOpacity(0.20)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Expanded(child: Text('Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
-              Text('${linked.length} linked', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+              Expanded(child: Text('📋 Task Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: style.textPrimary))),
+              Text('${linked.length} linked', style: TextStyle(fontWeight: FontWeight.w700, color: style.textMuted)),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             isRoutine ? 'Configure routine rules here. Update them from the occurrence popup.' : 'Attach rules to the whole task or a phase. Status updates happen during completion.',
-            style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 12, color: style.textMuted, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 10),
           if (linked.isEmpty)
-            const Text('No instructions linked yet.', style: TextStyle(color: Colors.black54))
+            Text('No instructions added yet.', style: TextStyle(color: style.textMuted))
           else
-            ...linked.map((instruction) => ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(radius: 13, backgroundColor: Color(instruction.colorValue).withOpacity(0.16), child: Icon(Icons.rule_rounded, color: Color(instruction.colorValue), size: 15)),
-                  title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                  subtitle: Text('Bonus: +${instruction.bonusPoints}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}'),
-                )),
+            ...linked.asMap().entries.map((entry) {
+              final index = entry.key;
+              final instruction = entry.value;
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(radius: 13, backgroundColor: Color(instruction.colorValue).withOpacity(0.16), child: Text('${index + 1}', style: TextStyle(color: Color(instruction.colorValue), fontWeight: FontWeight.w900, fontSize: 12))),
+                title: Text(instruction.name, style: TextStyle(fontWeight: FontWeight.w800, color: style.textPrimary)),
+                subtitle: Text('Bonus: +${instruction.bonusPoints} pts • +${instruction.xpEarned} XP${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: TextStyle(color: style.textMuted)),
+                trailing: Wrap(
+                  spacing: 4,
+                  children: [
+                    IconButton(
+                      tooltip: 'Edit',
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      onPressed: () async {
+                        await _showAddInstructionForTaskDialog(context, hiveService, taskName, phaseNames, existing: instruction);
+                        onChanged();
+                      },
+                    ),
+                    IconButton(
+                      tooltip: 'Delete',
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      onPressed: () async {
+                        await hiveService.deleteInstruction(instruction.id);
+                        onChanged();
+                      },
+                    ),
+                  ],
+                ),
+              );
+            }),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -706,15 +751,7 @@ class _TaskInstructionSection extends StatelessWidget {
                   onChanged();
                 },
                 icon: const Icon(Icons.add),
-                label: const Text('Add Instruction'),
-              ),
-              OutlinedButton.icon(
-                onPressed: taskName.trim().isEmpty ? null : () async {
-                  await _showLinkInstructionDialog(context, hiveService, taskName, phaseNames);
-                  onChanged();
-                },
-                icon: const Icon(Icons.link_rounded),
-                label: const Text('Link Existing Instruction'),
+                label: const Text('+ Add Instruction'),
               ),
             ],
           ),
@@ -730,28 +767,48 @@ List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, String
   return hiveService.getInstructions().where((instruction) => instruction.isLinkedToTask(normalizedName)).toList();
 }
 
-Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames) async {
-  final nameController = TextEditingController();
-  final descriptionController = TextEditingController();
-  final bonusController = TextEditingController(text: '20');
-  final xpController = TextEditingController(text: '5');
-  var repeatType = InstructionRule.repeatDaily;
-  var enabled = true;
-  var streakTracking = true;
-  var colorValue = 0xFF43A047;
-  var linkedPhase = '';
+Future<void> _relinkTaskInstructionsIfRenamed({
+  required HiveService hiveService,
+  required String oldName,
+  required String newName,
+}) async {
+  final from = oldName.trim();
+  final to = newName.trim();
+  if (from.isEmpty || to.isEmpty || from.toLowerCase() == to.toLowerCase()) return;
+
+  for (final instruction in hiveService.getInstructions().where((instruction) => instruction.isLinkedToTask(from))) {
+    final updatedLinks = instruction.linkedTasks.map((linkedTask) {
+      return linkedTask.trim().toLowerCase() == from.toLowerCase() ? to : linkedTask;
+    }).toList();
+    await hiveService.saveInstruction(instruction.copyWith(linkedTask: InstructionRule.encodeLinks(updatedLinks)));
+  }
+}
+
+Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames, {InstructionRule? existing}) async {
+  final nameController = TextEditingController(text: existing?.name ?? '');
+  final descriptionController = TextEditingController(text: existing?.description ?? '');
+  final bonusController = TextEditingController(text: existing == null ? '20' : '${existing.bonusPoints}');
+  final xpController = TextEditingController(text: existing == null ? '5' : '${existing.xpEarned}');
+  var repeatType = existing?.repeatType ?? InstructionRule.repeatDaily;
+  var enabled = existing?.enabled ?? true;
+  var streakTracking = existing?.streakTracking ?? true;
+  final style = DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
+  final instructionColors = _themeTaskColorOptions(style);
+  var colorValue = existing?.colorValue ?? instructionColors.values.first;
+  var linkedPhase = existing?.linkedPhase ?? '';
+  var requiredInstruction = true;
   final instruction = await showDialog<InstructionRule>(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Add Instruction'),
+        title: Text(existing == null ? 'Add Task-Linked Instruction' : 'Edit Task-Linked Instruction'),
         content: SingleChildScrollView(
           child: SizedBox(
             width: 420,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
+                TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name *')),
                 TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
                 if (phaseNames.isNotEmpty) ...[
                   const SizedBox(height: 10),
@@ -765,31 +822,30 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                     onChanged: (value) => setDialogState(() => linkedPhase = value == '__whole_task__' ? '' : value ?? ''),
                   ),
                 ],
-                DropdownButtonFormField<String>(
-                  value: repeatType,
-                  decoration: const InputDecoration(labelText: 'Repeat Type'),
-                  items: const [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly, InstructionRule.repeatOneTime]
-                      .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-                      .toList(),
-                  onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
-                ),
                 TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
                 TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                SwitchListTile(
+                  value: requiredInstruction,
+                  onChanged: (value) => setDialogState(() => requiredInstruction = value),
+                  title: const Text('Required / Optional'),
+                  subtitle: Text(requiredInstruction ? 'Required' : 'Optional'),
+                ),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
                   children: [
-                    for (final color in const [0xFF43A047, 0xFF1E88E5, 0xFFFF9800, 0xFF8E24AA, 0xFFE53935])
+                    for (final entry in instructionColors.entries)
                       ChoiceChip(
-                        selected: colorValue == color,
-                        label: const Text(''),
-                        avatar: CircleAvatar(backgroundColor: Color(color)),
-                        onSelected: (_) => setDialogState(() => colorValue = color),
+                        selected: colorValue == entry.value,
+                        label: Text(entry.key, style: TextStyle(color: colorValue == entry.value ? _readableOn(Color(entry.value), style) : style.textPrimary, fontWeight: FontWeight.w700)),
+                        avatar: CircleAvatar(backgroundColor: Color(entry.value)),
+                        selectedColor: Color(entry.value),
+                        onSelected: (_) => setDialogState(() => colorValue = entry.value),
                       ),
                   ],
                 ),
-                SwitchListTile(value: enabled, onChanged: (value) => setDialogState(() => enabled = value), title: const Text('Enable Instruction')),
-                SwitchListTile(value: streakTracking, onChanged: (value) => setDialogState(() => streakTracking = value), title: const Text('Streak Tracking')),
+                const SizedBox(height: 8),
+                Text('Task-linked instructions are managed only from this task and unlock after the task is completed.', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: style.textMuted)),
               ],
             ),
           ),
@@ -800,7 +856,7 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
             onPressed: () => Navigator.pop(
               context,
               InstructionRule(
-                id: 'instruction_${DateTime.now().microsecondsSinceEpoch}',
+                id: existing?.id ?? 'instruction_${DateTime.now().microsecondsSinceEpoch}',
                 name: nameController.text.trim().isEmpty ? 'Instruction' : nameController.text.trim(),
                 description: descriptionController.text.trim(),
                 linkedTask: InstructionRule.encodeLinks([taskName]),
@@ -811,7 +867,8 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                 colorValue: colorValue,
                 enabled: enabled,
                 streakTracking: streakTracking,
-                createdAt: DateTime.now(),
+                createdAt: existing?.createdAt ?? DateTime.now(),
+                history: existing?.history ?? const [],
               ),
             ),
             child: const Text('Save'),
@@ -821,91 +878,6 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
     ),
   );
   if (instruction != null) await hiveService.saveInstruction(instruction);
-}
-
-Future<void> _showLinkInstructionDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames) async {
-  final searchController = TextEditingController();
-  var selectedIds = <String>{};
-  var linkedPhase = '';
-  final selected = await showDialog<Set<String>>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setDialogState) {
-        final query = searchController.text.trim().toLowerCase();
-        final instructions = hiveService.getInstructions().where((instruction) {
-          if (instruction.isLinkedToTask(taskName)) return false;
-          if (query.isEmpty) return true;
-          return instruction.name.toLowerCase().contains(query) || instruction.description.toLowerCase().contains(query);
-        }).toList();
-        return AlertDialog(
-          title: const Text('Link Existing Instruction'),
-          content: SizedBox(
-            width: 460,
-            height: 460,
-            child: Column(
-              children: [
-                TextField(
-                  controller: searchController,
-                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search instructions...'),
-                  onChanged: (_) => setDialogState(() {}),
-                ),
-                if (phaseNames.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: linkedPhase.isEmpty ? '__whole_task__' : linkedPhase,
-                    decoration: const InputDecoration(labelText: 'Attach To'),
-                    items: [
-                      const DropdownMenuItem(value: '__whole_task__', child: Text('Whole Task')),
-                      ...phaseNames.map((phase) => DropdownMenuItem(value: phase, child: Text('Phase: $phase'))),
-                    ],
-                    onChanged: (value) => setDialogState(() => linkedPhase = value == '__whole_task__' ? '' : value ?? ''),
-                  ),
-                ],
-                const SizedBox(height: 10),
-                Expanded(
-                  child: instructions.isEmpty
-                      ? const Center(child: Text('No matching instructions found.'))
-                      : ListView(
-                          children: instructions.map((instruction) {
-                            final checked = selectedIds.contains(instruction.id);
-                            return CheckboxListTile(
-                              value: checked,
-                              title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                              subtitle: Text('+${instruction.bonusPoints} bonus points'),
-                              onChanged: (value) => setDialogState(() {
-                                selectedIds = {...selectedIds};
-                                if (value == true) {
-                                  selectedIds.add(instruction.id);
-                                } else {
-                                  selectedIds.remove(instruction.id);
-                                }
-                              }),
-                            );
-                          }).toList(),
-                        ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(onPressed: selectedIds.isEmpty ? null : () => Navigator.pop(context, selectedIds), child: const Text('Link Selected')),
-          ],
-        );
-      },
-    ),
-  );
-  if (selected == null || selected.isEmpty) return;
-  for (final instruction in hiveService.getInstructions()) {
-    if (!selected.contains(instruction.id)) continue;
-    final linkedTasks = [...instruction.linkedTasks, taskName];
-    await hiveService.saveInstruction(
-      instruction.copyWith(
-        linkedTask: InstructionRule.encodeLinks(linkedTasks),
-        linkedPhase: linkedPhase.trim().isEmpty ? instruction.linkedPhase : linkedPhase.trim(),
-      ),
-    );
-  }
 }
 
 class _ScheduleDraft {
@@ -1047,13 +1019,14 @@ class _PhaseBooleanPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = DashboardThemeStyle.of(HiveService.instance.getDashboardTheme(), palette: HiveService.instance.getDashboardPalette());
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F4FF),
+        color: style.elevatedSurface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black12),
+        border: Border.all(color: style.primary.withOpacity(0.20)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1212,11 +1185,6 @@ class _ProjectPhaseDraft {
   static int? _parseOptionalDuration(String? rawValue) {
     final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
     if (parsed == null) return null;
-    return normalizeTaskDuration(parsed);
-  }
-
-  static int _parseDuration(String? rawValue) {
-    final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
     return normalizeTaskDuration(parsed);
   }
 

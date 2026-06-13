@@ -37,7 +37,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
         builder: (context, box, child) {
-          final instructions = widget.hiveService.getInstructions();
+          final instructions = widget.hiveService.getStandaloneInstructions();
           final filtered = _filteredInstructions(instructions, today);
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 96),
@@ -63,7 +63,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   }
 
   Widget _filterChips() {
-    const filters = ['All', 'Standalone', 'Task-Linked', 'Active', 'Followed', 'Missed', 'Pending', 'Disabled'];
+    const filters = ['All', 'Active', 'Followed', 'Missed', 'Pending', 'Disabled'];
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -84,10 +84,6 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     return instructions.where((instruction) {
       final entry = widget.hiveService.instructionEntryForDate(instruction, today);
       switch (_filter) {
-        case 'Standalone':
-          return instruction.isStandalone;
-        case 'Task-Linked':
-          return instruction.isTaskLinked;
         case 'Active':
           return instruction.enabled;
         case 'Followed':
@@ -181,7 +177,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
           final availablePhases = _phaseOptionsForSelection(linkedTasks);
           if (availablePhases.isEmpty || (linkedPhase.isNotEmpty && !availablePhases.contains(linkedPhase))) linkedPhase = '';
           final taskSummary = linkedTasks.isEmpty
-              ? 'No linked task selected'
+              ? 'Standalone instructions are independent'
               : linkedTasks.length == 1
                   ? linkedTasks.first
                   : '${linkedTasks.length} tasks selected';
@@ -197,7 +193,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
                     TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
                     const SizedBox(height: 12),
-                    const Text('Linked Task (Optional)', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black54)),
+                    const Text('Standalone Instruction', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black54)),
                     const SizedBox(height: 6),
                     InkWell(
                       borderRadius: BorderRadius.circular(16),
@@ -227,7 +223,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                                 children: [
                                   Text(taskSummary, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
                                   const SizedBox(height: 2),
-                                  const Text('Tap to select from routine and non-routine tasks', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                                  const Text('Saving here always creates standalone instructions; task links are managed from task forms', style: TextStyle(fontSize: 12, color: Colors.black54)),
                                 ],
                               ),
                             ),
@@ -301,8 +297,8 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     id: instruction?.id ?? 'instruction_${DateTime.now().microsecondsSinceEpoch}',
                     name: nameController.text.trim().isEmpty ? 'Instruction' : nameController.text.trim(),
                     description: descriptionController.text.trim(),
-                    linkedTask: InstructionRule.encodeLinks(linkedTasks),
-                    linkedPhase: linkedPhase.trim(),
+                    linkedTask: '',
+                    linkedPhase: '',
                     repeatType: repeatType,
                     bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
                     xpEarned: int.tryParse(xpController.text.trim()) ?? 5,

@@ -100,7 +100,7 @@ class _MonthViewState extends State<MonthView> {
   }
 
   Future<void> _editTask(Task task) async {
-    if (isRoutineTask(task)) {
+    if (isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task)) {
       final action = await showRoutineOccurrenceDialog(context: context, task: task, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
@@ -116,11 +116,15 @@ class _MonthViewState extends State<MonthView> {
             context,
             date: task.dueDate,
             initialTask: task,
-            title: 'Edit Routine Details',
-            actionLabel: 'Save Routine',
+            title: isRoutineTask(task) ? 'Edit Routine Details' : 'Update Task',
+            actionLabel: isRoutineTask(task) ? 'Save Routine' : 'Save Task',
           );
           if (edited != null) {
-            await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+            if (isRoutineTask(task)) {
+              await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+            } else {
+              await widget.hiveService.updateTaskByReference(task, edited);
+            }
           }
           return;
         case RoutineOccurrenceAction.missOccurrence:
@@ -128,6 +132,8 @@ class _MonthViewState extends State<MonthView> {
           return;
         case RoutineOccurrenceAction.completeOccurrence:
           await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed'));
+          return;
+        case RoutineOccurrenceAction.savedOccurrence:
           return;
         case RoutineOccurrenceAction.close:
           return;
