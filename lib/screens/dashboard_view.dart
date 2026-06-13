@@ -1670,24 +1670,27 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final selectedScale = widget.hiveService.getAppFontScale();
     final selectedWeight = widget.hiveService.getAppFontWeight();
 
-  Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
-    final size = compact ? 5.0 : 12.0;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: palette.colors
-          .map((color) => Container(
-                width: size,
-                height: size,
-                margin: const EdgeInsets.only(right: 2),
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black.withOpacity(0.12)),
-                ),
-              ),
-              Text('${selectedTheme.label} • ${selectedPalette.label}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 320),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: style.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: style.primary.withOpacity(0.18)),
+        boxShadow: [BoxShadow(color: style.primary.withOpacity(style.dark ? 0.18 : 0.08), blurRadius: 14, offset: const Offset(0, 6))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.palette_outlined, color: style.primary),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Dashboard Theme', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16))),
             ],
           ),
+          const SizedBox(height: 4),
+          Text('${selectedTheme.label} • ${selectedPalette.label}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -1742,6 +1745,25 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           ),
         ],
       ),
+    );
+  }
+
+  Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
+    final size = compact ? 5.0 : 12.0;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: palette.colors
+          .map((color) => Container(
+                width: size,
+                height: size,
+                margin: const EdgeInsets.only(right: 2),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.black.withOpacity(0.12)),
+                ),
+              ))
+          .toList(),
     );
   }
 
@@ -3755,7 +3777,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 }
 
 
-}
 class _RoutineMood {
   final String emoji;
   final String label;
