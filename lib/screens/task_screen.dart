@@ -42,7 +42,7 @@ class _TaskScreenState extends State<TaskScreen> {
     if (index < 0 || index >= tasks.length) return;
     final currentTask = tasks[index];
 
-    if (isRoutineTask(currentTask)) {
+    if (isRoutineTask(currentTask) || hasTaskLinkedInstructions(widget.hiveService, currentTask)) {
       final action = await showRoutineOccurrenceDialog(context: context, task: currentTask, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
@@ -58,11 +58,15 @@ class _TaskScreenState extends State<TaskScreen> {
             context,
             date: currentTask.dueDate,
             initialTask: currentTask,
-            title: 'Edit Routine Details',
-            actionLabel: 'Save Routine',
+            title: isRoutineTask(currentTask) ? 'Edit Routine Details' : 'View Task Details',
+            actionLabel: isRoutineTask(currentTask) ? 'Save Routine' : 'Save Task',
           );
           if (edited != null) {
-            await widget.hiveService.updateRecurringTaskSeriesByReference(currentTask, edited.copyWith(repeatTask: true));
+            if (isRoutineTask(currentTask)) {
+              await widget.hiveService.updateRecurringTaskSeriesByReference(currentTask, edited.copyWith(repeatTask: true));
+            } else {
+              await widget.hiveService.updateTask(widget.date, index, edited);
+            }
           }
           return;
         case RoutineOccurrenceAction.missOccurrence:
