@@ -1608,9 +1608,9 @@ class HiveService {
     final ratio = followed / linkedInstructions.length;
     if (ratio >= 1) return '🤩 ${task.task} reached Excellent Mood • all instructions followed';
     if (ratio >= 0.75) return '😄 ${task.task} recovered to Happy Mood • $followed/${linkedInstructions.length} instructions followed';
-    if (ratio >= 0.5) return '🙂 ${task.task} reached Good Mood • $followed/${linkedInstructions.length} instructions followed';
-    if (followed > 0) return '😐 ${task.task} stayed Neutral • $followed/${linkedInstructions.length} instructions followed';
-    return '😕 ${task.task} completed but skipped linked instructions';
+    if (ratio >= 0.5) return '😊 ${task.task} reached Good Mood • $followed/${linkedInstructions.length} instructions followed';
+    if (followed > 0) return '🙂 ${task.task} completed but can improve • $followed/${linkedInstructions.length} instructions followed';
+    return '😐 ${task.task} completed but skipped linked instructions';
   }
 
   int _streakBonusForLength(int streakLength) {

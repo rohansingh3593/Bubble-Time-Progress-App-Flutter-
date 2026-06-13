@@ -1353,50 +1353,291 @@ class _StreakBoardActivityRow extends StatelessWidget {
     final taskColor = Color(habit.template.colorValue);
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
-      duration: Duration(milliseconds: 420 + (rowIndex * 55)),
+      duration: Duration(milliseconds: 360 + (rowIndex * 80)),
       curve: Curves.easeOutCubic,
       builder: (context, progress, child) => Opacity(
         opacity: progress,
-        child: Transform.translate(offset: Offset(0, 10 * (1 - progress)), child: child),
+        child: Transform.translate(offset: Offset(-18 * (1 - progress), 0), child: child),
       ),
       child: SizedBox(
         height: layout.rowHeight + layout.rowSpacing,
         child: Row(
           children: dates.map((date) {
-          final status = _boardStatusFor(habit, date, today);
-          final blockColor = _habitActivityBlockColor(habit, date, status, taskColor);
-          final emoji = _habitMoodEmojiForDate(hiveService, habit, date, today, status);
-          final isToday = _isSameDate(date, today);
-          return Tooltip(
-            message: '${habit.title} • ${_formatBoardDate(date)} • ${_statusLabel(status)} • $emoji',
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.86, end: 1.0),
-              duration: Duration(milliseconds: 220 + (dates.indexOf(date) * 12)),
-              curve: Curves.easeOutBack,
-              builder: (context, scale, child) => Transform.scale(scale: isToday ? scale * 1.04 : scale, child: child),
-              child: Container(
-                width: layout.blockSize,
-                height: layout.blockSize,
-                margin: EdgeInsets.symmetric(horizontal: layout.cellSpacing),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: blockColor,
-                  borderRadius: BorderRadius.circular(layout.radius + 4),
-                  border: Border.all(color: isToday ? const Color(0xFFFFA726) : Colors.white.withOpacity(0.16), width: isToday ? 2.4 : 1),
-                  boxShadow: [
-                    if (isToday) BoxShadow(color: const Color(0xFF8E24AA).withOpacity(0.36), blurRadius: 16, spreadRadius: 1),
-                    if (status == _HabitDayStatus.completed) BoxShadow(color: blockColor.withOpacity(0.22), blurRadius: 8, offset: const Offset(0, 3)),
-                  ],
-                ),
-                child: Text(emoji, style: TextStyle(fontSize: layout.iconSize + 2)),
-              ),
-            ),
-          );
+            final status = _boardStatusFor(habit, date, today);
+            final mood = _habitInstructionMoodForDate(hiveService, habit, date, today, status);
+            final isToday = _isSameDate(date, today);
+            return _StreakEmojiTile(
+              hiveService: hiveService,
+              habit: habit,
+              date: date,
+              today: today,
+              status: status,
+              mood: mood,
+              taskColor: taskColor,
+              layout: layout,
+              isToday: isToday,
+              animationIndex: dates.indexOf(date),
+            );
           }).toList(),
         ),
       ),
     );
   }
+}
+
+
+class _HabitInstructionMood {
+  final String emoji;
+  final String label;
+  final String detail;
+  final int followed;
+  final int total;
+  final double progress;
+  final Color ringColor;
+
+  const _HabitInstructionMood({
+    required this.emoji,
+    required this.label,
+    required this.detail,
+    required this.followed,
+    required this.total,
+    required this.progress,
+    required this.ringColor,
+  });
+
+  String get progressLabel => total == 0 ? 'No linked instructions' : '$followed / $total instructions';
+}
+
+class _StreakEmojiTile extends StatefulWidget {
+  final HiveService hiveService;
+  final _HabitTracker habit;
+  final DateTime date;
+  final DateTime today;
+  final _HabitDayStatus status;
+  final _HabitInstructionMood mood;
+  final Color taskColor;
+  final _StreakBoardLayout layout;
+  final bool isToday;
+  final int animationIndex;
+
+  const _StreakEmojiTile({
+    required this.hiveService,
+    required this.habit,
+    required this.date,
+    required this.today,
+    required this.status,
+    required this.mood,
+    required this.taskColor,
+    required this.layout,
+    required this.isToday,
+    required this.animationIndex,
+  });
+
+  @override
+  State<_StreakEmojiTile> createState() => _StreakEmojiTileState();
+}
+
+class _StreakEmojiTileState extends State<_StreakEmojiTile> with SingleTickerProviderStateMixin {
+  late final AnimationController _breathingController;
+
+  @override
+  void initState() {
+    super.initState();
+    _breathingController = AnimationController(vsync: this, duration: const Duration(seconds: 2));
+    if (widget.isToday) _breathingController.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _StreakEmojiTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isToday && !_breathingController.isAnimating) {
+      _breathingController.repeat(reverse: true);
+    } else if (!widget.isToday && _breathingController.isAnimating) {
+      _breathingController.stop();
+      _breathingController.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _breathingController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final background = _emojiTileBackground(widget.status, widget.taskColor);
+    return Tooltip(
+      message: '${widget.habit.title} • ${_formatBoardDate(widget.date)} • ${widget.mood.emoji} ${widget.mood.label} • ${widget.mood.progressLabel}',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _showHabitEmojiDetails(context, widget.hiveService, widget.habit, widget.date, widget.status, widget.mood),
+        child: AnimatedBuilder(
+          animation: _breathingController,
+          builder: (context, child) {
+            final pulse = widget.isToday ? 1 + (_breathingController.value * 0.045) : 1.0;
+            return Transform.scale(scale: pulse, child: child);
+          },
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: Duration(milliseconds: 250 + (widget.animationIndex * 12)),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, child) {
+              final scale = value < 0.62
+                  ? 0.8 + (0.3 * (value / 0.62))
+                  : 1.1 - (0.1 * ((value - 0.62) / 0.38));
+              return Transform.scale(scale: scale, child: child);
+            },
+            child: Container(
+              width: widget.layout.blockSize,
+              height: widget.layout.blockSize,
+              margin: EdgeInsets.symmetric(horizontal: widget.layout.cellSpacing),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: background),
+                border: Border.all(color: widget.isToday ? AppColors.accent : widget.taskColor.withOpacity(0.82), width: widget.isToday ? 2.5 : 1.5),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.14), blurRadius: 8, offset: const Offset(0, 4)),
+                  if (widget.isToday) BoxShadow(color: AppColors.accent.withOpacity(0.42), blurRadius: 18, spreadRadius: 2),
+                  if (widget.status == _HabitDayStatus.completed) BoxShadow(color: widget.taskColor.withOpacity(0.22), blurRadius: 12, spreadRadius: 1),
+                ],
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _InstructionProgressRingPainter(
+                        progress: widget.mood.progress,
+                        color: widget.mood.ringColor,
+                        trackColor: Colors.white.withOpacity(0.42),
+                      ),
+                    ),
+                  ),
+                  if (widget.status == _HabitDayStatus.completed && widget.mood.progress >= 1)
+                    Positioned(top: 4, right: 6, child: Icon(Icons.auto_awesome, color: Colors.white.withOpacity(0.72), size: widget.layout.iconSize * 0.45)),
+                  Text(widget.mood.emoji, style: TextStyle(fontSize: widget.layout.iconSize + 3)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+List<Color> _emojiTileBackground(_HabitDayStatus status, Color taskColor) {
+  switch (status) {
+    case _HabitDayStatus.completed:
+      return [Color.lerp(taskColor, Colors.white, 0.22)!, taskColor];
+    case _HabitDayStatus.cancelled:
+    case _HabitDayStatus.missed:
+      return const [Color(0xFFFF6B6B), Color(0xFFE53935)];
+    case _HabitDayStatus.none:
+      return const [Color(0xFF37474F), Color(0xFF1F2933)];
+  }
+}
+
+class _InstructionProgressRingPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final Color trackColor;
+
+  const _InstructionProgressRingPainter({required this.progress, required this.color, required this.trackColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final strokeWidth = math.max(2.2, size.width * 0.07);
+    final rect = Offset.zero & size;
+    final ringRect = rect.deflate(strokeWidth / 2 + 1);
+    final trackPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..color = trackColor;
+    final progressPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    canvas.drawArc(ringRect, -math.pi / 2, math.pi * 2, false, trackPaint);
+    if (progress > 0) {
+      canvas.drawArc(ringRect, -math.pi / 2, math.pi * 2 * progress.clamp(0.0, 1.0).toDouble(), false, progressPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _InstructionProgressRingPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.color != color || oldDelegate.trackColor != trackColor;
+  }
+}
+
+void _showHabitEmojiDetails(BuildContext context, HiveService hiveService, _HabitTracker habit, DateTime date, _HabitDayStatus status, _HabitInstructionMood mood) {
+  final day = _dateOnly(date);
+  final linkedInstructions = hiveService
+      .getTaskLinkedInstructions()
+      .where((instruction) => instruction.enabled && instruction.isLinkedToTask(habit.title))
+      .toList();
+  final completed = status == _HabitDayStatus.completed;
+  final instructionBonus = linkedInstructions.fold<int>(0, (sum, instruction) {
+    final entry = hiveService.instructionEntryForDate(instruction, day);
+    return sum + ((entry?.followed ?? false) ? entry!.xpEarned : 0);
+  });
+  final remainingBonus = linkedInstructions.fold<int>(0, (sum, instruction) {
+    final entry = hiveService.instructionEntryForDate(instruction, day);
+    return sum + ((entry?.followed ?? false) ? 0 : instruction.xpEarned);
+  });
+
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('${mood.emoji} ${mood.label}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Task:\n${habit.title}', style: const TextStyle(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 12),
+            Text('Date: ${_formatBoardDate(day)}'),
+            Text('Status: ${_statusLabel(status)}'),
+            Text('Instruction progress: ${mood.progressLabel}'),
+            Text(mood.detail, style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            const Text('Instructions:', style: TextStyle(fontWeight: FontWeight.w900)),
+            if (linkedInstructions.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text('No linked instructions for this task.'),
+              )
+            else
+              ...linkedInstructions.map((instruction) {
+                final entry = hiveService.instructionEntryForDate(instruction, day);
+                final icon = entry?.followed == true
+                    ? '✅'
+                    : entry?.missed == true
+                        ? '❌'
+                        : completed
+                            ? '☐'
+                            : '🔒';
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text('$icon ${instruction.name}'),
+                );
+              }),
+            const SizedBox(height: 12),
+            Text('Bonus: +$instructionBonus XP${completed && remainingBonus > 0 ? ' • Potential +$remainingBonus XP' : ''}'),
+            if (completed && mood.progress >= 1) const Text('+10 Coins • +5 Streak Bonus'),
+            if (completed && mood.progress < 1 && remainingBonus > 0) Text('Potential: 🤩 complete remaining instructions for +$remainingBonus XP'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+      ],
+    ),
+  );
 }
 
 double _clampDouble(double value, double min, double max) => value < min ? min : value > max ? max : value;
@@ -1425,27 +1666,61 @@ _HabitDayStatus _boardStatusFor(_HabitTracker habit, DateTime date, DateTime tod
   return habit.statusFor(day);
 }
 
-String _habitMoodEmojiForDate(HiveService hiveService, _HabitTracker habit, DateTime date, DateTime today, _HabitDayStatus status) {
+_HabitInstructionMood _habitInstructionMoodForDate(HiveService hiveService, _HabitTracker habit, DateTime date, DateTime today, _HabitDayStatus status) {
   final day = _dateOnly(date);
-  if (status == _HabitDayStatus.none || day.isAfter(_dateOnly(today))) return '➖';
+  if (status == _HabitDayStatus.none || day.isAfter(_dateOnly(today))) {
+    return const _HabitInstructionMood(
+      emoji: '➖',
+      label: 'Upcoming',
+      detail: 'Future or not due yet',
+      followed: 0,
+      total: 0,
+      progress: 0.0,
+      ringColor: Color(0xFFB0BEC5),
+    );
+  }
+
   if (status == _HabitDayStatus.completed) {
     final linkedInstructions = hiveService
         .getTaskLinkedInstructions()
         .where((instruction) => instruction.enabled && instruction.isLinkedToTask(habit.title))
         .toList();
-    if (linkedInstructions.isEmpty) return '🙂';
+    if (linkedInstructions.isEmpty) {
+      return const _HabitInstructionMood(
+        emoji: '🤩',
+        label: 'Completed',
+        detail: 'Task completed with no linked instructions',
+        followed: 0,
+        total: 0,
+        progress: 1.0,
+        ringColor: Color(0xFF43A047),
+      );
+    }
+
     final followed = linkedInstructions.where((instruction) {
       return hiveService.instructionEntryForDate(instruction, day)?.followed ?? false;
     }).length;
-    if (followed == linkedInstructions.length) return '🤩';
-    if (followed / linkedInstructions.length >= 0.75) return '😊';
-    return '😐';
+    final ratio = followed / linkedInstructions.length;
+    if (ratio >= 1) {
+      return _HabitInstructionMood(emoji: '🤩', label: 'Perfect Execution', detail: 'All instructions completed', followed: followed, total: linkedInstructions.length, progress: ratio, ringColor: const Color(0xFF2ECC71));
+    }
+    if (ratio >= 0.75) {
+      return _HabitInstructionMood(emoji: '😄', label: 'Excellent', detail: '75%+ instructions completed', followed: followed, total: linkedInstructions.length, progress: ratio, ringColor: const Color(0xFF43A047));
+    }
+    if (ratio >= 0.5) {
+      return _HabitInstructionMood(emoji: '😊', label: 'Good', detail: '50%+ instructions completed', followed: followed, total: linkedInstructions.length, progress: ratio, ringColor: const Color(0xFFFBC02D));
+    }
+    if (followed > 0) {
+      return _HabitInstructionMood(emoji: '🙂', label: 'Can Improve', detail: 'Completed with a few instructions', followed: followed, total: linkedInstructions.length, progress: ratio, ringColor: const Color(0xFF42A5F5));
+    }
+    return _HabitInstructionMood(emoji: '😐', label: 'Instructions Ignored', detail: 'Task done, instructions ignored', followed: 0, total: linkedInstructions.length, progress: 0.0, ringColor: const Color(0xFFB0BEC5));
   }
+
   final missedCount = _habitMissedRunEndingAt(habit, day);
-  if (missedCount >= 7) return '😵';
-  if (missedCount >= 4) return '😫';
-  if (missedCount >= 2) return '😠';
-  return '😞';
+  if (missedCount >= 7) return _HabitInstructionMood(emoji: '😵', label: 'Critical', detail: 'Missed $missedCount consecutive days', followed: 0, total: 0, progress: 0.0, ringColor: Colors.red.shade900);
+  if (missedCount >= 4) return _HabitInstructionMood(emoji: '😫', label: 'Losing Streak', detail: 'Missed $missedCount consecutive days', followed: 0, total: 0, progress: 0.0, ringColor: Colors.deepOrange);
+  if (missedCount >= 2) return _HabitInstructionMood(emoji: '😠', label: 'Warning', detail: 'Missed $missedCount consecutive days', followed: 0, total: 0, progress: 0.0, ringColor: Colors.orange);
+  return const _HabitInstructionMood(emoji: '😞', label: 'Missed Today', detail: 'Missed today', followed: 0, total: 0, progress: 0.0, ringColor: Colors.redAccent);
 }
 
 int _habitMissedRunEndingAt(_HabitTracker habit, DateTime date) {

@@ -106,8 +106,14 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
         final taskCompleted = occurrenceStatus == 'completed';
         final taskMissed = occurrenceStatus == 'missed';
         final instructionChoicesEnabled = !occurrenceUpdated && taskCompleted;
+        final followedCount = linkedInstructions.where((instruction) => selectedStatuses[instruction.id] == InstructionHistoryEntry.statusFollowed).length;
+        final currentEmoji = _routineDialogMood(taskCompleted, taskMissed, followedCount, linkedInstructions.length);
+        final instructionProgressLabel = linkedInstructions.isEmpty ? 'No linked instructions' : '$followedCount / ${linkedInstructions.length} Complete';
+        final remainingXp = linkedInstructions.fold<int>(0, (sum, instruction) {
+          return sum + (selectedStatuses[instruction.id] == InstructionHistoryEntry.statusFollowed ? 0 : instruction.xpEarned);
+        });
         return AlertDialog(
-          title: Text('Update ${task.task} Occurrence'),
+          title: Text('Update ${task.task} Today'),
           content: SingleChildScrollView(
             child: SizedBox(
               width: 520,
@@ -118,7 +124,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                   Text(
                     occurrenceUpdated
                         ? 'This occurrence is already updated.\n\n${_updatedSummary(task)}\n\nRoutine details are locked here. Use Edit Routine Details to change the routine itself.'
-                        : 'Choose the occurrence status first. Linked instruction bonuses can only be updated when the task is completed.',
+                        : 'Choose the task status first. Completing the task unlocks linked instructions, but instructions must still be confirmed manually.',
                   ),
                   const SizedBox(height: 14),
                   const Text('Task Status', style: TextStyle(fontWeight: FontWeight.w900)),
@@ -128,14 +134,14 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                     children: [
                       ChoiceChip(
                         selected: taskCompleted,
-                        label: const Text('Completed'),
+                        label: const Text('☑ Complete'),
                         onSelected: !task.routineEnabled || occurrenceUpdated
                             ? null
                             : (_) => setDialogState(() => occurrenceStatus = 'completed'),
                       ),
                       ChoiceChip(
                         selected: taskMissed,
-                        label: const Text('Missed'),
+                        label: const Text('☐ Missed'),
                         onSelected: !task.routineEnabled || occurrenceUpdated
                             ? null
                             : (_) => setDialogState(() => occurrenceStatus = 'missed'),
@@ -143,13 +149,38 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                     ],
                   ),
                   const SizedBox(height: 14),
-                  const Text('Linked Instructions', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const Divider(),
                   const SizedBox(height: 6),
+                  const Text('Instructions', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: currentEmoji.color.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: currentEmoji.color.withOpacity(0.24)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Current Emoji  ${currentEmoji.emoji} ${currentEmoji.label}', style: TextStyle(color: currentEmoji.color, fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 4),
+                        Text(instructionProgressLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        if (taskCompleted && linkedInstructions.isNotEmpty && followedCount < linkedInstructions.length)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text('Potential: 🤩 Complete remaining instructions for +$remainingXp XP', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   if (linkedInstructions.isNotEmpty && !taskCompleted && !occurrenceUpdated)
                     const Padding(
                       padding: EdgeInsets.only(bottom: 8),
                       child: Text(
-                        'Complete the task first to update linked instructions.',
+                        '🔒 Complete the task first to unlock its instructions.',
                         style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
                       ),
                     ),
@@ -182,21 +213,21 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                               spacing: 6,
                               children: [
                                 _instructionStatusChoice(
-                                  label: 'Followed +${instruction.bonusPoints}',
+                                  label: instructionChoicesEnabled ? '☑ Followed +${instruction.bonusPoints}' : '🔒 Followed +${instruction.bonusPoints}',
                                   value: InstructionHistoryEntry.statusFollowed,
                                   selected: selected,
                                   enabled: instructionChoicesEnabled,
                                   onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusFollowed),
                                 ),
                                 _instructionStatusChoice(
-                                  label: 'Missed',
+                                  label: instructionChoicesEnabled ? '☐ Missed' : '🔒 Missed',
                                   value: InstructionHistoryEntry.statusMissed,
                                   selected: selected,
                                   enabled: instructionChoicesEnabled,
                                   onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusMissed),
                                 ),
                                 _instructionStatusChoice(
-                                  label: 'N/A',
+                                  label: instructionChoicesEnabled ? '○ N/A' : '🔒 N/A',
                                   value: InstructionHistoryEntry.statusNotApplicable,
                                   selected: selected,
                                   enabled: instructionChoicesEnabled,
@@ -258,6 +289,27 @@ List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, Task t
   return hiveService.getInstructions().where((instruction) {
     return instruction.enabled && instruction.isLinkedToTask(taskName);
   }).toList();
+}
+
+
+class _RoutineDialogMood {
+  final String emoji;
+  final String label;
+  final Color color;
+
+  const _RoutineDialogMood({required this.emoji, required this.label, required this.color});
+}
+
+_RoutineDialogMood _routineDialogMood(bool taskCompleted, bool taskMissed, int followed, int total) {
+  if (taskMissed) return const _RoutineDialogMood(emoji: '😞', label: 'Missed Today', color: Colors.redAccent);
+  if (!taskCompleted) return const _RoutineDialogMood(emoji: '➖', label: 'Complete task first', color: Colors.blueGrey);
+  if (total == 0) return const _RoutineDialogMood(emoji: '🤩', label: 'Task Complete', color: Colors.green);
+  final ratio = followed / total;
+  if (ratio >= 1) return const _RoutineDialogMood(emoji: '🤩', label: 'Perfect', color: Colors.green);
+  if (ratio >= 0.75) return const _RoutineDialogMood(emoji: '😄', label: 'Excellent', color: Colors.lightGreen);
+  if (ratio >= 0.5) return const _RoutineDialogMood(emoji: '😊', label: 'Good', color: Colors.amber);
+  if (followed > 0) return const _RoutineDialogMood(emoji: '🙂', label: 'Can Improve', color: Colors.blueAccent);
+  return const _RoutineDialogMood(emoji: '😐', label: 'Instructions Ignored', color: Colors.blueGrey);
 }
 
 Widget _instructionStatusChoice({
