@@ -377,6 +377,22 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Future<void> _openTodayTaskQuickOccurrence(_DashboardTodayTask row) async {
     final task = row.task;
+    if (_isCompletedTask(task)) {
+      await _showTodayTaskLockedMessage(
+        '${task.task} is already completed today${_timeLabelForTask(task) == null ? '.' : ' at ${_timeLabelForTask(task)}.'}',
+      );
+      return;
+    }
+
+    if (task.status.trim().toLowerCase() == 'missed') {
+      await _showTodayTaskLockedMessage(
+        '${task.task} is already marked missed for today.',
+        actionLabel: 'View Details',
+        onAction: () => _editTaskDetails(task),
+      );
+      return;
+    }
+
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -420,7 +436,22 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
     switch (action) {
       case 'complete':
-        await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed'));
+        final completedAt = DateTime.now();
+        final scheduleResult = _scheduleResultForCompletion(task, completedAt);
+        await widget.hiveService.updateTaskByReference(
+          task,
+          task.copyWith(
+            done: true,
+            status: 'Completed',
+            dueDate: DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day, completedAt.hour, completedAt.minute),
+          ),
+        );
+        if (!mounted) return;
+        if (scheduleResult != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(scheduleResult.message)),
+          );
+        }
         break;
       case 'missed':
         await widget.hiveService.updateTaskByReference(task, task.copyWith(done: false, status: 'Missed'));
@@ -429,6 +460,80 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
         break;
     }
+  }
+
+  Future<void> _showTodayTaskLockedMessage(String message, {String actionLabel = 'OK', VoidCallback? onAction}) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onAction?.call();
+            },
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _DashboardScheduleResult? _scheduleResultForCompletion(Task task, DateTime completedAt) {
+    if (!task.repeatTask) return null;
+    final schedule = _dashboardRoutineScheduleForTask(task);
+    if (schedule == null) return null;
+    var completedMinutes = completedAt.hour * 60 + completedAt.minute;
+    final start = schedule.startMinutes;
+    var end = schedule.endMinutes;
+    if (end < start) {
+      end += 24 * 60;
+      if (completedMinutes < start) completedMinutes += 24 * 60;
+    }
+    final onTime = completedMinutes >= start && completedMinutes <= end;
+    return _DashboardScheduleResult(
+      onTime
+          ? 'Completed on time! +${schedule.bonusPoints} bonus points earned.'
+          : 'Task completed, but outside the scheduled time. No schedule bonus added.',
+      onTime ? schedule.bonusPoints : 0,
+    );
+  }
+
+  _DashboardRoutineSchedule? _dashboardRoutineScheduleForTask(Task task) {
+    int? start;
+    int? end;
+    int? bonus;
+    for (final line in task.description.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.startsWith('⏰ Schedule Start:')) {
+        start = _parseScheduleMinutes(trimmed.substring('⏰ Schedule Start:'.length).trim());
+      } else if (trimmed.startsWith('⏰ Schedule End:')) {
+        end = _parseScheduleMinutes(trimmed.substring('⏰ Schedule End:'.length).trim());
+      } else if (trimmed.startsWith('⏰ Schedule Bonus:')) {
+        bonus = int.tryParse(trimmed.substring('⏰ Schedule Bonus:'.length).replaceAll('points', '').trim());
+      }
+    }
+    if (start == null || end == null) return null;
+    return _DashboardRoutineSchedule(startMinutes: start, endMinutes: end, bonusPoints: bonus ?? 20);
+  }
+
+  int? _parseScheduleMinutes(String raw) {
+    final parts = raw.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return (hour * 60) + minute;
+  }
+
+  String? _timeLabelForTask(Task task) {
+    if (task.dueDate.hour == 0 && task.dueDate.minute == 0 && task.hourSlot == null) return null;
+    final hour = task.dueDate.hour;
+    final minute = task.dueDate.minute.toString().padLeft(2, '0');
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final period = hour >= 12 ? 'PM' : 'AM';
+    return '$displayHour:$minute $period';
   }
 
   void _showTaskListSheet(String title, List<Task> tasks) {
@@ -3307,6 +3412,22 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
+}
+
+
+class _DashboardRoutineSchedule {
+  final int startMinutes;
+  final int endMinutes;
+  final int bonusPoints;
+
+  const _DashboardRoutineSchedule({required this.startMinutes, required this.endMinutes, required this.bonusPoints});
+}
+
+class _DashboardScheduleResult {
+  final String message;
+  final int bonusPoints;
+
+  const _DashboardScheduleResult(this.message, this.bonusPoints);
 }
 
 enum _TodayTaskGroup {
