@@ -364,12 +364,12 @@ class _YearViewState extends State<YearView> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final monthColumns = constraints.maxWidth < 600 ? 7 : constraints.maxWidth < 1024 ? 10 : 14;
-        final spacing = constraints.maxWidth < 600 ? 5.0 : 6.0;
+        final monthColumns = constraints.maxWidth < 380 ? 12 : constraints.maxWidth < 600 ? 13 : constraints.maxWidth < 1024 ? 14 : 15;
+        final spacing = constraints.maxWidth < 600 ? 4.0 : 5.0;
         final horizontalPadding = constraints.maxWidth < 600 ? 28.0 : 36.0;
         final availableDotWidth = constraints.maxWidth - horizontalPadding - (spacing * (monthColumns - 1));
         final dotCellWidth = availableDotWidth / monthColumns;
-        final dotSize = dotCellWidth.clamp(28.0, 42.0).toDouble();
+        final dotSize = dotCellWidth.clamp(20.0, 32.0).toDouble();
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -452,7 +452,7 @@ class _YearViewState extends State<YearView> {
                                     '${dayIndex + 1}',
                                     style: TextStyle(
                                       color: selectedYearIsPast || (isCurrentYear && date.isBefore(today)) || isToday ? theme.surface : theme.textMuted,
-                                      fontSize: dotSize < 34 ? 10 : 11,
+                                      fontSize: dotSize < 24 ? 9 : 10,
                                       fontWeight: FontWeight.w900,
                                     ),
                                   ),
