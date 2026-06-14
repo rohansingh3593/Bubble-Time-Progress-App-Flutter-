@@ -1011,7 +1011,8 @@ class HiveService {
       if (key is! String || !key.startsWith(_instructionPrefix)) continue;
       final raw = _box.get(key);
       if (raw == null) continue;
-      instructions.add(InstructionRule.fromStorageList(raw.cast<dynamic>()));
+      final instruction = InstructionRule.fromStorageList(raw.cast<dynamic>());
+      if (!instruction.archived) instructions.add(instruction);
     }
     instructions.sort((a, b) {
       if (a.enabled != b.enabled) return a.enabled ? -1 : 1;
@@ -1033,7 +1034,10 @@ class HiveService {
   }
 
   Future<void> deleteInstruction(String id) async {
-    await _box.delete(_instructionKey(id));
+    final raw = _box.get(_instructionKey(id));
+    if (raw == null) return;
+    final instruction = InstructionRule.fromStorageList(raw.cast<dynamic>());
+    await saveInstruction(instruction.copyWith(archived: true, enabled: false));
   }
 
   Future<void> setInstructionEnabled(InstructionRule instruction, bool enabled) async {
@@ -1048,19 +1052,28 @@ class HiveService {
     return null;
   }
 
-  Future<void> updateInstructionStatus(InstructionRule instruction, DateTime date, String status, {String note = ''}) async {
+  Future<void> updateInstructionStatus(InstructionRule instruction, DateTime date, String status, {String note = '', InstructionLevel? level, InstructionOption? option}) async {
     final occurrence = _instructionOccurrenceDate(instruction, date);
     final updatedHistory = instruction.history
         .where((entry) => !_isSameDate(_instructionOccurrenceDate(instruction, entry.date), occurrence))
         .toList();
     final followed = status == InstructionHistoryEntry.statusFollowed;
+    final selectedLevel = followed ? level : null;
+    final selectedOption = followed ? option : null;
     updatedHistory.add(
       InstructionHistoryEntry(
         date: occurrence,
         status: status,
-        bonusPoints: followed ? instruction.bonusPoints : 0,
-        xpEarned: followed ? instruction.xpEarned : 0,
+        bonusPoints: followed ? (selectedLevel?.bonusPoints ?? selectedOption?.bonusPoints ?? instruction.bonusPoints) : 0,
+        xpEarned: followed ? (selectedLevel?.xpEarned ?? selectedOption?.xpEarned ?? instruction.xpEarned) : 0,
         note: note.trim(),
+        levelId: selectedLevel?.id ?? '',
+        levelName: selectedLevel?.name ?? '',
+        completedTarget: selectedLevel?.target ?? 0,
+        unit: selectedLevel?.unit ?? instruction.unit,
+        optionId: selectedOption?.id ?? '',
+        optionName: selectedOption?.name ?? '',
+        optionEmoji: selectedOption?.emoji ?? '',
       ),
     );
     await saveInstruction(instruction.copyWith(history: updatedHistory));
@@ -1203,7 +1216,7 @@ class HiveService {
     if (existing == null) {
       history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Goal created', note: updated.name));
     } else {
-      if (existing.imagePath != updated.imagePath) {
+      if (existing.imagePath != updated.imagePath || existing.galleryImages.length != updated.galleryImages.length) {
         history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Goal image updated'));
       }
       if (existing.effectiveStatus != updated.effectiveStatus) {
@@ -1223,7 +1236,7 @@ class HiveService {
 
   RewardGoal _normalizeRewardGoal(RewardGoal goal) {
     if (goal.targetAmountRupees > 0 && goal.savedAmountRupees >= goal.targetAmountRupees) {
-      return goal.copyWith(status: RewardGoal.statusAchieved);
+      return goal.copyWith(status: RewardGoal.statusAchieved, completedAt: goal.completedAt ?? DateTime.now());
     }
     return goal;
   }
@@ -1285,6 +1298,7 @@ class HiveService {
       goal.copyWith(
         savedAmountRupees: newSavedAmount,
         status: goal.targetAmountRupees > 0 && newSavedAmount >= goal.targetAmountRupees ? RewardGoal.statusAchieved : goal.status,
+        completedAt: goal.targetAmountRupees > 0 && newSavedAmount >= goal.targetAmountRupees ? (goal.completedAt ?? DateTime.now()) : goal.completedAt,
         history: history,
       ),
     );

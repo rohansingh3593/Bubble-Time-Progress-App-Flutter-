@@ -9,7 +9,6 @@ import 'screens/month_view.dart';
 import 'screens/week_view.dart';
 import 'screens/day_view.dart';
 import 'screens/streak_view.dart';
-import 'constants/colors.dart';
 import 'constants/dashboard_themes.dart';
 
 void main() async {
@@ -134,6 +133,7 @@ class MyApp extends StatelessWidget {
           fontScale: hiveService.getAppFontScale(),
           fontWeight: hiveService.getAppFontWeight(),
         );
+        final dashboardTheme = AppThemeColors.fromDashboardStyle(dashboardStyle);
         return MaterialApp(
           title: 'Bubble Time Progress',
           theme: ThemeData(
@@ -143,17 +143,18 @@ class MyApp extends StatelessWidget {
               primary: dashboardStyle.primary,
               secondary: dashboardStyle.secondary,
               surface: dashboardStyle.surface,
-              onPrimary: Colors.white,
-              onSecondary: dashboardStyle.dark ? Colors.white : AppColors.textPrimary,
+              onPrimary: dashboardTheme.inverseText,
+              onSecondary: AppThemeColors.readableTextOn(dashboardStyle.secondary, dashboardStyle),
               onSurface: dashboardStyle.textPrimary,
               brightness: dashboardStyle.dark ? Brightness.dark : Brightness.light,
             ),
             scaffoldBackgroundColor: dashboardStyle.background,
             textTheme: appTextTheme,
-            primaryTextTheme: appTextTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+            primaryTextTheme: appTextTheme.apply(bodyColor: dashboardTheme.inverseText, displayColor: dashboardTheme.inverseText),
+            extensions: [dashboardTheme],
             appBarTheme: AppBarTheme(
               backgroundColor: dashboardStyle.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: dashboardTheme.inverseText,
               elevation: dashboardStyle.dark ? 0 : 2,
             ),
             bottomNavigationBarTheme: BottomNavigationBarThemeData(
@@ -172,7 +173,7 @@ class MyApp extends StatelessWidget {
             ),
             floatingActionButtonTheme: FloatingActionButtonThemeData(
               backgroundColor: dashboardStyle.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: dashboardTheme.inverseText,
             ),
             chipTheme: ChipThemeData(
               selectedColor: dashboardStyle.primary.withOpacity(0.18),
@@ -183,8 +184,8 @@ class MyApp extends StatelessWidget {
             ),
             elevatedButtonTheme: ElevatedButtonThemeData(
               style: ElevatedButton.styleFrom(
-                backgroundColor: dashboardStyle.accent,
-                foregroundColor: Colors.white,
+                backgroundColor: dashboardTheme.filledButton,
+                foregroundColor: dashboardTheme.buttonText,
               ),
             ),
           ),

@@ -665,16 +665,38 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               subtitle: Text(entry == null ? 'Have you followed this instruction today?' : 'This instruction is already updated today.'),
             ),
             if (entry == null && instruction.enabled) ...[
-              ListTile(
-                leading: const Icon(Icons.check_circle_outline, color: Colors.green),
-                title: const Text('Followed'),
-                onTap: () => Navigator.pop(context, 'followed'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.cancel_outlined, color: Colors.red),
-                title: const Text('Missed'),
-                onTap: () => Navigator.pop(context, 'missed'),
-              ),
+              if (instruction.isOptionBased) ...[
+                ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
+                ...instruction.options.map((option) => ListTile(
+                      leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
+                      title: Text('${option.name} (+${option.bonusPoints})'),
+                      subtitle: Text('${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
+                      onTap: () => Navigator.pop(context, 'option:${option.id}'),
+                    )),
+              ] else if (instruction.isLevelBased) ...[
+                ListTile(
+                  leading: const Icon(Icons.cancel_outlined, color: Colors.red),
+                  title: const Text('Missed'),
+                  onTap: () => Navigator.pop(context, 'missed'),
+                ),
+                ...instruction.levels.map((level) => ListTile(
+                      leading: const Icon(Icons.emoji_events_outlined, color: Colors.green),
+                      title: Text('${level.displayLabel} (+${level.bonusPoints})'),
+                      subtitle: Text('${level.xpEarned} XP'),
+                      onTap: () => Navigator.pop(context, 'level:${level.id}'),
+                    )),
+              ] else ...[
+                ListTile(
+                  leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                  title: const Text('Followed'),
+                  onTap: () => Navigator.pop(context, 'followed'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.cancel_outlined, color: Colors.red),
+                  title: const Text('Missed'),
+                  onTap: () => Navigator.pop(context, 'missed'),
+                ),
+              ],
             ] else
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -695,6 +717,18 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       ),
     );
     if (!mounted || action == null || action == 'close') return;
+    if (action.startsWith('option:') && instruction.options.isNotEmpty) {
+      final optionId = action.substring('option:'.length);
+      final option = instruction.options.firstWhere((item) => item.id == optionId, orElse: () => instruction.options.first);
+      await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed, option: option);
+      return;
+    }
+    if (action.startsWith('level:') && instruction.levels.isNotEmpty) {
+      final levelId = action.substring('level:'.length);
+      final level = instruction.levels.firstWhere((item) => item.id == levelId, orElse: () => instruction.levels.first);
+      await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed, level: level);
+      return;
+    }
     switch (action) {
       case 'followed':
         await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed);
@@ -1760,23 +1794,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           const SizedBox(height: 10),
           Text('Color Palette', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: DashboardPaletteType.values.map((palette) {
-                final isSelected = palette == selectedPalette;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: _themeSelectorChip(
-                    selected: isSelected,
-                    label: palette.label,
-                    leading: _paletteDots(palette, compact: true),
-                    style: style,
-                    onTap: () => widget.hiveService.setDashboardPalette(palette),
-                  ),
-                );
-              }).toList(),
-            ),
+          _paletteSelectorGrid(
+            style: style,
+            selectedPalette: selectedPalette,
           ),
           const SizedBox(height: 14),
           _buildTypographySelector(
@@ -1793,6 +1813,146 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         ],
       ),
     );
+  }
+
+
+
+  Widget _paletteSelectorGrid({
+    required DashboardThemeStyle style,
+    required DashboardPaletteType selectedPalette,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        final crossAxisCount = availableWidth >= 620
+            ? 4
+            : availableWidth >= 430
+                ? 3
+                : 2;
+        final spacing = 10.0;
+        final tileWidth = (availableWidth - (spacing * (crossAxisCount - 1))) / crossAxisCount;
+
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 280),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          child: Wrap(
+            key: ValueKey(selectedPalette.storageKey),
+            spacing: spacing,
+            runSpacing: spacing,
+            children: dashboardThemePickerPalettes.map((palette) {
+              final isSelected = palette == selectedPalette;
+              return SizedBox(
+                width: tileWidth.clamp(132.0, 220.0).toDouble(),
+                child: _paletteSelectorTile(
+                  palette: palette,
+                  selected: isSelected,
+                  style: style,
+                  onTap: () => widget.hiveService.setDashboardPalette(palette),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _paletteSelectorTile({
+    required DashboardPaletteType palette,
+    required bool selected,
+    required DashboardThemeStyle style,
+    required VoidCallback onTap,
+  }) {
+    final theme = AppThemeColors.fromDashboardStyle(style);
+    final background = selected ? theme.primaryLight : theme.surface;
+    final borderColor = selected ? theme.primary : theme.border;
+    final textColor = selected ? theme.primary : theme.textPrimary;
+    final recommendation = _paletteRecommendation(palette);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor, width: selected ? 1.8 : 1),
+            boxShadow: [
+              BoxShadow(
+                color: selected ? theme.primary.withOpacity(0.18) : theme.shadow.withOpacity(0.35),
+                blurRadius: selected ? 18 : 10,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _paletteDots(palette, compact: false)),
+                  AnimatedOpacity(
+                    opacity: selected ? 1 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Icon(Icons.check_circle_rounded, size: 18, color: theme.primary),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                palette.label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: textColor, fontWeight: FontWeight.w900, fontSize: 12.5, height: 1.05),
+              ),
+              if (recommendation != null) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.accent.withOpacity(style.dark ? 0.20 : 0.16),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: theme.accent.withOpacity(0.28)),
+                  ),
+                  child: Text(
+                    recommendation,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: theme.accent, fontWeight: FontWeight.w900, fontSize: 10),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String? _paletteRecommendation(DashboardPaletteType palette) {
+    switch (palette) {
+      case DashboardPaletteType.earthyForestHues:
+        return 'Calm app';
+      case DashboardPaletteType.refreshingSummerFun:
+        return 'Eye-catching';
+      case DashboardPaletteType.vividNightfall:
+        return 'Premium';
+      case DashboardPaletteType.aquaFocus:
+        return 'Focused';
+      case DashboardPaletteType.fieryOcean:
+        return 'Bold';
+      case DashboardPaletteType.oliveGardenFeast:
+        return 'Journal';
+      default:
+        return null;
+    }
   }
 
   Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
@@ -3177,10 +3337,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _todaysProductivitySection(_TodayProductivityStats stats, List<_DashboardTodayTask> todayRows) {
     final style = _dashboardStyle();
+    final theme = AppThemeColors.fromDashboardStyle(style);
     final badge = _productivityBadge(stats.completionRate);
-    const completedColor = Color(0xFF2ECC71);
-    const pendingColor = Color(0xFFFFA726);
-    const overdueColor = Color(0xFFFF5252);
+    final completedColor = theme.completed;
+    final pendingColor = theme.pending;
+    final overdueColor = theme.overdue;
 
     return _panel(
       title: "TODAY'S PRODUCTIVITY",
@@ -3341,10 +3502,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   _ProductivityBadge _productivityBadge(int rate) {
-    if (rate <= 25) return const _ProductivityBadge(label: 'Needs Attention', emoji: '🔴', color: Color(0xFFFF5252));
-    if (rate <= 50) return const _ProductivityBadge(label: 'Getting Started', emoji: '🟠', color: Color(0xFFFFA726));
-    if (rate <= 75) return const _ProductivityBadge(label: 'Productive', emoji: '🟢', color: Color(0xFF2ECC71));
-    return const _ProductivityBadge(label: 'Excellent', emoji: '🔥', color: Color(0xFFFF7043));
+    final theme = AppThemeColors.fromDashboardStyle(_dashboardStyle());
+    if (rate <= 25) return _ProductivityBadge(label: 'Needs Attention', emoji: '🔴', color: theme.danger);
+    if (rate <= 50) return _ProductivityBadge(label: 'Getting Started', emoji: '🟠', color: theme.warning);
+    if (rate <= 75) return _ProductivityBadge(label: 'Productive', emoji: '🟢', color: theme.success);
+    return _ProductivityBadge(label: 'Excellent', emoji: '🔥', color: theme.accent);
   }
 
   Widget _instructionProductivitySection(DateTime today) {
@@ -3370,11 +3532,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             runSpacing: 10,
             children: [
               _instructionProductivityStat('Standalone Instructions', instructions.length, style.primary, onTap: () => _showInstructionFilterSheet('All standalone instructions', enabled, today)),
-              _instructionProductivityStat('😀 Followed Today', followed, Colors.green, onTap: () => _showInstructionFilterSheet('Followed instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).toList(), today)),
-              _instructionProductivityStat('😞 Missed', missed, Colors.redAccent, onTap: () => _showInstructionFilterSheet('Missed instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.missed ?? false).toList(), today)),
-              _instructionProductivityStat('😐 Pending', pending, Colors.orangeAccent, onTap: () => _showInstructionFilterSheet('Pending instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today) == null).toList(), today)),
+              _instructionProductivityStat('😀 Followed Today', followed, AppThemeColors.fromDashboardStyle(style).success, onTap: () => _showInstructionFilterSheet('Followed instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).toList(), today)),
+              _instructionProductivityStat('😞 Missed', missed, AppThemeColors.fromDashboardStyle(style).danger, onTap: () => _showInstructionFilterSheet('Missed instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.missed ?? false).toList(), today)),
+              _instructionProductivityStat('😐 Pending', pending, AppThemeColors.fromDashboardStyle(style).warning, onTap: () => _showInstructionFilterSheet('Pending instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today) == null).toList(), today)),
               _instructionProductivityStat('⭐ Completion', score, style.primary, suffix: '%', onTap: () => _showInstructionFilterSheet('All standalone instructions', enabled, today)),
-              _instructionProductivityStat('🎁 Bonus Points', bonus, Colors.green, prefix: '+', onTap: () => _showInstructionFilterSheet('Bonus-earning instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).toList(), today)),
+              _instructionProductivityStat('🎁 Bonus Points', bonus, AppThemeColors.fromDashboardStyle(style).bonus, prefix: '+', onTap: () => _showInstructionFilterSheet('Bonus-earning instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).toList(), today)),
               ],
             ),
             const SizedBox(height: 14),
@@ -3385,11 +3547,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             else
               ...enabled.take(6).map((instruction) {
               final entry = widget.hiveService.instructionEntryForDate(instruction, today);
+              final dashboardTheme = AppThemeColors.fromDashboardStyle(style);
               final statusColor = entry?.followed == true
-                  ? Colors.green
+                  ? dashboardTheme.success
                   : entry?.missed == true
-                      ? Colors.redAccent
-                      : Colors.grey;
+                      ? dashboardTheme.danger
+                      : dashboardTheme.muted;
               return ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
@@ -3398,7 +3561,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   child: Icon(Icons.rule_folder_outlined, color: Color(instruction.colorValue)),
                 ),
                 title: Text(instruction.name, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
-                subtitle: Text('${instruction.repeatType} • +${instruction.bonusPoints} points • ${widget.hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: style.textMuted)),
+                subtitle: Text((entry?.hasLevel == true || entry?.hasOption == true) ? 'Today: ${entry!.selectionSummary} • Bonus: +${entry.bonusPoints} • ${widget.hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.repeatType} • ${instruction.isLevelBased ? '${instruction.levels.length} levels' : instruction.isOptionBased ? '${instruction.options.length} options' : '+${instruction.bonusPoints} points'} • ${widget.hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: style.textMuted)),
                 trailing: Text(entry?.status ?? 'Pending', style: TextStyle(color: statusColor, fontWeight: FontWeight.w900)),
                 onTap: () => _showStandaloneInstructionActions(instruction, today),
               );
@@ -3801,13 +3964,21 @@ class _InstructionDonutChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = followed + pending + missed;
     if (total == 0) return const SizedBox.shrink();
+    final theme = context.dashboardTheme;
     return SizedBox(
       width: 128,
       height: 128,
       child: CustomPaint(
-        painter: _InstructionDonutPainter(followed: followed, pending: pending, missed: missed),
+        painter: _InstructionDonutPainter(
+          followed: followed,
+          pending: pending,
+          missed: missed,
+          followedColor: theme.success,
+          pendingColor: theme.warning,
+          missedColor: theme.danger,
+        ),
         child: Center(
-          child: Text('$total\nRules', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900)),
+          child: Text('$total\nRules', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900, color: theme.textPrimary)),
         ),
       ),
     );
@@ -3818,8 +3989,18 @@ class _InstructionDonutPainter extends CustomPainter {
   final int followed;
   final int pending;
   final int missed;
+  final Color followedColor;
+  final Color pendingColor;
+  final Color missedColor;
 
-  const _InstructionDonutPainter({required this.followed, required this.pending, required this.missed});
+  const _InstructionDonutPainter({
+    required this.followed,
+    required this.pending,
+    required this.missed,
+    required this.followedColor,
+    required this.pendingColor,
+    required this.missedColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3838,14 +4019,19 @@ class _InstructionDonutPainter extends CustomPainter {
       canvas.drawArc(rect.deflate(12), start, sweep, false, paint);
       start += sweep;
     }
-    draw(followed, Colors.green);
-    draw(pending, Colors.amber);
-    draw(missed, Colors.redAccent);
+    draw(followed, followedColor);
+    draw(pending, pendingColor);
+    draw(missed, missedColor);
   }
 
   @override
   bool shouldRepaint(covariant _InstructionDonutPainter oldDelegate) {
-    return oldDelegate.followed != followed || oldDelegate.pending != pending || oldDelegate.missed != missed;
+    return oldDelegate.followed != followed ||
+        oldDelegate.pending != pending ||
+        oldDelegate.missed != missed ||
+        oldDelegate.followedColor != followedColor ||
+        oldDelegate.pendingColor != pendingColor ||
+        oldDelegate.missedColor != missedColor;
   }
 }
 

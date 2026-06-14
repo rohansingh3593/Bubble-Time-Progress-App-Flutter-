@@ -70,6 +70,7 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
                       availableBalance: summary.availableRupees,
                       onEdit: () => _showGoalForm(goal),
                       onFund: () => _showFundGoalDialog(goal),
+                      onView: () => _showGoalDetails(goal),
                     )),
             ],
           );
@@ -186,30 +187,59 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
     final descriptionController = TextEditingController(text: goal?.description ?? '');
     final targetController = TextEditingController(text: goal == null ? '' : '${goal.targetAmountRupees}');
     final savedController = TextEditingController(text: goal == null ? '0' : '${goal.savedAmountRupees}');
-    final categoryController = TextEditingController(text: goal?.category ?? 'Personal');
+    var category = goal?.category ?? 'Personal';
+    final startDateController = TextEditingController(text: goal?.startDate == null ? _formatIsoDate(DateTime.now()) : _formatIsoDate(goal!.startDate!));
     final deadlineController = TextEditingController(text: goal?.deadline == null ? '' : _formatIsoDate(goal!.deadline!));
     var priority = goal?.priority ?? 'Medium';
     var status = goal?.effectiveStatus ?? RewardGoal.statusInProgress;
-    var imagePath = goal?.imagePath ?? '';
+    var images = [...(goal?.galleryImages ?? const <RewardGoalImage>[])];
+    var milestones = [...(goal?.milestones ?? const <RewardGoalMilestone>[])];
+    if (milestones.isEmpty) {
+      milestones = const [
+        RewardGoalMilestone(id: 'ms_20', percent: 20, title: '20% milestone'),
+        RewardGoalMilestone(id: 'ms_40', percent: 40, title: '40% milestone'),
+        RewardGoalMilestone(id: 'ms_60', percent: 60, title: '60% milestone'),
+        RewardGoalMilestone(id: 'ms_80', percent: 80, title: '80% milestone'),
+        RewardGoalMilestone(id: 'ms_100', percent: 100, title: 'Goal achieved'),
+      ];
+    }
     final saved = await showDialog<RewardGoal>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text(goal == null ? 'Add Goal' : 'Edit Goal'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Goal Name')),
                 TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Goal Description')),
-                TextField(controller: targetController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target Amount (₹)')),
-                TextField(controller: savedController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Current Saved Amount (₹)')),
-                TextField(controller: categoryController, decoration: const InputDecoration(labelText: 'Goal Category')),
+                TextField(controller: targetController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target Amount (₹)'), onChanged: (_) => setDialogState(() {})),
+                TextField(controller: savedController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Current Saved Amount (₹)'), onChanged: (_) => setDialogState(() {})),
+                Builder(builder: (_) {
+                  final target = int.tryParse(targetController.text.trim()) ?? 0;
+                  final savedAmount = int.tryParse(savedController.text.trim()) ?? 0;
+                  final remaining = (target - savedAmount).clamp(0, target).toInt();
+                  final progress = target <= 0 ? 0 : ((savedAmount / target).clamp(0, 1) * 100).round();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text('Remaining: ${_formatRupees(remaining)} • Progress: $progress%', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.black54)),
+                  );
+                }),
+                DropdownButtonFormField<String>(
+                  value: category,
+                  decoration: const InputDecoration(labelText: 'Goal Category'),
+                  items: const ['Personal', 'Health', 'Career', 'Education', 'Finance', 'Travel', 'Lifestyle', 'Family', 'Other'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+                  onChanged: (value) => setDialogState(() => category = value ?? category),
+                ),
+                TextField(controller: startDateController, decoration: const InputDecoration(labelText: 'Start Date (YYYY-MM-DD)')),
                 TextField(controller: deadlineController, decoration: const InputDecoration(labelText: 'Deadline (YYYY-MM-DD)')),
                 DropdownButtonFormField<String>(
                   value: priority,
                   decoration: const InputDecoration(labelText: 'Priority'),
-                  items: const ['Low', 'Medium', 'High'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+                  items: const ['Low', 'Medium', 'High', 'Critical'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
                   onChanged: (value) => setDialogState(() => priority = value ?? priority),
                 ),
                 DropdownButtonFormField<String>(
@@ -221,6 +251,8 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
                   onChanged: (value) => setDialogState(() => status = value ?? status),
                 ),
                 const SizedBox(height: 12),
+                const Align(alignment: Alignment.centerLeft, child: Text('📷 Add Goal Images', style: TextStyle(fontWeight: FontWeight.w900))),
+                const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -228,32 +260,52 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
                     OutlinedButton.icon(
                       onPressed: () async {
                         final path = await _pickGoalImage(ImageSource.gallery);
-                        if (path != null) setDialogState(() => imagePath = path);
+                        if (path != null) setDialogState(() => images = [...images, RewardGoalImage(path: path, dateAdded: DateTime.now())]);
                       },
                       icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('Choose from Gallery'),
+                      label: const Text('Add from Gallery'),
                     ),
                     OutlinedButton.icon(
                       onPressed: () async {
                         final path = await _pickGoalImage(ImageSource.camera);
-                        if (path != null) setDialogState(() => imagePath = path);
+                        if (path != null) setDialogState(() => images = [...images, RewardGoalImage(path: path, dateAdded: DateTime.now())]);
                       },
                       icon: const Icon(Icons.photo_camera_outlined),
-                      label: const Text('Take Photo'),
+                      label: const Text('Add from Camera'),
                     ),
-                    if (imagePath.isNotEmpty)
-                      TextButton.icon(onPressed: () => setDialogState(() => imagePath = ''), icon: const Icon(Icons.delete_outline), label: const Text('Remove Image')),
                   ],
                 ),
-                if (imagePath.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: SizedBox(width: 360, height: 120, child: Image.file(File(imagePath), width: 360, height: 120, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Center(child: Text('Image preview unavailable')))),
+                if (images.isNotEmpty)
+                  SizedBox(
+                    height: 132,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: images.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final image = images[index];
+                        return _GoalImageThumb(
+                          image: image,
+                          isCover: index == 0,
+                          onMakeCover: index == 0 ? null : () => setDialogState(() { final updated = [...images]; final item = updated.removeAt(index); updated.insert(0, item); images = updated; }),
+                          onDelete: () => setDialogState(() => images = images.where((item) => item.path != image.path).toList()),
+                          onMoveLeft: index == 0 ? null : () => setDialogState(() { final updated = [...images]; final item = updated.removeAt(index); updated.insert(index - 1, item); images = updated; }),
+                          onMoveRight: index == images.length - 1 ? null : () => setDialogState(() { final updated = [...images]; final item = updated.removeAt(index); updated.insert(index + 1, item); images = updated; }),
+                        );
+                      },
                     ),
                   ),
-              ],
+                const SizedBox(height: 12),
+                const Align(alignment: Alignment.centerLeft, child: Text('Milestones', style: TextStyle(fontWeight: FontWeight.w900))),
+                ...milestones.map((milestone) => ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(child: Text('${milestone.percent}%')),
+                      title: Text(milestone.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                      subtitle: Text(milestone.reward.isEmpty ? 'Optional reward • ${milestone.bonusXp} XP' : '${milestone.reward} • ${milestone.bonusXp} XP'),
+                    )),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -272,8 +324,11 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
                     savedAmountRupees: savedAmount,
                     priority: priority,
                     deadline: DateTime.tryParse(deadlineController.text.trim()),
-                    imagePath: imagePath,
-                    category: categoryController.text.trim().isEmpty ? 'Personal' : categoryController.text.trim(),
+                    imagePath: images.isEmpty ? '' : images.first.path,
+                    images: images,
+                    milestones: milestones,
+                    startDate: DateTime.tryParse(startDateController.text.trim()),
+                    category: category,
                     status: target > 0 && savedAmount >= target ? RewardGoal.statusAchieved : status,
                     createdAt: goal?.createdAt ?? DateTime.now(),
                     history: goal?.history ?? const [],
@@ -286,13 +341,64 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
         ),
       ),
     );
-    nameController.dispose();
-    descriptionController.dispose();
-    targetController.dispose();
-    savedController.dispose();
-    categoryController.dispose();
-    deadlineController.dispose();
+    // Keep dialog controllers alive until the route exit animation is fully done;
+    // disposing immediately after showDialog can race with the closing rebuild.
     if (saved != null) await widget.hiveService.saveRewardGoal(saved);
+  }
+
+
+  void _showGoalDetails(RewardGoal goal) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.82,
+        maxChildSize: 0.95,
+        builder: (context, controller) => ListView(
+          controller: controller,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          children: [
+            Text(goal.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+            const SizedBox(height: 8),
+            Text(goal.description.isEmpty ? 'No description yet.' : goal.description, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+            const SizedBox(height: 14),
+            if (goal.galleryImages.isNotEmpty) ...[
+              const Text('Image Gallery', style: TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 150,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: goal.galleryImages.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    final image = goal.galleryImages[index];
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: Image.file(File(image.path), width: 190, height: 150, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 190, color: AppColors.surface, child: const Icon(Icons.image_not_supported_outlined))),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            const Text('Financial Progress', style: TextStyle(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 8),
+            Text('${_formatRupees(goal.savedAmountRupees)} / ${_formatRupees(goal.targetAmountRupees)} • ${_formatRupees(goal.remainingAmountRupees)} remaining', style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: goal.progress, minHeight: 12),
+            const SizedBox(height: 14),
+            const Text('Milestones', style: TextStyle(fontWeight: FontWeight.w900)),
+            ...goal.milestones.map((milestone) => ListTile(leading: CircleAvatar(child: Text('${milestone.percent}%')), title: Text(milestone.title), subtitle: Text('${milestone.description}${milestone.reward.isEmpty ? '' : ' • Reward: ${milestone.reward}'}'))),
+            const SizedBox(height: 8),
+            const Text('Journey Timeline', style: TextStyle(fontWeight: FontWeight.w900)),
+            ...goal.history.reversed.map((entry) => ListTile(leading: const Icon(Icons.timeline), title: Text(entry.title), subtitle: Text('${_formatDate(entry.date)}${entry.note.isEmpty ? '' : ' • ${entry.note}'}'), trailing: entry.amountRupees == 0 ? null : Text(_formatRupees(entry.amountRupees)))),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<String?> _pickGoalImage(ImageSource source) async {
@@ -304,6 +410,75 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open image picker: $error')));
       return null;
     }
+  }
+}
+
+
+class _GoalImageThumb extends StatelessWidget {
+  final RewardGoalImage image;
+  final bool isCover;
+  final VoidCallback? onMakeCover;
+  final VoidCallback? onDelete;
+  final VoidCallback? onMoveLeft;
+  final VoidCallback? onMoveRight;
+
+  const _GoalImageThumb({required this.image, required this.isCover, this.onMakeCover, this.onDelete, this.onMoveLeft, this.onMoveRight});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 120,
+      child: Column(
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.file(File(image.path), width: 120, height: 82, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 120, height: 82, color: AppColors.surface, child: const Icon(Icons.image_not_supported_outlined))),
+              ),
+              if (isCover)
+                Positioned(
+                  left: 6,
+                  top: 6,
+                  child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(999)), child: const Text('Cover', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900))),
+                ),
+            ],
+          ),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 0,
+            runSpacing: 0,
+            children: [
+              _ThumbActionButton(tooltip: 'Move left', icon: Icons.chevron_left, onPressed: onMoveLeft),
+              _ThumbActionButton(tooltip: 'Cover', icon: Icons.star_border, onPressed: onMakeCover),
+              _ThumbActionButton(tooltip: 'Move right', icon: Icons.chevron_right, onPressed: onMoveRight),
+              _ThumbActionButton(tooltip: 'Delete', icon: Icons.delete_outline, onPressed: onDelete),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+class _ThumbActionButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _ThumbActionButton({required this.tooltip, required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+      padding: EdgeInsets.zero,
+      icon: Icon(icon, size: 17),
+      onPressed: onPressed,
+    );
   }
 }
 
@@ -381,13 +556,17 @@ class _GoalCard extends StatelessWidget {
   final int availableBalance;
   final VoidCallback onEdit;
   final VoidCallback onFund;
+  final VoidCallback onView;
 
-  const _GoalCard({required this.goal, required this.availableBalance, required this.onEdit, required this.onFund});
+  const _GoalCard({required this.goal, required this.availableBalance, required this.onEdit, required this.onFund, required this.onView});
 
   @override
   Widget build(BuildContext context) {
     final achieved = goal.effectiveStatus == RewardGoal.statusAchieved;
-    return AnimatedContainer(
+    return InkWell(
+      onTap: onView,
+      borderRadius: BorderRadius.circular(24),
+      child: AnimatedContainer(
       duration: const Duration(milliseconds: 350),
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -404,9 +583,9 @@ class _GoalCard extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(18),
-                child: goal.imagePath.isEmpty
+                child: goal.coverImagePath.isEmpty
                     ? Container(width: 72, height: 72, color: AppColors.surface, child: const Icon(Icons.flag_outlined, color: AppColors.primary, size: 32))
-                    : Image.file(File(goal.imagePath), width: 72, height: 72, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 72, height: 72, color: AppColors.surface, child: const Icon(Icons.flag_outlined))),
+                    : Image.file(File(goal.coverImagePath), width: 72, height: 72, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 72, height: 72, color: AppColors.surface, child: const Icon(Icons.flag_outlined))),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -435,7 +614,7 @@ class _GoalCard extends StatelessWidget {
             child: LinearProgressIndicator(value: goal.progress, minHeight: 10, backgroundColor: Colors.black12, color: achieved ? Colors.green : AppColors.primary),
           ),
           const SizedBox(height: 6),
-          Text('Progress: ${(goal.progress * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          Text('Progress: ${(goal.progress * 100).round()}% • ${goal.deadline == null ? 'No deadline' : '${goal.deadline!.difference(DateTime.now()).inDays.clamp(0, 99999)} days remaining'} • ${goal.galleryImages.length} images • ${goal.milestones.length} milestones', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
           if (achieved) ...[
             const SizedBox(height: 10),
             Container(
@@ -454,12 +633,13 @@ class _GoalCard extends StatelessWidget {
           ),
           if (goal.history.isNotEmpty) ...[
             const SizedBox(height: 10),
-            const Text('Goal History', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+            const Text('Goal Journey Timeline', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
             const SizedBox(height: 6),
             ...goal.history.reversed.take(3).map((entry) => Text('• ${_formatDate(entry.date)} — ${entry.title}${entry.note.isEmpty ? '' : ' (${entry.note})'}', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54))),
           ],
         ],
       ),
+    ),
     );
   }
 }
