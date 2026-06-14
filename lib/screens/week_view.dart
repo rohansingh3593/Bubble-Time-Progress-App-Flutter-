@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/period_progress_bubble_map.dart';
@@ -35,37 +34,6 @@ class _WeekViewState extends State<WeekView> {
     final daysToSubtract = weekday - 1;
     return DateTime(date.year, date.month, date.day - daysToSubtract);
   }
-
-  Color _getBubbleColor(DateTime date, Map<String, int> summary, DateTime today) {
-    if (date.isBefore(today)) {
-      return AppColors.passed;
-    }
-
-    if (summary['completed']! > 0 && summary['pending']! == 0) {
-      return AppColors.taskCompleted;
-    } else if (summary['pending']! > 0) {
-      return AppColors.taskPending;
-    } else {
-      return AppColors.taskNone;
-    }
-  }
-
-  Future<void> _openQuickAddForDate(DateTime date) async {
-    final selectedDate = DateTime(date.year, date.month, date.day);
-    final task = await showTaskFormDialog(
-      context,
-      date: selectedDate,
-      title: 'Add Task',
-      actionLabel: 'Save Task',
-    );
-
-    if (task != null) {
-      await widget.hiveService.addTask(selectedDate, task);
-    }
-  }
-
-
-
 
   void _openJournalForTask(Task task) {
     Navigator.of(context).push(
@@ -135,18 +103,6 @@ class _WeekViewState extends State<WeekView> {
     final startStr = '${start.month}/${start.day}';
     final endStr = '${end.month}/${end.day}';
     return '$startStr - $endStr';
-  }
-
-  Map<String, int> _getCompletedSummaryForDate(DateTime date) {
-    final completedTasks = widget.hiveService
-        .getTasksForDate(date)
-        .where((task) => task.status == 'Completed')
-        .toList();
-
-    return {
-      'completed': completedTasks.length,
-      'pending': 0,
-    };
   }
 
   List<Task> _getWeeklyRepeatingTasks() {
@@ -501,7 +457,6 @@ class _WeekViewState extends State<WeekView> {
     );
   }
 
-
   DashboardThemeStyle _selectedDashboardTheme() {
     return DashboardThemeStyle.of(
       widget.hiveService.getDashboardTheme(),
@@ -605,40 +560,6 @@ class _WeekViewState extends State<WeekView> {
             padding: const EdgeInsets.all(16.0),
             children: [
               _weekDayProgressMap(selectedDashboardTheme, weekDays, todayStart),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 118,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(7, (index) {
-                    final date = weekDays[index];
-                    final summary = _getCompletedSummaryForDate(date);
-                    final isToday = date.year == now.year && date.month == now.month && date.day == now.day;
-
-                    return Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 68,
-                            height: 68,
-                            child: BubbleWidget(
-                              color: _getBubbleColor(date, summary, todayStart),
-                              isHighlighted: isToday,
-                              onTap: () => _openQuickAddForDate(date),
-                            ),
-                          ),
-                          const SizedBox(height: 6.0),
-                          Text(
-                            _getDayLabels()[index],
-                            style: const TextStyle(fontSize: 12.0),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ),
-              ),
               const SizedBox(height: 12),
               _weeklyProductivitySection(weeklyStats),
               const SizedBox(height: 12),
