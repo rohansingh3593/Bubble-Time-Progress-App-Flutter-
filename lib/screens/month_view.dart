@@ -3,8 +3,10 @@ import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/productivity_period_summary.dart';
+import '../widgets/period_progress_bubble_map.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
+import '../constants/dashboard_themes.dart';
 import '../models/task_model.dart';
 import '../models/productivity_snapshot.dart';
 import 'journal_view.dart';
@@ -360,6 +362,35 @@ class _MonthViewState extends State<MonthView> {
     );
   }
 
+
+  DashboardThemeStyle _selectedDashboardTheme() {
+    return DashboardThemeStyle.of(
+      widget.hiveService.getDashboardTheme(),
+      palette: widget.hiveService.getDashboardPalette(),
+    );
+  }
+
+  Widget _monthDayProgressMap(DashboardThemeStyle theme, DateTime now) {
+    final daysInMonth = _getDaysInMonth(_currentMonth);
+    final monthStart = DateTime(_currentMonth.year, _currentMonth.month, 1);
+    final currentMonthStart = DateTime(now.year, now.month, 1);
+    final isCurrentMonth = _currentMonth.year == now.year && _currentMonth.month == now.month;
+    final isPastMonth = monthStart.isBefore(currentMonthStart);
+    final isFutureMonth = monthStart.isAfter(currentMonthStart);
+    final passedDays = isPastMonth ? daysInMonth : isFutureMonth ? 0 : (now.day - 1).clamp(0, daysInMonth).toInt();
+    final remainingDays = isPastMonth ? 0 : isFutureMonth ? daysInMonth : (daysInMonth - passedDays - 1).clamp(0, daysInMonth).toInt();
+    return PeriodProgressBubbleMap(
+      theme: theme,
+      title: 'Month Day Progress',
+      subtitle: '$passedDays days passed • $remainingDays days left',
+      totalItems: daysInMonth,
+      passedItems: passedDays,
+      currentIndex: isCurrentMonth ? now.day - 1 : null,
+      itemsPerRow: 7,
+      tooltipBuilder: (index) => '${index + 1}/${_currentMonth.month}/${_currentMonth.year}',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -378,10 +409,13 @@ class _MonthViewState extends State<MonthView> {
         builder: (context, box, _) {
           final monthlyTasks = _getMonthlyRepeatingTasks();
           final monthlyStats = _monthlyProductivityStats();
+          final selectedDashboardTheme = _selectedDashboardTheme();
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               _monthBubbleSelector(),
+              const SizedBox(height: 16),
+              _monthDayProgressMap(selectedDashboardTheme, now),
               const SizedBox(height: 16),
               ProductivityPeriodSummaryCard(stats: monthlyStats),
               const SizedBox(height: 16),

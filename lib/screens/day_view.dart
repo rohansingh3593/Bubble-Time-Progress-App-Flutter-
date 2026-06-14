@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
+import '../widgets/period_progress_bubble_map.dart';
 import '../services/hive_service.dart';
 import '../models/task_model.dart';
 import '../constants/colors.dart';
+import '../constants/dashboard_themes.dart';
 import '../utils/task_time_utils.dart';
 import 'journal_view.dart';
 
@@ -208,6 +210,35 @@ class _DayViewState extends State<DayView> {
 
 
 
+
+  DashboardThemeStyle _selectedDashboardTheme() {
+    return DashboardThemeStyle.of(
+      widget.hiveService.getDashboardTheme(),
+      palette: widget.hiveService.getDashboardPalette(),
+    );
+  }
+
+  Widget _dayHourProgressMap(DashboardThemeStyle theme, DateTime now, bool isToday, bool isPastDay) {
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final selectedDayStart = DateTime(_currentDay.year, _currentDay.month, _currentDay.day);
+    final isFutureDay = selectedDayStart.isAfter(todayStart);
+    final passedHours = isPastDay ? 24 : isFutureDay ? 0 : now.hour.clamp(0, 24).toInt();
+    final remainingHours = isPastDay ? 0 : isFutureDay ? 24 : (24 - passedHours - 1).clamp(0, 24).toInt();
+    return PeriodProgressBubbleMap(
+      theme: theme,
+      title: 'Day Hour Progress',
+      subtitle: '$passedHours hours passed • $remainingHours hours left',
+      totalItems: 24,
+      passedItems: passedHours,
+      currentIndex: isToday ? now.hour : null,
+      itemsPerRow: 6,
+      passedLabel: 'Passed',
+      currentLabel: 'Now',
+      remainingLabel: 'Remaining',
+      tooltipBuilder: (index) => _formatHour(index),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -241,11 +272,14 @@ class _DayViewState extends State<DayView> {
         builder: (context, box, _) {
           final todayTasks = widget.hiveService.getTasksForDate(_currentDay);
           final matrix = _calculateMatrix(todayTasks);
+          final selectedDashboardTheme = _selectedDashboardTheme();
 
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 110),
             child: Column(
               children: [
+                _dayHourProgressMap(selectedDashboardTheme, now, isToday, isPastDay),
+                const SizedBox(height: 10),
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),

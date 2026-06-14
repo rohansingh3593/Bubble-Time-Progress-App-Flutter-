@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
+import '../widgets/period_progress_bubble_map.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
+import '../constants/dashboard_themes.dart';
 import '../models/task_model.dart';
 import '../models/productivity_snapshot.dart';
 import 'journal_view.dart';
@@ -499,6 +501,37 @@ class _WeekViewState extends State<WeekView> {
     );
   }
 
+
+  DashboardThemeStyle _selectedDashboardTheme() {
+    return DashboardThemeStyle.of(
+      widget.hiveService.getDashboardTheme(),
+      palette: widget.hiveService.getDashboardPalette(),
+    );
+  }
+
+  Widget _weekDayProgressMap(DashboardThemeStyle theme, List<DateTime> weekDays, DateTime todayStart) {
+    final weekEnd = _currentWeekStart.add(const Duration(days: 6));
+    final isCurrentWeek = !todayStart.isBefore(_currentWeekStart) && !todayStart.isAfter(weekEnd);
+    final isPastWeek = weekEnd.isBefore(todayStart);
+    final isFutureWeek = _currentWeekStart.isAfter(todayStart);
+    final todayIndex = isCurrentWeek ? todayStart.difference(_currentWeekStart).inDays : -1;
+    final passedDays = isPastWeek ? 7 : isFutureWeek ? 0 : todayIndex.clamp(0, 7).toInt();
+    final remainingDays = isPastWeek ? 0 : isFutureWeek ? 7 : (7 - passedDays - 1).clamp(0, 7).toInt();
+    return PeriodProgressBubbleMap(
+      theme: theme,
+      title: 'Week Day Progress',
+      subtitle: '$passedDays days passed • $remainingDays days left',
+      totalItems: 7,
+      passedItems: passedDays,
+      currentIndex: isCurrentWeek ? todayIndex : null,
+      itemsPerRow: 7,
+      tooltipBuilder: (index) {
+        final date = weekDays[index];
+        return '${date.month}/${date.day}/${date.year}';
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -562,10 +595,13 @@ class _WeekViewState extends State<WeekView> {
           final weeklyTasks = _getWeeklyRepeatingTasks();
 
           final weeklyStats = _weeklyProductivityStats(weekDays);
+          final selectedDashboardTheme = _selectedDashboardTheme();
 
           return ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
+              _weekDayProgressMap(selectedDashboardTheme, weekDays, todayStart),
+              const SizedBox(height: 12),
               SizedBox(
                 height: 118,
                 child: Row(
