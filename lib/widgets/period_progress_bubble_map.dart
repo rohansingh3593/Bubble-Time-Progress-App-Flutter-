@@ -145,27 +145,28 @@ class PeriodProgressBubbleMap extends StatelessWidget {
                             ),
                           ),
                         );
+                        final cellContent = belowLabel == null
+                            ? bubble
+                            : Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  bubble,
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    belowLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: theme.textMuted, fontSize: 9, fontWeight: FontWeight.w800),
+                                  ),
+                                ],
+                              );
                         final cell = SizedBox(
                           height: cellHeight,
                           child: isPlaceholder
                               ? bubble
                               : Tooltip(
                                   message: tooltipBuilder?.call(index) ?? '${index + 1}',
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      bubble,
-                                      if (belowLabel != null) ...[
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          belowLabel,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(color: theme.textMuted, fontSize: 9, fontWeight: FontWeight.w800),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
+                                  child: cellContent,
                                 ),
                         );
                         return Expanded(
