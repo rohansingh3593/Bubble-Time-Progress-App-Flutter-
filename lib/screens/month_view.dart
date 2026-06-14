@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/productivity_period_summary.dart';
@@ -64,37 +63,6 @@ class _MonthViewState extends State<MonthView> {
     _centerSelectedMonthAfterLayout();
   }
 
-  Color _getBubbleColor(DateTime date, Map<String, int> summary, DateTime today) {
-    if (date.isBefore(today)) {
-      return AppColors.passed;
-    }
-
-    if (summary['completed']! > 0 && summary['pending']! == 0) {
-      return AppColors.taskCompleted;
-    } else if (summary['pending']! > 0) {
-      return AppColors.taskPending;
-    } else {
-      return AppColors.taskNone;
-    }
-  }
-
-  Future<void> _openQuickAddForDate(DateTime date) async {
-    final selectedDate = DateTime(date.year, date.month, date.day);
-    final task = await showTaskFormDialog(
-      context,
-      date: selectedDate,
-      title: 'Add Task',
-      actionLabel: 'Save Task',
-    );
-
-    if (task != null) {
-      await widget.hiveService.addTask(selectedDate, task);
-    }
-  }
-
-
-
-
   void _openJournalForTask(Task task) {
     Navigator.of(context).push(
       JournalView.route(hiveService: widget.hiveService, initialDate: task.dueDate),
@@ -154,10 +122,6 @@ class _MonthViewState extends State<MonthView> {
     }
   }
 
-  List<String> _getDayHeaders() {
-    return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  }
-
   List<DateTime> _daysInCurrentMonth() {
     final daysInMonth = _getDaysInMonth(_currentMonth);
     return List.generate(daysInMonth, (index) => DateTime(_currentMonth.year, _currentMonth.month, index + 1));
@@ -209,30 +173,9 @@ class _MonthViewState extends State<MonthView> {
     return intervals;
   }
 
-  int _getWeekdayOffset(DateTime month) {
-    // Monday = 1, Sunday = 7
-    final firstDay = DateTime(month.year, month.month, 1);
-    return (firstDay.weekday - 1) % 7; // 0 for Monday
-  }
-
   int _getDaysInMonth(DateTime month) {
     return DateTime(month.year, month.month + 1, 0).day;
   }
-
-
-  Map<String, int> _getCompletedSummaryForDate(DateTime date) {
-    final completedTasks = widget.hiveService
-        .getTasksForDate(date)
-        .where((task) => task.status == 'Completed')
-        .toList();
-
-    return {
-      'completed': completedTasks.length,
-      'pending': 0,
-    };
-  }
-
-
 
   List<Task> _getMonthlyRepeatingTasks() {
     final allTasksByDate = widget.hiveService.getAllTasksByDate();
@@ -362,7 +305,6 @@ class _MonthViewState extends State<MonthView> {
     );
   }
 
-
   DashboardThemeStyle _selectedDashboardTheme() {
     return DashboardThemeStyle.of(
       widget.hiveService.getDashboardTheme(),
@@ -400,9 +342,6 @@ class _MonthViewState extends State<MonthView> {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final isCurrentMonth = _currentMonth.year == now.year && _currentMonth.month == now.month;
-    final daysInMonth = _getDaysInMonth(_currentMonth);
-    final weekdayOffset = _getWeekdayOffset(_currentMonth);
-    final totalCells = weekdayOffset + daysInMonth;
 
     return Scaffold(
       appBar: AppBar(
@@ -423,47 +362,6 @@ class _MonthViewState extends State<MonthView> {
               _monthDayProgressMap(selectedDashboardTheme, now),
               const SizedBox(height: 16),
               ProductivityPeriodSummaryCard(stats: monthlyStats),
-              const SizedBox(height: 16),
-              Row(
-                children: _getDayHeaders().map((day) => Expanded(
-                  child: Center(
-                    child: Text(
-                      day,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                )).toList(),
-              ),
-              const SizedBox(height: 8.0),
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 7,
-                  childAspectRatio: 1.0,
-                  crossAxisSpacing: 4.0,
-                  mainAxisSpacing: 4.0,
-                ),
-                itemCount: totalCells,
-                itemBuilder: (context, index) {
-                  if (index < weekdayOffset) {
-                    return const SizedBox.shrink();
-                  }
-
-                  final day = index - weekdayOffset + 1;
-                  final date = DateTime(_currentMonth.year, _currentMonth.month, day);
-                  final summary = _getCompletedSummaryForDate(date);
-                  final isToday = isCurrentMonth && day == now.day;
-                  final todayStart = DateTime(now.year, now.month, now.day);
-
-                  return BubbleWidget(
-                    color: _getBubbleColor(date, summary, todayStart),
-                    isHighlighted: isToday,
-                    onTap: () => _openQuickAddForDate(date),
-                    label: day.toString(),
-                  );
-                },
-              ),
               const SizedBox(height: 16),
               _monthlyTasksPanel(monthlyTasks),
             ],
