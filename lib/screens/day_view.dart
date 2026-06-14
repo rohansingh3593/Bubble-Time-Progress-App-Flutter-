@@ -180,6 +180,55 @@ class _DayViewState extends State<DayView> {
     return 'Poor ❌';
   }
 
+  DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+
+  bool _sameDate(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+  String _taskOccurrenceKey(Task task) {
+    return '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${task.repeatFrequency?.trim().toLowerCase() ?? ''}';
+  }
+
+  bool _routineOccursOnDay(Task task, DateTime day) {
+    if (!task.repeatTask || !task.routineEnabled) return false;
+    final start = _dateOnly(task.dueDate);
+    if (day.isBefore(start)) return false;
+    switch (task.repeatFrequency?.trim().toLowerCase()) {
+      case 'daily':
+        return true;
+      case 'weekly':
+        return day.weekday == start.weekday;
+      case 'monthly':
+        return day.day == start.day;
+      case 'yearly':
+        return day.month == start.month && day.day == start.day;
+      default:
+        return _sameDate(day, start);
+    }
+  }
+
+  List<Task> _tasksForCurrentDay() {
+    final selectedDay = _dateOnly(_currentDay);
+    final tasks = widget.hiveService.getTasksForDate(selectedDay).toList();
+    final existingKeys = tasks.where((task) => task.repeatTask).map(_taskOccurrenceKey).toSet();
+    final routineTemplates = widget.hiveService
+        .getAllTasksByDate()
+        .values
+        .expand((items) => items)
+        .where((task) => _routineOccursOnDay(task, selectedDay));
+
+    for (final template in routineTemplates) {
+      final key = _taskOccurrenceKey(template);
+      if (existingKeys.contains(key)) continue;
+      existingKeys.add(key);
+      tasks.add(template.copyWith(
+        done: false,
+        status: 'Not Updated',
+        dueDate: DateTime(selectedDay.year, selectedDay.month, selectedDay.day, template.dueDate.hour, template.dueDate.minute),
+      ));
+    }
+    return tasks;
+  }
+
   DashboardThemeStyle _selectedDashboardTheme() {
     return DashboardThemeStyle.of(
       widget.hiveService.getDashboardTheme(),
@@ -242,7 +291,7 @@ class _DayViewState extends State<DayView> {
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
         builder: (context, box, _) {
-          final todayTasks = widget.hiveService.getTasksForDate(_currentDay);
+          final todayTasks = _tasksForCurrentDay();
           final matrix = _calculateMatrix(todayTasks);
           final selectedDashboardTheme = _selectedDashboardTheme();
 
@@ -254,7 +303,7 @@ class _DayViewState extends State<DayView> {
                 const SizedBox(height: 10),
                 _metricsPanel(matrix),
                 const SizedBox(height: 10),
-                _todayTasksPanel(todayTasks),
+                _todayTasksPanel(todayTasks, selectedDashboardTheme),
                 const SizedBox(height: 10),
                 _reflectionPanel(),
               ],
@@ -507,11 +556,16 @@ class _DayViewState extends State<DayView> {
     return 'Tip: Great balance — protect deep work and keep low-value tasks capped.';
   }
 
-  Widget _todayTasksPanel(List<Task> tasks) {
+  Widget _todayTasksPanel(List<Task> tasks, DashboardThemeStyle theme) {
     final visibleTasks = tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
 
     return Container(
-      decoration: BoxDecoration(color: const Color(0xFFECE8E6), border: Border.all(color: Colors.black38), borderRadius: BorderRadius.circular(22)),
+      decoration: BoxDecoration(
+        color: theme.surface,
+        border: Border.all(color: theme.primary.withOpacity(0.18)),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [BoxShadow(color: theme.primary.withOpacity(theme.dark ? 0.16 : 0.08), blurRadius: 16, offset: const Offset(0, 8))],
+      ),
       child: Column(
         children: [
           InkWell(
@@ -519,32 +573,46 @@ class _DayViewState extends State<DayView> {
             onTap: () => setState(() => _showTodayTasks = !_showTodayTasks),
             child: Container(
               width: double.infinity,
-              decoration: const BoxDecoration(color: Color(0xFFAED9AE), borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+              decoration: BoxDecoration(
+                color: theme.primary.withOpacity(theme.dark ? 0.34 : 0.18),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 children: [
-                  const Expanded(child: Text("TODAY'S TASKS", textAlign: TextAlign.center, style: TextStyle(letterSpacing: 4, fontWeight: FontWeight.w600))),
-                  Icon(_showTodayTasks ? Icons.expand_more : Icons.chevron_right, color: Colors.green[800]),
+                  Expanded(
+                    child: Text(
+                      "TODAY'S TASKS",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: theme.textPrimary, letterSpacing: 4, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Icon(_showTodayTasks ? Icons.expand_more : Icons.chevron_right, color: theme.primary),
                 ],
               ),
             ),
           ),
           if (_showTodayTasks) ...[
-            Container(width: double.infinity, color: const Color(0xFFE8C1A0), padding: const EdgeInsets.symmetric(vertical: 4), child: const Text('TASK', textAlign: TextAlign.center, style: TextStyle(letterSpacing: 3))),
+            Container(
+              width: double.infinity,
+              color: theme.cardTint?.withOpacity(0.55) ?? theme.elevatedSurface,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text('TASK', textAlign: TextAlign.center, style: TextStyle(color: theme.textPrimary, letterSpacing: 3, fontWeight: FontWeight.w700)),
+            ),
             SizedBox(
               height: 170,
               child: visibleTasks.isEmpty
-                  ? const Center(child: Text('Nothing for Today, Great Job !'))
+                  ? Center(child: Text('Nothing for Today, Great Job !', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700)))
                   : ListView.separated(
                       itemCount: visibleTasks.length,
-                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      separatorBuilder: (context, index) => Divider(height: 1, color: theme.primary.withOpacity(0.14)),
                       itemBuilder: (context, index) {
                         final task = visibleTasks[index];
                         return ListTile(
                           dense: true,
                           onTap: () => _editTask(task),
-                          title: Text(task.task),
-                          subtitle: Text(_taskSubtitle(task)),
+                          title: Text(task.task, style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w800)),
+                          subtitle: Text(_taskSubtitle(task), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w600)),
                         );
                       },
                     ),
