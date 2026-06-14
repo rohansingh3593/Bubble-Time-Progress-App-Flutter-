@@ -341,12 +341,8 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
         ),
       ),
     );
-    nameController.dispose();
-    descriptionController.dispose();
-    targetController.dispose();
-    savedController.dispose();
-    startDateController.dispose();
-    deadlineController.dispose();
+    // Keep dialog controllers alive until the route exit animation is fully done;
+    // disposing immediately after showDialog can race with the closing rebuild.
     if (saved != null) await widget.hiveService.saveRewardGoal(saved);
   }
 
@@ -448,17 +444,40 @@ class _GoalImageThumb extends StatelessWidget {
                 ),
             ],
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 0,
+            runSpacing: 0,
             children: [
-              IconButton(tooltip: 'Move left', visualDensity: VisualDensity.compact, icon: const Icon(Icons.chevron_left, size: 18), onPressed: onMoveLeft),
-              IconButton(tooltip: 'Cover', visualDensity: VisualDensity.compact, icon: const Icon(Icons.star_border, size: 18), onPressed: onMakeCover),
-              IconButton(tooltip: 'Move right', visualDensity: VisualDensity.compact, icon: const Icon(Icons.chevron_right, size: 18), onPressed: onMoveRight),
-              IconButton(tooltip: 'Delete', visualDensity: VisualDensity.compact, icon: const Icon(Icons.delete_outline, size: 18), onPressed: onDelete),
+              _ThumbActionButton(tooltip: 'Move left', icon: Icons.chevron_left, onPressed: onMoveLeft),
+              _ThumbActionButton(tooltip: 'Cover', icon: Icons.star_border, onPressed: onMakeCover),
+              _ThumbActionButton(tooltip: 'Move right', icon: Icons.chevron_right, onPressed: onMoveRight),
+              _ThumbActionButton(tooltip: 'Delete', icon: Icons.delete_outline, onPressed: onDelete),
             ],
           ),
         ],
       ),
+    );
+  }
+}
+
+
+class _ThumbActionButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _ThumbActionButton({required this.tooltip, required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+      padding: EdgeInsets.zero,
+      icon: Icon(icon, size: 17),
+      onPressed: onPressed,
     );
   }
 }
