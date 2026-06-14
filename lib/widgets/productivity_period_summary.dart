@@ -164,10 +164,37 @@ class ProductivityPeriodSummaryCard extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    SizedBox(width: 178, child: Text(item.$1, style: const TextStyle(fontWeight: FontWeight.w800))),
-                    Expanded(child: LinearProgressIndicator(value: stats.totalHours == 0 ? 0 : (item.$2 / stats.totalHours).clamp(0.0, 1.0), minHeight: 8, color: item.$3, backgroundColor: item.$3.withOpacity(0.16), borderRadius: BorderRadius.circular(999))),
+                    Flexible(
+                      flex: 5,
+                      child: Text(
+                        item.$1,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
                     const SizedBox(width: 8),
-                    SizedBox(width: 58, child: Text(_formatHours(item.$2), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w800))),
+                    Expanded(
+                      flex: 4,
+                      child: LinearProgressIndicator(
+                        value: stats.totalHours == 0 ? 0 : (item.$2 / stats.totalHours).clamp(0.0, 1.0),
+                        minHeight: 8,
+                        color: item.$3,
+                        backgroundColor: item.$3.withOpacity(0.16),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 52,
+                      child: Text(
+                        _formatHours(item.$2),
+                        maxLines: 1,
+                        textAlign: TextAlign.right,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
                   ],
                 ),
               ))
