@@ -374,17 +374,26 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                         final index = entry.key;
                         final level = entry.value;
                         return Card(
-                          child: ListTile(
-                            dense: true,
-                            title: Text(level.displayLabel, style: const TextStyle(fontWeight: FontWeight.w900)),
-                            subtitle: Text('+${level.bonusPoints} points • ${level.xpEarned} XP'),
-                            trailing: Wrap(
-                              spacing: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                IconButton(tooltip: 'Move up', icon: const Icon(Icons.arrow_upward, size: 18), onPressed: index == 0 ? null : () => setDialogState(() { final updated = [...levels]; final item = updated.removeAt(index); updated.insert(index - 1, item); levels = updated; })),
-                                IconButton(tooltip: 'Move down', icon: const Icon(Icons.arrow_downward, size: 18), onPressed: index == levels.length - 1 ? null : () => setDialogState(() { final updated = [...levels]; final item = updated.removeAt(index); updated.insert(index + 1, item); levels = updated; })),
-                                IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () async { final updatedLevel = await _showInstructionLevelDialog(existing: level, defaultUnit: unitController.text.trim(), index: index); if (updatedLevel != null) setDialogState(() { final updated = [...levels]; updated[index] = updatedLevel; levels = updated; }); }),
-                                IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => setDialogState(() => levels = levels.where((item) => item.id != level.id).toList())),
+                                Text(level.displayLabel, style: const TextStyle(fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 4),
+                                Text('+${level.bonusPoints} points • ${level.xpEarned} XP', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Wrap(
+                                    spacing: 2,
+                                    children: [
+                                      IconButton(tooltip: 'Move up', icon: const Icon(Icons.arrow_upward, size: 18), onPressed: index == 0 ? null : () => setDialogState(() { final updated = [...levels]; final item = updated.removeAt(index); updated.insert(index - 1, item); levels = updated; })),
+                                      IconButton(tooltip: 'Move down', icon: const Icon(Icons.arrow_downward, size: 18), onPressed: index == levels.length - 1 ? null : () => setDialogState(() { final updated = [...levels]; final item = updated.removeAt(index); updated.insert(index + 1, item); levels = updated; })),
+                                      IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () async { final updatedLevel = await _showInstructionLevelDialog(existing: level, defaultUnit: unitController.text.trim(), index: index); if (updatedLevel != null) setDialogState(() { final updated = [...levels]; updated[index] = updatedLevel; levels = updated; }); }),
+                                      IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => setDialogState(() => levels = levels.where((item) => item.id != level.id).toList())),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -408,18 +417,43 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                         final index = entry.key;
                         final option = entry.value;
                         return Card(
-                          child: ListTile(
-                            dense: true,
-                            leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
-                            title: Text(option.name, style: const TextStyle(fontWeight: FontWeight.w900)),
-                            subtitle: Text('+${option.bonusPoints} points • ${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
-                            trailing: Wrap(
-                              spacing: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                IconButton(tooltip: 'Move up', icon: const Icon(Icons.arrow_upward, size: 18), onPressed: index == 0 ? null : () => setDialogState(() { final updated = [...options]; final item = updated.removeAt(index); updated.insert(index - 1, item); options = updated; })),
-                                IconButton(tooltip: 'Move down', icon: const Icon(Icons.arrow_downward, size: 18), onPressed: index == options.length - 1 ? null : () => setDialogState(() { final updated = [...options]; final item = updated.removeAt(index); updated.insert(index + 1, item); options = updated; })),
-                                IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () async { final updatedOption = await _showInstructionOptionDialog(existing: option, index: index); if (updatedOption != null) setDialogState(() { final updated = [...options]; updated[index] = updatedOption; options = updated; }); }),
-                                IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => setDialogState(() => options = options.where((item) => item.id != option.id).toList())),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(width: 34, child: Text(option.emoji, style: const TextStyle(fontSize: 22))),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(option.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '+${option.bonusPoints} points • ${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}',
+                                            style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Wrap(
+                                    spacing: 2,
+                                    children: [
+                                      IconButton(tooltip: 'Move up', icon: const Icon(Icons.arrow_upward, size: 18), onPressed: index == 0 ? null : () => setDialogState(() { final updated = [...options]; final item = updated.removeAt(index); updated.insert(index - 1, item); options = updated; })),
+                                      IconButton(tooltip: 'Move down', icon: const Icon(Icons.arrow_downward, size: 18), onPressed: index == options.length - 1 ? null : () => setDialogState(() { final updated = [...options]; final item = updated.removeAt(index); updated.insert(index + 1, item); options = updated; })),
+                                      IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () async { final updatedOption = await _showInstructionOptionDialog(existing: option, index: index); if (updatedOption != null) setDialogState(() { final updated = [...options]; updated[index] = updatedOption; options = updated; }); }),
+                                      IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => setDialogState(() => options = options.where((item) => item.id != option.id).toList())),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                           ),
