@@ -208,10 +208,12 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text(goal == null ? 'Add Goal' : 'Edit Goal'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Goal Name')),
                 TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Goal Description')),
                 TextField(controller: targetController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target Amount (₹)'), onChanged: (_) => setDialogState(() {})),
@@ -302,7 +304,8 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
                       title: Text(milestone.title, style: const TextStyle(fontWeight: FontWeight.w800)),
                       subtitle: Text(milestone.reward.isEmpty ? 'Optional reward • ${milestone.bonusXp} XP' : '${milestone.reward} • ${milestone.bonusXp} XP'),
                     )),
-              ],
+                ],
+              ),
             ),
           ),
           actions: [
