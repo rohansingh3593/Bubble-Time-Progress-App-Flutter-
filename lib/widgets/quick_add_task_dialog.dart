@@ -77,6 +77,7 @@ Future<Task?> showTaskFormDialog(
   int selectedColorValue = initialTask?.colorValue ?? _taskColorOptions['Blue']!;
   int selectedRoutineMinutes = normalizeTaskDuration(initialTask?.estimatedMinutes);
   final projectPhases = _ProjectPhaseDraft.parseFromDescription(initialTask?.description ?? '');
+  final draftInstructions = <InstructionRule>[];
   void syncStatusForTaskType() {
     if (repeatTask) {
       selectedStatus = 'Not Updated';
@@ -105,7 +106,7 @@ Future<Task?> showTaskFormDialog(
                   decoration: InputDecoration(labelText: 'Task Name *', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
                   autofocus: !isEditing,
                   onChanged: (_) {
-                    if (isEditing) setDialogState(() {});
+                    setDialogState(() {});
                   },
                 ),
                 const SizedBox(height: 12),
@@ -447,16 +448,15 @@ Future<Task?> showTaskFormDialog(
                   ),
                   const SizedBox(height: 12),
                 ],
-                if (isEditing) ...[
-                  const SizedBox(height: 12),
-                  _TaskInstructionSection(
-                    hiveService: hiveService,
-                    taskName: nameController.text.trim().isEmpty ? (initialTask?.task ?? '') : nameController.text.trim(),
-                    isRoutine: repeatTask,
-                    phaseNames: repeatTask ? const <String>[] : projectPhases.map((phase) => phase.nameController.text.trim()).where((name) => name.isNotEmpty).toList(),
-                    onChanged: () => setDialogState(() {}),
-                  ),
-                ],
+                const SizedBox(height: 12),
+                _TaskInstructionSection(
+                  hiveService: hiveService,
+                  taskName: nameController.text.trim().isEmpty ? (initialTask?.task ?? '') : nameController.text.trim(),
+                  isRoutine: repeatTask,
+                  phaseNames: repeatTask ? const <String>[] : projectPhases.map((phase) => phase.nameController.text.trim()).where((name) => name.isNotEmpty).toList(),
+                  draftInstructions: isEditing ? null : draftInstructions,
+                  onChanged: () => setDialogState(() {}),
+                ),
                 if (!repeatTask) ...[
                   DropdownButtonFormField<String>(
                     value: selectedPriority,
@@ -572,7 +572,7 @@ Future<Task?> showTaskFormDialog(
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              onPressed: () {
+              onPressed: () async {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task name is required')));
@@ -607,6 +607,12 @@ Future<Task?> showTaskFormDialog(
                       )
                     : dueDate;
 
+                for (final instruction in draftInstructions) {
+                  await hiveService.saveInstruction(
+                    instruction.copyWith(linkedTask: InstructionRule.encodeLinks([name])),
+                  );
+                }
+                if (!context.mounted) return;
                 Navigator.of(context).pop(Task(
                   task: name,
                   description: mergedDescription,
@@ -649,6 +655,7 @@ class _TaskInstructionSection extends StatelessWidget {
   final String taskName;
   final bool isRoutine;
   final List<String> phaseNames;
+  final List<InstructionRule>? draftInstructions;
   final VoidCallback onChanged;
 
   const _TaskInstructionSection({
@@ -656,12 +663,14 @@ class _TaskInstructionSection extends StatelessWidget {
     required this.taskName,
     required this.isRoutine,
     required this.phaseNames,
+    this.draftInstructions,
     required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    final linked = _linkedInstructionsForTask(hiveService, taskName);
+    final linked = draftInstructions ?? _linkedInstructionsForTask(hiveService, taskName);
+    final isDraftMode = draftInstructions != null;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -675,8 +684,8 @@ class _TaskInstructionSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(child: Text('Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
-              Text('${linked.length} linked', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+              const Expanded(child: Text('📋 Task Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+              Text(isDraftMode ? '${linked.length} pending' : '${linked.length} linked', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
             ],
           ),
           const SizedBox(height: 4),
@@ -688,13 +697,56 @@ class _TaskInstructionSection extends StatelessWidget {
           if (linked.isEmpty)
             const Text('No instructions linked yet.', style: TextStyle(color: Colors.black54))
           else
-            ...linked.map((instruction) => ListTile(
+            ...linked.asMap().entries.map((entry) {
+              final index = entry.key;
+              final instruction = entry.value;
+              return ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(radius: 13, backgroundColor: Color(instruction.colorValue).withOpacity(0.16), child: Icon(Icons.rule_rounded, color: Color(instruction.colorValue), size: 15)),
                   title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                  subtitle: Text('Bonus: +${instruction.bonusPoints}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}'),
-                )),
+                  subtitle: Text(_instructionSummary(instruction)),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (action) async {
+                      if (action == 'edit') {
+                        final updated = await _showAddInstructionForTaskDialog(
+                          context,
+                          hiveService,
+                          taskName,
+                          phaseNames,
+                          initialInstruction: instruction,
+                          saveImmediately: !isDraftMode,
+                        );
+                        if (updated != null && isDraftMode) draftInstructions![index] = updated;
+                        onChanged();
+                      } else if (action == 'delete') {
+                        if (isDraftMode) {
+                          draftInstructions!.removeAt(index);
+                        } else {
+                          await hiveService.deleteInstruction(instruction.id);
+                        }
+                        onChanged();
+                      } else if (action == 'up' && isDraftMode && index > 0) {
+                        final drafts = draftInstructions!;
+                        final item = drafts.removeAt(index);
+                        drafts.insert(index - 1, item);
+                        onChanged();
+                      } else if (action == 'down' && isDraftMode && index < linked.length - 1) {
+                        final drafts = draftInstructions!;
+                        final item = drafts.removeAt(index);
+                        drafts.insert(index + 1, item);
+                        onChanged();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      if (isDraftMode && index > 0) const PopupMenuItem(value: 'up', child: Text('Move up')),
+                      if (isDraftMode && index < linked.length - 1) const PopupMenuItem(value: 'down', child: Text('Move down')),
+                      const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    ],
+                  ),
+                );
+            }),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -702,20 +754,28 @@ class _TaskInstructionSection extends StatelessWidget {
             children: [
               OutlinedButton.icon(
                 onPressed: taskName.trim().isEmpty ? null : () async {
-                  await _showAddInstructionForTaskDialog(context, hiveService, taskName, phaseNames);
+                  final instruction = await _showAddInstructionForTaskDialog(
+                    context,
+                    hiveService,
+                    taskName,
+                    phaseNames,
+                    saveImmediately: !isDraftMode,
+                  );
+                  if (instruction != null && isDraftMode) draftInstructions!.add(instruction);
                   onChanged();
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('Add Instruction'),
               ),
-              OutlinedButton.icon(
-                onPressed: taskName.trim().isEmpty ? null : () async {
-                  await _showLinkInstructionDialog(context, hiveService, taskName, phaseNames);
-                  onChanged();
-                },
-                icon: const Icon(Icons.link_rounded),
-                label: const Text('Link Existing Instruction'),
-              ),
+              if (!isDraftMode)
+                OutlinedButton.icon(
+                  onPressed: taskName.trim().isEmpty ? null : () async {
+                    await _showLinkInstructionDialog(context, hiveService, taskName, phaseNames);
+                    onChanged();
+                  },
+                  icon: const Icon(Icons.link_rounded),
+                  label: const Text('Link Existing Instruction'),
+                ),
             ],
           ),
         ],
@@ -724,33 +784,54 @@ class _TaskInstructionSection extends StatelessWidget {
   }
 }
 
+String _instructionSummary(InstructionRule instruction) {
+  final phase = instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}';
+  if (instruction.isLevelBased) return '${instruction.levels.length} levels${instruction.unit.isEmpty ? '' : ' • ${instruction.unit}'}$phase';
+  if (instruction.isOptionBased) return '${instruction.options.length} options$phase';
+  return 'Bonus: +${instruction.bonusPoints}$phase';
+}
+
 List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, String taskName) {
   final normalizedName = taskName.trim();
   if (normalizedName.isEmpty) return const <InstructionRule>[];
   return hiveService.getInstructions().where((instruction) => instruction.isLinkedToTask(normalizedName)).toList();
 }
 
-Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames) async {
-  final nameController = TextEditingController();
-  final descriptionController = TextEditingController();
-  final bonusController = TextEditingController(text: '20');
-  final xpController = TextEditingController(text: '5');
-  var repeatType = InstructionRule.repeatDaily;
-  var instructionType = InstructionRule.typeSimple;
-  var options = const [
+Future<InstructionRule?> _showAddInstructionForTaskDialog(
+  BuildContext context,
+  HiveService hiveService,
+  String taskName,
+  List<String> phaseNames, {
+  InstructionRule? initialInstruction,
+  bool saveImmediately = true,
+}) async {
+  final nameController = TextEditingController(text: initialInstruction?.name ?? '');
+  final descriptionController = TextEditingController(text: initialInstruction?.description ?? '');
+  final bonusController = TextEditingController(text: '${initialInstruction?.bonusPoints ?? 20}');
+  final xpController = TextEditingController(text: '${initialInstruction?.xpEarned ?? 5}');
+  final unitController = TextEditingController(text: initialInstruction?.unit.isNotEmpty == true ? initialInstruction!.unit : 'km');
+  var repeatType = initialInstruction?.repeatType ?? InstructionRule.repeatDaily;
+  var instructionType = initialInstruction?.instructionType ?? InstructionRule.typeSimple;
+  var levels = initialInstruction?.levels.isNotEmpty == true ? initialInstruction!.levels : const [
+    InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, xpEarned: 5),
+    InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, xpEarned: 8),
+    InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, xpEarned: 12),
+  ];
+  var options = initialInstruction?.options.isNotEmpty == true ? initialInstruction!.options : const [
     InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, xpEarned: 2, emoji: '🥤'),
     InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, xpEarned: 5, emoji: '🥤'),
     InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, xpEarned: 8, emoji: '🍊'),
+    InstructionOption(id: 'option_amla', name: 'Amla Juice', bonusPoints: 50, xpEarned: 10, emoji: '🥤'),
   ];
-  var enabled = true;
-  var streakTracking = true;
-  var colorValue = 0xFF43A047;
-  var linkedPhase = '';
+  var enabled = initialInstruction?.enabled ?? true;
+  var streakTracking = initialInstruction?.streakTracking ?? true;
+  var colorValue = initialInstruction?.colorValue ?? 0xFF43A047;
+  var linkedPhase = initialInstruction?.linkedPhase ?? '';
   final instruction = await showDialog<InstructionRule>(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Add Instruction'),
+        title: Text(initialInstruction == null ? 'Add Instruction' : 'Edit Instruction'),
         content: SingleChildScrollView(
           child: SizedBox(
             width: 420,
@@ -774,7 +855,7 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                 DropdownButtonFormField<String>(
                   value: instructionType,
                   decoration: const InputDecoration(labelText: 'Instruction Type'),
-                  items: const [InstructionRule.typeSimple, InstructionRule.typeOptionBased]
+                  items: const [InstructionRule.typeSimple, InstructionRule.typeLevelBased, InstructionRule.typeOptionBased]
                       .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                       .toList(),
                   onChanged: (value) => setDialogState(() => instructionType = value ?? instructionType),
@@ -790,6 +871,15 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                 if (instructionType == InstructionRule.typeSimple) ...[
                   TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
                   TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                ] else if (instructionType == InstructionRule.typeLevelBased) ...[
+                  TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
+                  const Align(alignment: Alignment.centerLeft, child: Text('Levels', style: TextStyle(fontWeight: FontWeight.w900))),
+                  ...levels.map((level) => ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.emoji_events_outlined),
+                        title: Text(level.displayLabel),
+                        subtitle: Text('+${level.bonusPoints} points • ${level.xpEarned} XP'),
+                      )),
                 ] else ...[
                   const Align(alignment: Alignment.centerLeft, child: Text('Options', style: TextStyle(fontWeight: FontWeight.w900))),
                   ...options.map((option) => ListTile(
@@ -824,13 +914,17 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
             onPressed: () => Navigator.pop(
               context,
               InstructionRule(
-                id: 'instruction_${DateTime.now().microsecondsSinceEpoch}',
+                id: initialInstruction?.id ?? 'instruction_${DateTime.now().microsecondsSinceEpoch}',
                 name: nameController.text.trim().isEmpty ? 'Instruction' : nameController.text.trim(),
                 description: descriptionController.text.trim(),
                 linkedTask: InstructionRule.encodeLinks([taskName]),
                 linkedPhase: linkedPhase.trim(),
                 repeatType: repeatType,
                 instructionType: instructionType,
+                unit: instructionType == InstructionRule.typeLevelBased ? unitController.text.trim() : '',
+                levels: instructionType == InstructionRule.typeLevelBased
+                    ? levels.map((level) => InstructionLevel(id: level.id, name: level.name, target: level.target, unit: unitController.text.trim().isEmpty ? level.unit : unitController.text.trim(), bonusPoints: level.bonusPoints, xpEarned: level.xpEarned)).toList()
+                    : const [],
                 options: instructionType == InstructionRule.typeOptionBased ? options : const [],
                 bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
                 xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
@@ -846,7 +940,13 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
       ),
     ),
   );
-  if (instruction != null) await hiveService.saveInstruction(instruction);
+  nameController.dispose();
+  descriptionController.dispose();
+  bonusController.dispose();
+  xpController.dispose();
+  unitController.dispose();
+  if (instruction != null && saveImmediately) await hiveService.saveInstruction(instruction);
+  return instruction;
 }
 
 Future<void> _showLinkInstructionDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames) async {
