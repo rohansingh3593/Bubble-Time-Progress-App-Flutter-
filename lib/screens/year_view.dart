@@ -6,6 +6,7 @@ import '../widgets/productivity_period_summary.dart';
 import '../utils/grid_utils.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
+import '../constants/dashboard_themes.dart';
 import '../models/task_model.dart';
 import '../models/productivity_snapshot.dart';
 import 'task_screen.dart';
@@ -327,6 +328,166 @@ class _YearViewState extends State<YearView> {
     );
   }
 
+
+  DashboardThemeStyle _selectedDashboardTheme() {
+    return DashboardThemeStyle.of(
+      widget.hiveService.getDashboardTheme(),
+      palette: widget.hiveService.getDashboardPalette(),
+    );
+  }
+
+  Widget _yearDayProgressMap(DashboardThemeStyle selectedDashboardTheme) {
+    final theme = selectedDashboardTheme;
+    final yearStart = DateTime(_currentYear.year, 1, 1);
+    final totalDays = DateTime(_currentYear.year, 12, 31).difference(yearStart).inDays + 1;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final isCurrentYear = _currentYear.year == today.year;
+    final todayIndex = isCurrentYear ? today.difference(yearStart).inDays : -1;
+    final selectedYearIsPast = _currentYear.year < today.year;
+    final selectedYearIsFuture = _currentYear.year > today.year;
+    final currentYearPassedDays = todayIndex.clamp(0, totalDays).toInt();
+    final passedDays = selectedYearIsPast ? totalDays : selectedYearIsFuture ? 0 : currentYearPassedDays;
+    final remainingDays = selectedYearIsPast ? 0 : selectedYearIsFuture ? totalDays : (totalDays - passedDays - 1).clamp(0, totalDays).toInt();
+    final progress = totalDays == 0 ? 0.0 : (passedDays / totalDays).clamp(0.0, 1.0);
+    final progressLabel = '${(progress * 100).round()}%';
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    Color dayColor(int index) {
+      if (index == todayIndex) return theme.accent;
+      if (index < passedDays) return theme.primary;
+      return theme.textMuted.withOpacity(0.28);
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final dotsPerRow = constraints.maxWidth < 600 ? 21 : constraints.maxWidth < 1024 ? 23 : 28;
+        final spacing = constraints.maxWidth < 600 ? 5.0 : 6.0;
+        final availableDotWidth = constraints.maxWidth - 36 - (spacing * (dotsPerRow - 1));
+        final dotSize = (availableDotWidth / dotsPerRow).clamp(6.0, 11.0).toDouble();
+        final rowCount = (totalDays / dotsPerRow).ceil();
+        final gridHeight = (rowCount * dotSize) + ((rowCount - 1) * spacing);
+
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: theme.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: theme.primary.withOpacity(0.14)),
+            boxShadow: [BoxShadow(color: theme.primary.withOpacity(0.10), blurRadius: 24, offset: const Offset(0, 12))],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Year Day Progress', style: TextStyle(color: theme.textPrimary, fontSize: 20, fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 4),
+                        Text('$passedDays days passed • $remainingDays days left', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: (theme.cardTint ?? theme.elevatedSurface).withOpacity(theme.dark ? 0.40 : 0.72),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: theme.primary.withOpacity(0.14)),
+                    ),
+                    child: Text(progressLabel, style: TextStyle(color: theme.primary, fontWeight: FontWeight.w900)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 9,
+                  color: theme.primary,
+                  backgroundColor: theme.primary.withOpacity(0.12),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 6,
+                children: monthLabels.map((label) => Text(label, style: TextStyle(color: theme.textMuted, fontSize: 12, fontWeight: FontWeight.w800))).toList(),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: gridHeight,
+                child: GridView.builder(
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: dotsPerRow,
+                    childAspectRatio: 1,
+                    crossAxisSpacing: spacing,
+                    mainAxisSpacing: spacing,
+                  ),
+                  itemCount: totalDays,
+                  itemBuilder: (context, index) {
+                    final date = DateTime(_currentYear.year, 1, index + 1);
+                    final isToday = index == todayIndex;
+                    return Tooltip(
+                      message: '${date.day}/${date.month}/${date.year}',
+                      child: Center(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 220),
+                          width: dotSize,
+                          height: dotSize,
+                          decoration: BoxDecoration(
+                            color: dayColor(index),
+                            shape: BoxShape.circle,
+                            boxShadow: isToday ? [BoxShadow(color: theme.accent.withOpacity(0.55), blurRadius: 12, spreadRadius: 2)] : null,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 14,
+                runSpacing: 8,
+                children: [
+                  _yearProgressLegendItem(theme: theme, color: theme.primary, label: 'Passed'),
+                  _yearProgressLegendItem(theme: theme, color: theme.accent, label: 'Today', glow: true),
+                  _yearProgressLegendItem(theme: theme, color: theme.textMuted.withOpacity(0.28), label: 'Remaining'),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _yearProgressLegendItem({required DashboardThemeStyle theme, required Color color, required String label, bool glow = false}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            boxShadow: glow ? [BoxShadow(color: theme.accent.withOpacity(0.45), blurRadius: 10, spreadRadius: 1)] : null,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -346,6 +507,7 @@ class _YearViewState extends State<YearView> {
         builder: (context, box, _) {
           final yearlyTasks = _getYearlyRepeatingTasks();
           final yearlyStats = _yearlyProductivityStats();
+          final selectedDashboardTheme = _selectedDashboardTheme();
           return LayoutBuilder(
             builder: (context, constraints) {
               final gridDims = calculateGridDimensions(
@@ -359,6 +521,8 @@ class _YearViewState extends State<YearView> {
                 padding: const EdgeInsets.all(16.0),
                 children: [
                   _yearBubbleSelector(),
+                  const SizedBox(height: 16),
+                  _yearDayProgressMap(selectedDashboardTheme),
                   const SizedBox(height: 16),
                   ProductivityPeriodSummaryCard(stats: yearlyStats),
                   const SizedBox(height: 16),
