@@ -213,6 +213,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Timer? _mottoTimer;
   bool _mottoDialogOpen = false;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
+  Listenable? _mottoStorageListenable;
+  String? _mottoReminderSignature;
 
   late final List<Widget> _screens;
 
@@ -220,6 +222,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _mottoStorageListenable = widget.hiveService.getBoxListenable()..addListener(_handleMottoStorageChanged);
     _screens = [
       DashboardView(hiveService: widget.hiveService, onGoToDashboard: _goToDashboardTab),
       YearView(hiveService: widget.hiveService),
@@ -234,6 +237,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _mottoStorageListenable?.removeListener(_handleMottoStorageChanged);
     _mottoTimer?.cancel();
     super.dispose();
   }
@@ -244,10 +248,23 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) _scheduleMottoReminder();
   }
 
+  void _handleMottoStorageChanged() {
+    final signature = _currentMottoReminderSignature();
+    if (signature == _mottoReminderSignature) return;
+    _scheduleMottoReminder();
+  }
+
+  String _currentMottoReminderSignature() {
+    final settings = widget.hiveService.getMottoReminderSettings();
+    final activeMottoIds = widget.hiveService.getMotivationMottos().where((motto) => motto.enabled).map((motto) => motto.id).join(',');
+    return '${settings.popupEnabled}|${settings.frequencyMinutes}|${settings.activeOnly}|$activeMottoIds';
+  }
+
   void _scheduleMottoReminder() {
     _mottoTimer?.cancel();
+    _mottoReminderSignature = _currentMottoReminderSignature();
     final settings = widget.hiveService.getMottoReminderSettings();
-    if (!settings.popupEnabled) return;
+    if (!settings.popupEnabled || widget.hiveService.getNextMotivationMotto() == null) return;
     _mottoTimer = Timer(Duration(minutes: settings.frequencyMinutes), _showMottoReminderIfReady);
   }
 
