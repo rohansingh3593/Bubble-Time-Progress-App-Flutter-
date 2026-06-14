@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
-import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/productivity_period_summary.dart';
-import '../utils/grid_utils.dart';
 import '../services/hive_service.dart';
 import '../constants/colors.dart';
 import '../constants/dashboard_themes.dart';
 import '../models/task_model.dart';
 import '../models/productivity_snapshot.dart';
-import 'task_screen.dart';
 import 'journal_view.dart';
 
 class YearView extends StatefulWidget {
@@ -63,26 +60,6 @@ class _YearViewState extends State<YearView> {
     });
     _centerSelectedYearAfterLayout();
   }
-
-  void _showTaskScreen(DateTime date) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        expand: false,
-        builder: (context, scrollController) => SingleChildScrollView(
-          controller: scrollController,
-          child: TaskScreen(
-            date: date,
-            hiveService: widget.hiveService,
-          ),
-        ),
-      ),
-    );
-  }
-
-
-
 
   void _openJournalForTask(Task task) {
     Navigator.of(context).push(
@@ -143,22 +120,6 @@ class _YearViewState extends State<YearView> {
     }
   }
 
-  Color _getBubbleColor(DateTime date, Map<String, int> summary, DateTime today) {
-    final isPassed = date.isBefore(today);
-    if (isPassed) {
-      return AppColors.passed;
-    }
-
-    if (summary['completed']! > 0 && summary['pending']! == 0) {
-      return AppColors.taskCompleted;
-    } else if (summary['pending']! > 0) {
-      return AppColors.taskPending;
-    } else {
-      return AppColors.taskNone;
-    }
-  }
-
-
   bool _isCompletedTask(Task task) {
     return task.done || task.status.trim().toLowerCase() == 'completed';
   }
@@ -208,20 +169,6 @@ class _YearViewState extends State<YearView> {
       );
     });
   }
-
-  Map<String, int> _getCompletedSummaryForDate(DateTime date) {
-    final completedTasks = widget.hiveService
-        .getTasksForDate(date)
-        .where((task) => task.status == 'Completed')
-        .toList();
-
-    return {
-      'completed': completedTasks.length,
-      'pending': 0,
-    };
-  }
-
-
 
   List<Task> _getYearlyRepeatingTasks() {
     final allTasksByDate = widget.hiveService.getAllTasksByDate();
@@ -506,9 +453,6 @@ class _YearViewState extends State<YearView> {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final isCurrentYear = _currentYear.year == now.year;
-    final daysInYear = DateTime(_currentYear.year + 1, 1, 1)
-        .difference(DateTime(_currentYear.year, 1, 1))
-        .inDays;
     final todayStart = DateTime(now.year, now.month, now.day);
 
     return Scaffold(
@@ -522,53 +466,17 @@ class _YearViewState extends State<YearView> {
           final yearlyTasks = _getYearlyRepeatingTasks();
           final yearlyStats = _yearlyProductivityStats();
           final selectedDashboardTheme = _selectedDashboardTheme();
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final gridDims = calculateGridDimensions(
-                daysInYear,
-                constraints.maxWidth,
-                420,
-                viewType: 'year',
-              );
-
-              return ListView(
-                padding: const EdgeInsets.all(16.0),
-                children: [
-                  _yearBubbleSelector(),
-                  const SizedBox(height: 16),
-                  _yearDayProgressMap(selectedDashboardTheme),
-                  const SizedBox(height: 16),
-                  ProductivityPeriodSummaryCard(stats: yearlyStats),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 420,
-                    child: GridView.builder(
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: gridDims['columns'],
-                        childAspectRatio: 1.0,
-                        crossAxisSpacing: 4.0,
-                        mainAxisSpacing: 4.0,
-                      ),
-                      itemCount: daysInYear,
-                      itemBuilder: (context, index) {
-                        final date = DateTime(_currentYear.year, 1, index + 1);
-                        final summary = _getCompletedSummaryForDate(date);
-                        final isToday = isCurrentYear && date.day == now.day && date.month == now.month;
-
-                        return BubbleWidget(
-                          color: _getBubbleColor(date, summary, todayStart),
-                          isHighlighted: isToday,
-                          onTap: () => _showTaskScreen(date),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _yearlyTasksPanel(yearlyTasks),
-                ],
-              );
-            },
+          return ListView(
+            padding: const EdgeInsets.all(16.0),
+            children: [
+              _yearBubbleSelector(),
+              const SizedBox(height: 16),
+              _yearDayProgressMap(selectedDashboardTheme),
+              const SizedBox(height: 16),
+              ProductivityPeriodSummaryCard(stats: yearlyStats),
+              const SizedBox(height: 16),
+              _yearlyTasksPanel(yearlyTasks),
+            ],
           );
         },
       ),
