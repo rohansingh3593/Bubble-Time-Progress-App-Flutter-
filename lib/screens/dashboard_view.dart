@@ -436,14 +436,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       return;
     }
 
+    if (isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task)) {
+      await _editTask(task);
+      return;
+    }
+
     if (_isCompletedTask(task)) {
-      if (hasTaskLinkedInstructions(widget.hiveService, task)) {
-        await _editTask(task);
-      } else {
-        await _showTodayTaskLockedMessage(
-          '${task.task} is already completed today${_timeLabelForTask(task) == null ? '.' : ' at ${_timeLabelForTask(task)}.'}',
-        );
-      }
+      await _showTodayTaskLockedMessage(
+        '${task.task} is already completed today${_timeLabelForTask(task) == null ? '.' : ' at ${_timeLabelForTask(task)}.'}',
+      );
       return;
     }
 
@@ -453,11 +454,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         actionLabel: 'View Details',
         onAction: () => _editTaskDetails(task),
       );
-      return;
-    }
-
-    if (hasTaskLinkedInstructions(widget.hiveService, task)) {
-      await _editTask(task);
       return;
     }
 
@@ -688,6 +684,61 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
+  void _showTodayTaskOccurrenceSheet(String title, List<_DashboardTodayTask> rows) {
+    final style = _dashboardStyle();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.62,
+          minChildSize: 0.35,
+          maxChildSize: 0.9,
+          builder: (context, scrollController) => Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(color: style.textPrimary, fontSize: 20, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 8),
+                Text('${rows.length} task${rows.length == 1 ? '' : 's'}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: rows.isEmpty
+                      ? const Center(child: Text('No tasks found for this filter.'))
+                      : ListView.separated(
+                          controller: scrollController,
+                          itemBuilder: (context, index) {
+                            final row = rows[index];
+                            final task = row.task;
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Color(task.colorValue).withOpacity(0.14),
+                                child: Icon(_isCompletedTask(task) ? Icons.check : Icons.task_alt, color: Color(task.colorValue)),
+                              ),
+                              title: Text(task.task, style: const TextStyle(fontWeight: FontWeight.w800)),
+                              subtitle: Text('${task.priority} • ${row.displayStatus} • ${_formatDueLabel(task)}'),
+                              trailing: Icon(isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task) ? Icons.event_repeat_rounded : Icons.touch_app_rounded, color: style.primary),
+                              onTap: () async {
+                                Navigator.pop(context);
+                                await _openTodayTaskQuickOccurrence(row);
+                              },
+                            );
+                          },
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemCount: rows.length,
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showStandaloneInstructionActions(InstructionRule instruction, DateTime today) async {
     if (instruction.isTaskLinked) {
       await _showTodayTaskLockedMessage('This instruction is linked to a task. Update it from the related task occurrence.');
@@ -842,16 +893,16 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  List<Task> _todayTasksForFilter(List<_DashboardTodayTask> rows, String filter) {
+  List<_DashboardTodayTask> _todayRowsForFilter(List<_DashboardTodayTask> rows, String filter) {
     switch (filter) {
       case 'completed':
-        return rows.where((row) => row.group == _TodayTaskGroup.completed).map((row) => row.task).toList();
+        return rows.where((row) => row.group == _TodayTaskGroup.completed).toList();
       case 'pending':
-        return rows.where((row) => row.group == _TodayTaskGroup.pending).map((row) => row.task).toList();
+        return rows.where((row) => row.group == _TodayTaskGroup.pending).toList();
       case 'overdue':
-        return rows.where((row) => row.group == _TodayTaskGroup.overdue).map((row) => row.task).toList();
+        return rows.where((row) => row.group == _TodayTaskGroup.overdue).toList();
       default:
-        return rows.map((row) => row.task).toList();
+        return rows;
     }
   }
 
@@ -1732,6 +1783,18 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
 
+  Color _headerTabBackground(DashboardThemeStyle style) {
+    return Color.lerp(style.surface, style.primary, style.dark ? 0.18 : 0.10) ?? style.surface;
+  }
+
+  BoxShadow _headerTabShadow(DashboardThemeStyle style) {
+    return BoxShadow(
+      color: style.primary.withOpacity(style.dark ? 0.22 : 0.12),
+      blurRadius: 10,
+      offset: const Offset(0, 6),
+    );
+  }
+
   Widget _rewardMoneyBadge(DashboardThemeStyle style) {
     final rewardSummary = widget.hiveService.getRewardMoneySummary();
     return Tooltip(
@@ -1745,10 +1808,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             duration: const Duration(milliseconds: 220),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             decoration: BoxDecoration(
-              color: style.primary.withOpacity(0.12),
+              color: _headerTabBackground(style),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: style.primary.withOpacity(0.22)),
-              boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
+              boxShadow: [_headerTabShadow(style)],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1785,22 +1848,16 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             duration: const Duration(milliseconds: 220),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: style.surface,
+              color: _headerTabBackground(style),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: style.primary.withOpacity(0.12)),
-              boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
+              border: Border.all(color: style.primary.withOpacity(0.22)),
+              boxShadow: [_headerTabShadow(style)],
             ),
             child: Icon(icon, color: style.primary, size: 22),
           ),
         ),
       ),
     );
-  }
-
-  Color _selectorTextColor(bool selected, DashboardThemeStyle style) {
-    final theme = AppThemeColors.fromDashboardStyle(style);
-    final chipColor = selected ? theme.selectedBackground : theme.chipBackground;
-    return AppThemeColors.readableTextOn(chipColor, style);
   }
 
   Widget _buildThemeSelector() {
@@ -1840,11 +1897,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 final isSelected = theme == selectedTheme;
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: _themeSelectorChip(
+                  child: ThemeSettingTab(
                     selected: isSelected,
                     label: theme.label,
-                    leading: Icon(_themeIcon(theme), size: 17, color: _selectorTextColor(isSelected, style)),
-                    style: style,
+                    icon: _themeIcon(theme),
+                    theme: style,
                     onTap: () => widget.hiveService.setDashboardTheme(theme),
                   ),
                 );
@@ -1925,9 +1982,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     required VoidCallback onTap,
   }) {
     final theme = AppThemeColors.fromDashboardStyle(style);
-    final background = selected ? theme.primaryLight : theme.surface;
-    final borderColor = selected ? theme.primary : theme.border;
-    final textColor = selected ? theme.primary : theme.textPrimary;
+    final background = selected ? style.selectedTabBg : style.unselectedTabBg;
+    final borderColor = selected ? style.primary : style.tabBorder;
+    final textColor = selected ? style.selectedTabText : style.unselectedTabText;
     final recommendation = _paletteRecommendation(palette);
 
     return Material(
@@ -1945,8 +2002,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             border: Border.all(color: borderColor, width: selected ? 1.8 : 1),
             boxShadow: [
               BoxShadow(
-                color: selected ? theme.primary.withOpacity(0.18) : theme.shadow.withOpacity(0.35),
-                blurRadius: selected ? 18 : 10,
+                color: selected ? style.primary.withOpacity(0.20) : theme.shadow.withOpacity(0.22),
+                blurRadius: selected ? 14 : 10,
                 offset: const Offset(0, 6),
               ),
             ],
@@ -1961,7 +2018,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   AnimatedOpacity(
                     opacity: selected ? 1 : 0,
                     duration: const Duration(milliseconds: 180),
-                    child: Icon(Icons.check_circle_rounded, size: 18, color: theme.primary),
+                    child: Icon(Icons.check_circle_rounded, size: 18, color: style.selectedTabText),
                   ),
                 ],
               ),
@@ -2089,18 +2146,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               final isSelected = scale == selectedScale;
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: _themeSelectorChip(
+                child: ThemeSettingTab(
                   selected: isSelected,
                   label: scale.label,
-                  leading: Text(
-                    'A',
-                    style: TextStyle(
-                      color: _selectorTextColor(isSelected, style),
-                      fontSize: 11 * scale.scale,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  style: style,
+                  theme: style,
                   onTap: () => widget.hiveService.setAppFontScale(scale),
                 ),
               );
@@ -2117,18 +2166,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               final isSelected = weight == selectedWeight;
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: _themeSelectorChip(
+                child: ThemeSettingTab(
                   selected: isSelected,
                   label: weight.label,
-                  leading: Text(
-                    'Aa',
-                    style: TextStyle(
-                      color: _selectorTextColor(isSelected, style),
-                      fontWeight: weight.weight,
-                      fontSize: 12,
-                    ),
-                  ),
-                  style: style,
+                  theme: style,
                   onTap: () => widget.hiveService.setAppFontWeight(weight),
                 ),
               );
@@ -2171,9 +2212,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     required AppFontScale scale,
     required AppFontWeightChoice weight,
   }) {
-    final theme = AppThemeColors.fromDashboardStyle(style);
-    final cardColor = selected ? theme.selectedBackground : theme.card;
-    final foreground = AppThemeColors.readableTextOn(cardColor, style);
+    final cardColor = selected ? style.primary : (style.cardTint ?? style.elevatedSurface).withOpacity(0.50);
+    final foreground = selected ? style.selectedTabText : style.textPrimary;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -2186,7 +2226,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           decoration: BoxDecoration(
             color: cardColor,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: selected ? theme.selectedBorder : theme.border, width: selected ? 1.5 : 1),
+            border: Border.all(color: selected ? style.primary : style.primary.withOpacity(0.20), width: selected ? 1.5 : 1),
+            boxShadow: selected
+                ? [BoxShadow(color: style.primary.withOpacity(0.22), blurRadius: 16, offset: const Offset(0, 8))]
+                : [],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2277,51 +2320,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     return FontWeight.values[nextIndex];
   }
 
-  Widget _themeSelectorChip({
-    required bool selected,
-    required String label,
-    required Widget leading,
-    required DashboardThemeStyle style,
-    required VoidCallback onTap,
-  }) {
-    final theme = AppThemeColors.fromDashboardStyle(style);
-    final chipColor = selected ? theme.selectedBackground : theme.chipBackground;
-    final foreground = AppThemeColors.readableTextOn(chipColor, style);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          constraints: const BoxConstraints(minHeight: 40),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: chipColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: selected ? theme.selectedBorder : theme.border, width: selected ? 1.4 : 1),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconTheme(data: IconThemeData(color: foreground), child: leading),
-              const SizedBox(width: 7),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: foreground,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: style.type == DashboardThemeType.minimal ? 0.4 : 0,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+
 
   Color _readableOn(Color color) {
     return AppThemeColors.readableTextOn(color, _dashboardStyle());
@@ -3490,11 +3489,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _todayProductivityStat('Total Tasks', stats.total, onTap: () => _showTaskListSheet("All today's tasks", _todayTasksForFilter(todayRows, 'all'))),
-                        _todayProductivityStat('Completed', stats.completed, onTap: () => _showTaskListSheet("Completed today", _todayTasksForFilter(todayRows, 'completed'))),
-                        _todayProductivityStat('Pending', stats.pending, onTap: () => _showTaskListSheet("Pending today", _todayTasksForFilter(todayRows, 'pending'))),
-                        _todayProductivityStat('Overdue', stats.overdue, onTap: () => _showTaskListSheet("Overdue today", _todayTasksForFilter(todayRows, 'overdue'))),
-                        _todayProductivityStat('Completion Rate', stats.completionRate, suffix: '%', onTap: () => _showTaskListSheet("All today's tasks", _todayTasksForFilter(todayRows, 'all'))),
+                        _todayProductivityStat('Total Tasks', stats.total, onTap: () => _showTodayTaskOccurrenceSheet("All today's tasks", _todayRowsForFilter(todayRows, 'all'))),
+                        _todayProductivityStat('Completed', stats.completed, onTap: () => _showTodayTaskOccurrenceSheet("Completed today", _todayRowsForFilter(todayRows, 'completed'))),
+                        _todayProductivityStat('Pending', stats.pending, onTap: () => _showTodayTaskOccurrenceSheet("Pending today", _todayRowsForFilter(todayRows, 'pending'))),
+                        _todayProductivityStat('Overdue', stats.overdue, onTap: () => _showTodayTaskOccurrenceSheet("Overdue today", _todayRowsForFilter(todayRows, 'overdue'))),
+                        _todayProductivityStat('Completion Rate', stats.completionRate, suffix: '%', onTap: () => _showTodayTaskOccurrenceSheet("All today's tasks", _todayRowsForFilter(todayRows, 'all'))),
                       ],
                     ),
                   ],
@@ -4291,6 +4290,83 @@ class _DisabledRoutineTask {
   });
 }
 
+
+extension DashboardThemeSettingColors on DashboardThemeStyle {
+  Color get onPrimary => AppThemeColors.readableTextOn(primary, this);
+  Color get selectedTabBg => primary;
+  Color get selectedTabText => onPrimary;
+  Color get unselectedTabBg => surface;
+  Color get unselectedTabText => textPrimary;
+  Color get softTabBg => primary.withOpacity(0.10);
+  Color get tabBorder => primary.withOpacity(0.22);
+}
+
+class ThemeSettingTab extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final VoidCallback onTap;
+  final DashboardThemeStyle theme;
+
+  const ThemeSettingTab({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    required this.theme,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedBg = theme.selectedTabBg;
+    final selectedText = theme.selectedTabText;
+    final unselectedBg = theme.unselectedTabBg;
+    final unselectedText = theme.unselectedTabText;
+    final borderColor = selected ? theme.primary : theme.tabBorder;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: selected ? selectedBg : unselectedBg,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: borderColor, width: 1.2),
+            boxShadow: selected
+                ? [BoxShadow(color: theme.primary.withOpacity(0.22), blurRadius: 14, offset: const Offset(0, 6))]
+                : [],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 18, color: selected ? selectedText : theme.primary),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? selectedText : unselectedText,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DashboardSettingsPanel extends StatelessWidget {
   final HiveService hiveService;
   final VoidCallback onClose;
@@ -4504,26 +4580,14 @@ class _DashboardSettingsPanel extends StatelessWidget {
   }
 
   Widget _simpleSettingsChip({required DashboardThemeStyle style, required String label, required bool selected, required VoidCallback onTap}) {
-    final color = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.44 : 0.22)! : style.elevatedSurface;
-    final foreground = color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF17211D);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: hiveService.getDashboardAnimationSpeed().duration,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: selected ? foreground.withOpacity(0.7) : style.primary.withOpacity(0.16), width: selected ? 1.4 : 1),
-          ),
-          child: Text(label, style: TextStyle(color: foreground, fontWeight: FontWeight.w800)),
-        ),
-      ),
+    return ThemeSettingTab(
+      label: label,
+      selected: selected,
+      onTap: onTap,
+      theme: style,
     );
   }
+
 
   Widget _settingsSwitch({required DashboardThemeStyle style, required String title, required bool value, required ValueChanged<bool> onChanged}) {
     return SwitchListTile.adaptive(

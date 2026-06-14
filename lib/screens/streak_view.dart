@@ -57,13 +57,14 @@ class StreakView extends StatelessWidget {
             journalEntries: journalEntries,
           );
           final habits = _HabitTracker.buildHabits(allTasksByDate, stats.today);
+          final style = _streakThemeStyle(hiveService);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _HeroStreakCard(stats: stats),
+                _HeroStreakCard(stats: stats, style: style),
                 const SizedBox(height: 14),
                 RankProfileCard(
                   profile: rankProfile,
@@ -72,6 +73,7 @@ class StreakView extends StatelessWidget {
                     JournalView.route(hiveService: hiveService, onGoToDashboard: onGoToDashboard),
                   ),
                   userProfile: hiveService.getUserProfile(),
+                  dashboardStyle: style,
                   onJourneyTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => JourneyTimelineView(hiveService: hiveService),
@@ -531,24 +533,28 @@ class _StreakInfo {
 
 class _HeroStreakCard extends StatelessWidget {
   final _JourneyStats stats;
+  final DashboardThemeStyle style;
 
-  const _HeroStreakCard({required this.stats});
+  const _HeroStreakCard({required this.stats, required this.style});
 
   @override
   Widget build(BuildContext context) {
+    final gradientColors = style.heroGradient.isNotEmpty ? style.heroGradient : [style.primary, style.secondary, style.accent];
+    final contentColor = AppThemeColors.readableTextOn(gradientColors.first, style);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFF8A00), Color(0xFFE52E71), Color(0xFF7E57C2)],
+        gradient: LinearGradient(
+          colors: gradientColors,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFE52E71).withOpacity(0.24),
+            color: style.primary.withOpacity(0.24),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -561,14 +567,14 @@ class _HeroStreakCard extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-                child: const Icon(Icons.local_fire_department, color: Colors.white, size: 32),
+                decoration: BoxDecoration(color: contentColor.withOpacity(0.20), shape: BoxShape.circle),
+                child: Icon(Icons.local_fire_department, color: contentColor, size: 32),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Your consistency journey',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: contentColor, fontSize: 18, fontWeight: FontWeight.w700),
                 ),
               ),
             ],
@@ -576,17 +582,17 @@ class _HeroStreakCard extends StatelessWidget {
           const SizedBox(height: 18),
           Text(
             '${stats.currentDailyStreak}',
-            style: const TextStyle(color: Colors.white, fontSize: 58, fontWeight: FontWeight.w900, height: 0.95),
+            style: TextStyle(color: contentColor, fontSize: 58, fontWeight: FontWeight.w900, height: 0.95),
           ),
-          const Text('day active streak', style: TextStyle(color: Colors.white, fontSize: 16)),
+          Text('day active streak', style: TextStyle(color: contentColor, fontSize: 16)),
           const SizedBox(height: 18),
           Row(
             children: [
-              Expanded(child: _HeroMetric(label: 'Weekly streak', value: '${stats.currentWeeklyStreak} wk')),
+              Expanded(child: _HeroMetric(label: 'Weekly streak', value: '${stats.currentWeeklyStreak} wk', contentColor: contentColor)),
               const SizedBox(width: 10),
-              Expanded(child: _HeroMetric(label: 'Longest', value: '${stats.longestStreak} days')),
+              Expanded(child: _HeroMetric(label: 'Longest', value: '${stats.longestStreak} days', contentColor: contentColor)),
               const SizedBox(width: 10),
-              Expanded(child: _HeroMetric(label: 'Productivity', value: '${(stats.productivityRatio * 100).round()}%')),
+              Expanded(child: _HeroMetric(label: 'Productivity', value: '${(stats.productivityRatio * 100).round()}%', contentColor: contentColor)),
             ],
           ),
         ],
@@ -598,23 +604,25 @@ class _HeroStreakCard extends StatelessWidget {
 class _HeroMetric extends StatelessWidget {
   final String label;
   final String value;
+  final Color contentColor;
 
-  const _HeroMetric({required this.label, required this.value});
+  const _HeroMetric({required this.label, required this.value, required this.contentColor});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
+        color: contentColor.withOpacity(0.16),
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: contentColor.withOpacity(0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
+          Text(value, style: TextStyle(color: contentColor, fontWeight: FontWeight.w800, fontSize: 18)),
           const SizedBox(height: 2),
-          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.82), fontSize: 11)),
+          Text(label, style: TextStyle(color: contentColor.withOpacity(0.82), fontSize: 11)),
         ],
       ),
     );

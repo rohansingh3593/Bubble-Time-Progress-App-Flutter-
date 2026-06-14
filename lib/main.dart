@@ -265,7 +265,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _mottoReminderSignature = _currentMottoReminderSignature();
     final settings = widget.hiveService.getMottoReminderSettings();
     if (!settings.popupEnabled || widget.hiveService.getNextMotivationMotto() == null) return;
-    _mottoTimer = Timer(Duration(minutes: settings.frequencyMinutes), _showMottoReminderIfReady);
+    final interval = settings.frequencyMinutes <= 0
+        ? const Duration(seconds: 30)
+        : Duration(minutes: settings.frequencyMinutes);
+    _mottoTimer = Timer(interval, _showMottoReminderIfReady);
   }
 
   Future<void> _showMottoReminderIfReady() async {
