@@ -63,7 +63,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   }
 
   Widget _filterChips() {
-    const filters = ['All', 'Standalone', 'Task-Linked', 'Active', 'Followed', 'Missed', 'Pending', 'Disabled'];
+    const filters = ['All', 'Active', 'Followed', 'Missed', 'Pending', 'Disabled'];
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -82,6 +82,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
 
   List<InstructionRule> _filteredInstructions(List<InstructionRule> instructions, DateTime today) {
     return instructions.where((instruction) {
+      if (instruction.isTaskLinked) return false;
       final entry = widget.hiveService.instructionEntryForDate(instruction, today);
       switch (_filter) {
         case 'Standalone':
@@ -128,7 +129,15 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 ),
               )
             else if (entry == null && instruction.enabled) ...[
-              if (instruction.isLevelBased) ...[
+              if (instruction.isOptionBased) ...[
+                ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
+                ...instruction.options.map((option) => ListTile(
+                      leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
+                      title: Text('${option.name} (+${option.bonusPoints})'),
+                      subtitle: Text('${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
+                      onTap: () => Navigator.pop(context, 'option:${option.id}'),
+                    )),
+              ] else if (instruction.isLevelBased) ...[
                 ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
                 ...instruction.levels.map((level) => ListTile(
                       leading: const Icon(Icons.emoji_events_outlined, color: Colors.green),
@@ -148,11 +157,18 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
             ListTile(leading: const Icon(Icons.visibility_outlined), title: const Text('View Details'), onTap: () => Navigator.pop(context, 'details')),
             ListTile(leading: Icon(instruction.enabled ? Icons.pause_circle_outline : Icons.play_circle_outline), title: Text(instruction.enabled ? 'Disable' : 'Enable'), onTap: () => Navigator.pop(context, 'toggle')),
             ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Edit'), onTap: () => Navigator.pop(context, 'edit')),
+            ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Delete from dashboard'), onTap: () => Navigator.pop(context, 'delete')),
           ],
         ),
       ),
     );
     if (!mounted || action == null) return;
+    if (action.startsWith('option:') && instruction.options.isNotEmpty) {
+      final optionId = action.substring('option:'.length);
+      final option = instruction.options.firstWhere((item) => item.id == optionId, orElse: () => instruction.options.first);
+      await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed, option: option);
+      return;
+    }
     if (action.startsWith('level:') && instruction.levels.isNotEmpty) {
       final levelId = action.substring('level:'.length);
       final level = instruction.levels.firstWhere((item) => item.id == levelId, orElse: () => instruction.levels.first);
@@ -175,6 +191,20 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
       case 'edit':
         _showInstructionForm(instruction);
         break;
+      case 'delete':
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete Instruction?'),
+            content: const Text('This removes the instruction from the dashboard and future tracking only. Past points, XP, money, timeline history, and completed history remain saved.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+              ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete from dashboard only')),
+            ],
+          ),
+        );
+        if (confirm == true) await widget.hiveService.deleteInstruction(instruction.id);
+        break;
     }
   }
 
@@ -186,6 +216,15 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     final unitController = TextEditingController(text: instruction?.unit ?? 'km');
     var instructionType = instruction?.instructionType ?? InstructionRule.typeSimple;
     var levels = [...(instruction?.levels ?? const <InstructionLevel>[])];
+    var options = [...(instruction?.options ?? const <InstructionOption>[])];
+    if (options.isEmpty) {
+      options = const [
+        InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, xpEarned: 2, emoji: '🥤'),
+        InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, xpEarned: 5, emoji: '🥤'),
+        InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, xpEarned: 8, emoji: '🍊'),
+        InstructionOption(id: 'option_amla', name: 'Amla Juice', bonusPoints: 50, xpEarned: 10, emoji: '🟢'),
+      ];
+    }
     if (levels.isEmpty) {
       levels = const [
         InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, xpEarned: 5),
@@ -226,7 +265,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     DropdownButtonFormField<String>(
                       value: instructionType,
                       decoration: const InputDecoration(labelText: 'Instruction Type'),
-                      items: const [InstructionRule.typeSimple, InstructionRule.typeLevelBased]
+                      items: const [InstructionRule.typeSimple, InstructionRule.typeLevelBased, InstructionRule.typeOptionBased]
                           .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                           .toList(),
                       onChanged: (value) => setDialogState(() => instructionType = value ?? instructionType),
@@ -309,7 +348,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     if (instructionType == InstructionRule.typeSimple) ...[
                       TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
                       TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
-                    ] else ...[
+                    ] else if (instructionType == InstructionRule.typeLevelBased) ...[
                       TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
                       const SizedBox(height: 10),
                       Row(
@@ -345,6 +384,41 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                           ),
                         );
                       }),
+                    ] else ...[
+                      Row(
+                        children: [
+                          const Expanded(child: Text('Options', style: TextStyle(fontWeight: FontWeight.w900))),
+                          TextButton.icon(
+                            onPressed: () async {
+                              final option = await _showInstructionOptionDialog(index: options.length);
+                              if (option != null) setDialogState(() => options = [...options, option]);
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Option'),
+                          ),
+                        ],
+                      ),
+                      ...options.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final option = entry.value;
+                        return Card(
+                          child: ListTile(
+                            dense: true,
+                            leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
+                            title: Text(option.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+                            subtitle: Text('+${option.bonusPoints} points • ${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
+                            trailing: Wrap(
+                              spacing: 2,
+                              children: [
+                                IconButton(tooltip: 'Move up', icon: const Icon(Icons.arrow_upward, size: 18), onPressed: index == 0 ? null : () => setDialogState(() { final updated = [...options]; final item = updated.removeAt(index); updated.insert(index - 1, item); options = updated; })),
+                                IconButton(tooltip: 'Move down', icon: const Icon(Icons.arrow_downward, size: 18), onPressed: index == options.length - 1 ? null : () => setDialogState(() { final updated = [...options]; final item = updated.removeAt(index); updated.insert(index + 1, item); options = updated; })),
+                                IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () async { final updatedOption = await _showInstructionOptionDialog(existing: option, index: index); if (updatedOption != null) setDialogState(() { final updated = [...options]; updated[index] = updatedOption; options = updated; }); }),
+                                IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => setDialogState(() => options = options.where((item) => item.id != option.id).toList())),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
                     ],
                     const SizedBox(height: 10),
                     Wrap(
@@ -374,12 +448,13 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     id: instruction?.id ?? 'instruction_${DateTime.now().microsecondsSinceEpoch}',
                     name: nameController.text.trim().isEmpty ? 'Instruction' : nameController.text.trim(),
                     description: descriptionController.text.trim(),
-                    linkedTask: InstructionRule.encodeLinks(linkedTasks),
-                    linkedPhase: linkedPhase.trim(),
+                    linkedTask: '',
+                    linkedPhase: '',
                     repeatType: repeatType,
                     instructionType: instructionType,
                     unit: instructionType == InstructionRule.typeLevelBased ? unitController.text.trim() : '',
                     levels: instructionType == InstructionRule.typeLevelBased ? levels : const [],
+                    options: instructionType == InstructionRule.typeOptionBased ? options : const [],
                     bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
                     xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
                     colorValue: colorValue,
@@ -403,6 +478,50 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     if (saved != null) await widget.hiveService.saveInstruction(saved);
   }
 
+
+
+  Future<InstructionOption?> _showInstructionOptionDialog({InstructionOption? existing, required int index}) async {
+    final nameController = TextEditingController(text: existing?.name ?? 'Option ${index + 1}');
+    final bonusController = TextEditingController(text: existing == null ? '10' : '${existing.bonusPoints}');
+    final xpController = TextEditingController(text: existing == null ? '2' : '${existing.xpEarned}');
+    final emojiController = TextEditingController(text: existing?.emoji ?? '🥤');
+    final descriptionController = TextEditingController(text: existing?.description ?? '');
+    return showDialog<InstructionOption>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(existing == null ? 'Add Option' : 'Edit Option'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Option Name')),
+              TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+              TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
+              TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(
+              context,
+              InstructionOption(
+                id: existing?.id ?? 'option_${DateTime.now().microsecondsSinceEpoch}',
+                name: nameController.text.trim().isEmpty ? 'Option ${index + 1}' : nameController.text.trim(),
+                bonusPoints: int.tryParse(bonusController.text.trim()) ?? 0,
+                xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
+                emoji: emojiController.text.trim().isEmpty ? '🥤' : emojiController.text.trim(),
+                description: descriptionController.text.trim(),
+              ),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<InstructionLevel?> _showInstructionLevelDialog({InstructionLevel? existing, required String defaultUnit, required int index}) async {
     final nameController = TextEditingController(text: existing?.name ?? 'Level ${index + 1}');
@@ -613,7 +732,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 if (instruction.history.isEmpty)
                   const Text('No updates yet.')
                 else
-                  ...instruction.history.reversed.take(10).map((entry) => Text('• ${_formatDate(entry.date)} — ${entry.hasLevel ? entry.levelSummary : entry.status}${entry.followed ? ' (+${entry.bonusPoints} pts)' : ''}')),
+                  ...instruction.history.reversed.take(10).map((entry) => Text('• ${_formatDate(entry.date)} — ${entry.hasLevel || entry.hasOption ? entry.selectionSummary : entry.status}${entry.followed ? ' (+${entry.bonusPoints} pts)' : ''}')),
               ],
             ),
           ),
@@ -718,7 +837,7 @@ class _InstructionCard extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
-                Text(entry?.hasLevel == true ? 'Today: ${entry!.levelSummary} • +${entry.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • ${instruction.isLevelBased ? '${instruction.levels.length} levels' : '+${instruction.bonusPoints} points'} • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                Text((entry?.hasLevel == true || entry?.hasOption == true) ? 'Today: ${entry!.selectionSummary} • +${entry.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • ${instruction.isLevelBased ? '${instruction.levels.length} levels' : instruction.isOptionBased ? '${instruction.options.length} options' : '+${instruction.bonusPoints} points'} • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
                 if (instruction.linkedTasks.isNotEmpty) Text('Linked: ${_linkedTaskSummary(instruction)}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: const TextStyle(fontSize: 12, color: Colors.black45)),
               ]),
             ),

@@ -736,6 +736,12 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
   final bonusController = TextEditingController(text: '20');
   final xpController = TextEditingController(text: '5');
   var repeatType = InstructionRule.repeatDaily;
+  var instructionType = InstructionRule.typeSimple;
+  var options = const [
+    InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, xpEarned: 2, emoji: '🥤'),
+    InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, xpEarned: 5, emoji: '🥤'),
+    InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, xpEarned: 8, emoji: '🍊'),
+  ];
   var enabled = true;
   var streakTracking = true;
   var colorValue = 0xFF43A047;
@@ -766,6 +772,14 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                   ),
                 ],
                 DropdownButtonFormField<String>(
+                  value: instructionType,
+                  decoration: const InputDecoration(labelText: 'Instruction Type'),
+                  items: const [InstructionRule.typeSimple, InstructionRule.typeOptionBased]
+                      .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                      .toList(),
+                  onChanged: (value) => setDialogState(() => instructionType = value ?? instructionType),
+                ),
+                DropdownButtonFormField<String>(
                   value: repeatType,
                   decoration: const InputDecoration(labelText: 'Repeat Type'),
                   items: const [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly, InstructionRule.repeatOneTime]
@@ -773,8 +787,18 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                       .toList(),
                   onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
                 ),
-                TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-                TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                if (instructionType == InstructionRule.typeSimple) ...[
+                  TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                ] else ...[
+                  const Align(alignment: Alignment.centerLeft, child: Text('Options', style: TextStyle(fontWeight: FontWeight.w900))),
+                  ...options.map((option) => ListTile(
+                        dense: true,
+                        leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
+                        title: Text(option.name),
+                        subtitle: Text('+${option.bonusPoints} points • ${option.xpEarned} XP'),
+                      )),
+                ],
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
@@ -806,6 +830,8 @@ Future<void> _showAddInstructionForTaskDialog(BuildContext context, HiveService 
                 linkedTask: InstructionRule.encodeLinks([taskName]),
                 linkedPhase: linkedPhase.trim(),
                 repeatType: repeatType,
+                instructionType: instructionType,
+                options: instructionType == InstructionRule.typeOptionBased ? options : const [],
                 bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
                 xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
                 colorValue: colorValue,

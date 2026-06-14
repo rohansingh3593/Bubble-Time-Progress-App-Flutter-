@@ -195,11 +195,12 @@ class _InstructionDateBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final isFuture = date.isAfter(DateTime(today.year, today.month, today.day));
     final levelIndex = entry?.hasLevel == true ? instruction.levels.indexWhere((level) => level.id == entry!.levelId) : -1;
+    final optionIndex = entry?.hasOption == true ? instruction.options.indexWhere((option) => option.id == entry!.optionId) : -1;
     final repeatedMisses = instruction.history.where((item) => item.missed && !item.date.isAfter(date)).length;
     final emoji = isFuture
         ? '➖'
-        : entry?.hasLevel == true
-            ? (levelIndex >= 2 ? '🤩' : levelIndex == 1 ? '😊' : '🙂')
+        : (entry?.hasLevel == true || entry?.hasOption == true)
+            ? (entry?.hasOption == true ? (optionIndex >= 2 ? '🤩' : optionIndex == 1 ? '😊' : '🙂') : (levelIndex >= 2 ? '🤩' : levelIndex == 1 ? '😊' : '🙂'))
             : entry?.followed == true
                 ? '🙂'
                 : entry?.missed == true
@@ -211,7 +212,7 @@ class _InstructionDateBubble extends StatelessWidget {
         : entry?.missed == true
             ? theme.danger
             : theme.muted;
-    final label = entry?.hasLevel == true ? entry!.levelSummary : entry?.status ?? 'Future / Pending';
+    final label = (entry?.hasLevel == true || entry?.hasOption == true) ? entry!.selectionSummary : entry?.status ?? 'Future / Pending';
     return Tooltip(
       message: '${date.day}/${date.month}/${date.year} • $label',
       child: Container(

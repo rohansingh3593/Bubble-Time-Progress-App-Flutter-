@@ -665,7 +665,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               subtitle: Text(entry == null ? 'Have you followed this instruction today?' : 'This instruction is already updated today.'),
             ),
             if (entry == null && instruction.enabled) ...[
-              if (instruction.isLevelBased) ...[
+              if (instruction.isOptionBased) ...[
+                ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
+                ...instruction.options.map((option) => ListTile(
+                      leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
+                      title: Text('${option.name} (+${option.bonusPoints})'),
+                      subtitle: Text('${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
+                      onTap: () => Navigator.pop(context, 'option:${option.id}'),
+                    )),
+              ] else if (instruction.isLevelBased) ...[
                 ListTile(
                   leading: const Icon(Icons.cancel_outlined, color: Colors.red),
                   title: const Text('Missed'),
@@ -709,6 +717,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       ),
     );
     if (!mounted || action == null || action == 'close') return;
+    if (action.startsWith('option:') && instruction.options.isNotEmpty) {
+      final optionId = action.substring('option:'.length);
+      final option = instruction.options.firstWhere((item) => item.id == optionId, orElse: () => instruction.options.first);
+      await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed, option: option);
+      return;
+    }
     if (action.startsWith('level:') && instruction.levels.isNotEmpty) {
       final levelId = action.substring('level:'.length);
       final level = instruction.levels.firstWhere((item) => item.id == levelId, orElse: () => instruction.levels.first);
@@ -3547,7 +3561,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   child: Icon(Icons.rule_folder_outlined, color: Color(instruction.colorValue)),
                 ),
                 title: Text(instruction.name, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
-                subtitle: Text(entry?.hasLevel == true ? 'Today: ${entry!.levelSummary} • Bonus: +${entry.bonusPoints} • ${widget.hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.repeatType} • ${instruction.isLevelBased ? '${instruction.levels.length} levels' : '+${instruction.bonusPoints} points'} • ${widget.hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: style.textMuted)),
+                subtitle: Text((entry?.hasLevel == true || entry?.hasOption == true) ? 'Today: ${entry!.selectionSummary} • Bonus: +${entry.bonusPoints} • ${widget.hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.repeatType} • ${instruction.isLevelBased ? '${instruction.levels.length} levels' : instruction.isOptionBased ? '${instruction.options.length} options' : '+${instruction.bonusPoints} points'} • ${widget.hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: style.textMuted)),
                 trailing: Text(entry?.status ?? 'Pending', style: TextStyle(color: statusColor, fontWeight: FontWeight.w900)),
                 onTap: () => _showStandaloneInstructionActions(instruction, today),
               );

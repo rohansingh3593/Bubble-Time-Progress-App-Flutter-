@@ -12,6 +12,9 @@ class InstructionHistoryEntry {
   final String levelName;
   final double completedTarget;
   final String unit;
+  final String optionId;
+  final String optionName;
+  final String optionEmoji;
 
   const InstructionHistoryEntry({
     required this.date,
@@ -23,18 +26,25 @@ class InstructionHistoryEntry {
     this.levelName = '',
     this.completedTarget = 0,
     this.unit = '',
+    this.optionId = '',
+    this.optionName = '',
+    this.optionEmoji = '',
   });
 
   bool get followed => status == statusFollowed;
   bool get missed => status == statusMissed;
   bool get notApplicable => status == statusNotApplicable;
   bool get hasLevel => levelId.isNotEmpty;
+  bool get hasOption => optionId.isNotEmpty;
 
   String get levelSummary {
     if (!hasLevel) return '';
     final targetText = completedTarget % 1 == 0 ? completedTarget.toStringAsFixed(0) : completedTarget.toStringAsFixed(1);
     return '$levelName - $targetText $unit'.trim();
   }
+
+  String get optionSummary => hasOption ? '$optionEmoji $optionName'.trim() : '';
+  String get selectionSummary => hasOption ? optionSummary : levelSummary;
 
   List<dynamic> toStorageList() => [
         date.toIso8601String(),
@@ -46,6 +56,9 @@ class InstructionHistoryEntry {
         levelName,
         completedTarget,
         unit,
+        optionId,
+        optionName,
+        optionEmoji,
       ];
 
   factory InstructionHistoryEntry.fromStorageList(List<dynamic> raw) {
@@ -59,6 +72,9 @@ class InstructionHistoryEntry {
       levelName: raw.length > 6 ? '${raw[6]}' : '',
       completedTarget: _readDouble(raw, 7),
       unit: raw.length > 8 ? '${raw[8]}' : '',
+      optionId: raw.length > 9 ? '${raw[9]}' : '',
+      optionName: raw.length > 10 ? '${raw[10]}' : '',
+      optionEmoji: raw.length > 11 ? '${raw[11]}' : '',
     );
   }
 }
@@ -101,6 +117,39 @@ class InstructionLevel {
   }
 }
 
+
+class InstructionOption {
+  final String id;
+  final String name;
+  final int bonusPoints;
+  final int xpEarned;
+  final String emoji;
+  final String description;
+
+  const InstructionOption({
+    required this.id,
+    required this.name,
+    required this.bonusPoints,
+    required this.xpEarned,
+    this.emoji = '🥤',
+    this.description = '',
+  });
+
+  String get displayLabel => '$emoji $name'.trim();
+
+  List<dynamic> toStorageList() => [id, name, bonusPoints, xpEarned, emoji, description];
+
+  factory InstructionOption.fromStorageList(List<dynamic> raw) {
+    return InstructionOption(
+      id: raw.isNotEmpty ? '${raw[0]}' : 'option_${DateTime.now().microsecondsSinceEpoch}',
+      name: raw.length > 1 ? '${raw[1]}' : 'Option',
+      bonusPoints: _readInt(raw, 2),
+      xpEarned: _readInt(raw, 3),
+      emoji: raw.length > 4 ? '${raw[4]}' : '🥤',
+      description: raw.length > 5 ? '${raw[5]}' : '',
+    );
+  }
+}
 class InstructionRule {
   static const String repeatDaily = 'Daily';
   static const String repeatWeekly = 'Weekly';
@@ -111,6 +160,7 @@ class InstructionRule {
   static const String linkDelimiter = '|||';
   static const String typeSimple = 'Simple';
   static const String typeLevelBased = 'Level-Based';
+  static const String typeOptionBased = 'Option-Based';
 
   final String id;
   final String name;
@@ -121,6 +171,8 @@ class InstructionRule {
   final String instructionType;
   final String unit;
   final List<InstructionLevel> levels;
+  final List<InstructionOption> options;
+  final bool archived;
   final int bonusPoints;
   final int xpEarned;
   final int colorValue;
@@ -139,6 +191,8 @@ class InstructionRule {
     this.instructionType = typeSimple,
     this.unit = '',
     this.levels = const [],
+    this.options = const [],
+    this.archived = false,
     this.bonusPoints = 20,
     this.xpEarned = 5,
     this.colorValue = 0xFF43A047,
@@ -156,7 +210,8 @@ class InstructionRule {
 
   bool get isStandalone => !isTaskLinked;
   bool get isLevelBased => instructionType == typeLevelBased;
-  bool get isSimple => !isLevelBased;
+  bool get isOptionBased => instructionType == typeOptionBased;
+  bool get isSimple => !isLevelBased && !isOptionBased;
 
   bool isLinkedToTask(String taskName) {
     final normalizedTaskName = _normalizeLink(taskName);
@@ -201,6 +256,8 @@ class InstructionRule {
     String? instructionType,
     String? unit,
     List<InstructionLevel>? levels,
+    List<InstructionOption>? options,
+    bool? archived,
     int? bonusPoints,
     int? xpEarned,
     int? colorValue,
@@ -218,6 +275,8 @@ class InstructionRule {
       instructionType: instructionType ?? this.instructionType,
       unit: unit ?? this.unit,
       levels: levels ?? this.levels,
+      options: options ?? this.options,
+      archived: archived ?? this.archived,
       bonusPoints: bonusPoints ?? this.bonusPoints,
       xpEarned: xpEarned ?? this.xpEarned,
       colorValue: colorValue ?? this.colorValue,
@@ -245,6 +304,8 @@ class InstructionRule {
         instructionType,
         unit,
         levels.map((level) => level.toStorageList()).toList(),
+        options.map((option) => option.toStorageList()).toList(),
+        archived,
       ];
 
   factory InstructionRule.fromStorageList(List<dynamic> raw) {
@@ -260,6 +321,12 @@ class InstructionRule {
         if (level is List) parsedLevels.add(InstructionLevel.fromStorageList(level.cast<dynamic>()));
       }
     }
+    final parsedOptions = <InstructionOption>[];
+    if (raw.length > 16 && raw[16] is Iterable) {
+      for (final option in raw[16] as Iterable) {
+        if (option is List) parsedOptions.add(InstructionOption.fromStorageList(option.cast<dynamic>()));
+      }
+    }
     return InstructionRule(
       id: raw.isNotEmpty ? '${raw[0]}' : 'instruction_${DateTime.now().microsecondsSinceEpoch}',
       name: raw.length > 1 ? '${raw[1]}' : 'Instruction',
@@ -270,6 +337,8 @@ class InstructionRule {
       instructionType: raw.length > 13 ? '${raw[13]}' : typeSimple,
       unit: raw.length > 14 ? '${raw[14]}' : '',
       levels: parsedLevels,
+      options: parsedOptions,
+      archived: raw.length > 17 ? raw[17] == true || '${raw[17]}'.toLowerCase() == 'true' : false,
       bonusPoints: _readInt(raw, 6, fallback: 20),
       xpEarned: _readInt(raw, 7, fallback: 5),
       colorValue: _readInt(raw, 8, fallback: 0xFF43A047),

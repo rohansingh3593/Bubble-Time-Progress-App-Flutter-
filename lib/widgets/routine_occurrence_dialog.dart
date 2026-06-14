@@ -98,7 +98,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
   final selectedStatuses = <String, String>{};
   for (final instruction in linkedInstructions) {
     final entry = hiveService.instructionEntryForDate(instruction, task.dueDate);
-    selectedStatuses[instruction.id] = entry?.hasLevel == true ? 'level:${entry!.levelId}' : (entry?.status ?? InstructionHistoryEntry.statusNotApplicable);
+    selectedStatuses[instruction.id] = entry?.hasOption == true ? 'option:${entry!.optionId}' : entry?.hasLevel == true ? 'level:${entry!.levelId}' : (entry?.status ?? InstructionHistoryEntry.statusNotApplicable);
   }
   var occurrenceStatus = '';
 
@@ -192,8 +192,32 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                             const SizedBox(height: 6),
                             Wrap(
                               spacing: 6,
-                              children: instruction.isLevelBased
+                              children: instruction.isOptionBased
                                   ? [
+                                      _instructionStatusChoice(
+                                        label: 'Missed',
+                                        value: InstructionHistoryEntry.statusMissed,
+                                        selected: selected,
+                                        enabled: instructionChoicesEnabled,
+                                        onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusMissed),
+                                      ),
+                                      ...instruction.options.map((option) => _instructionStatusChoice(
+                                            label: '${option.emoji} ${option.name} (+${option.bonusPoints})',
+                                            value: 'option:${option.id}',
+                                            selected: selected,
+                                            enabled: instructionChoicesEnabled,
+                                            onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = 'option:${option.id}'),
+                                          )),
+                                      _instructionStatusChoice(
+                                        label: 'N/A',
+                                        value: InstructionHistoryEntry.statusNotApplicable,
+                                        selected: selected,
+                                        enabled: instructionChoicesEnabled,
+                                        onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusNotApplicable),
+                                      ),
+                                    ]
+                                  : instruction.isLevelBased
+                                      ? [
                                       _instructionStatusChoice(
                                         label: 'Missed',
                                         value: InstructionHistoryEntry.statusMissed,
@@ -446,14 +470,19 @@ Future<void> _saveLinkedInstructionStatuses(
         ? selectedStatuses[instruction.id] ?? InstructionHistoryEntry.statusNotApplicable
         : InstructionHistoryEntry.statusMissed;
     final isLevelStatus = rawStatus.startsWith('level:');
+    final isOptionStatus = rawStatus.startsWith('option:');
     final level = isLevelStatus
         ? instruction.levels.firstWhere((item) => item.id == rawStatus.substring('level:'.length), orElse: () => instruction.levels.first)
+        : null;
+    final option = isOptionStatus
+        ? instruction.options.firstWhere((item) => item.id == rawStatus.substring('option:'.length), orElse: () => instruction.options.first)
         : null;
     await hiveService.updateInstructionStatus(
       instruction,
       task.dueDate,
-      isLevelStatus ? InstructionHistoryEntry.statusFollowed : rawStatus,
+      isLevelStatus || isOptionStatus ? InstructionHistoryEntry.statusFollowed : rawStatus,
       level: level,
+      option: option,
       note: 'Task occurrence: ${task.task} • ${routineOccurrenceLabel(task)} • ${occurrenceCompleted ? 'completed' : 'missed'}',
     );
   }
