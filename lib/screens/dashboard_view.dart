@@ -189,8 +189,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 categoryOptions: categoryOptions,
               ),
               const SizedBox(height: 14),
-              _buildDailyFocusStrip(pendingTodayTasks, todayStart),
-              const SizedBox(height: 14),
               _buildProjectsSection(nonRoutineDashboardTasks),
               const SizedBox(height: 12),
             ],
@@ -291,40 +289,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  void _openSettingsPanel() {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Close settings',
-      barrierColor: Colors.black.withOpacity(0.35),
-      transitionDuration: const Duration(milliseconds: 360),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return Align(
-          alignment: Alignment.centerRight,
-          child: Material(
-            color: Colors.transparent,
-            child: FractionallySizedBox(
-              widthFactor: MediaQuery.of(context).size.width < 760 ? 1 : 0.58,
-              heightFactor: 1,
-              child: _DashboardSettingsPanel(
-                hiveService: widget.hiveService,
-                onClose: () => Navigator.of(context).pop(),
-                themeSelectorBuilder: (_) => _buildThemeSelector(),
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
-        return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
-          child: FadeTransition(opacity: curved, child: child),
-        );
-      },
-    );
-  }
-
   void _openJourneyTimeline() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -367,15 +331,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       ),
     );
   }
-
-  void _openProductivityTimeline() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ProductivityTimelineView(hiveService: widget.hiveService),
-      ),
-    );
-  }
-
 
   String _normalizedRepeatFrequency(Task task) {
     final normalized = task.repeatFrequency?.trim().toLowerCase();
@@ -439,9 +394,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     }
 
     if (_isCompletedTask(task)) {
-      await _showTodayTaskLockedMessage(
-        '${task.task} is already completed today${_timeLabelForTask(task) == null ? '.' : ' at ${_timeLabelForTask(task)}.'}',
-      );
+      if (hasTaskLinkedInstructions(widget.hiveService, task)) {
+        await _editTask(task);
+      } else {
+        await _showTodayTaskLockedMessage(
+          '${task.task} is already completed today${_timeLabelForTask(task) == null ? '.' : ' at ${_timeLabelForTask(task)}.'}',
+        );
+      }
       return;
     }
 
@@ -451,6 +410,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         actionLabel: 'View Details',
         onAction: () => _editTaskDetails(task),
       );
+      return;
+    }
+
+    if (hasTaskLinkedInstructions(widget.hiveService, task)) {
+      await _editTask(task);
       return;
     }
 
@@ -824,7 +788,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
   Future<void> _editTask(Task task) async {
-    if (isRoutineTask(task)) {
+    if (isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task)) {
       final action = await showRoutineOccurrenceDialog(context: context, task: task, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
@@ -840,11 +804,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             context,
             date: task.dueDate,
             initialTask: task,
-            title: 'Edit Routine Details',
-            actionLabel: 'Save Routine',
+            title: isRoutineTask(task) ? 'Edit Routine Details' : 'View Task Details',
+            actionLabel: isRoutineTask(task) ? 'Save Routine' : 'Save Task',
           );
           if (edited != null) {
-            await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+            if (isRoutineTask(task)) {
+              await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+            } else {
+              await widget.hiveService.updateTaskByReference(task, edited);
+            }
           }
           return;
         case RoutineOccurrenceAction.missOccurrence:
@@ -1353,6 +1321,41 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   DashboardThemeStyle _dashboardStyle() => DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
 
+  AppThemeColors _dashboardThemeColors() => AppThemeColors.fromDashboardStyle(_dashboardStyle());
+
+  Color _dashboardThemeTaskColor(int storedColorValue) {
+    final theme = _dashboardThemeColors();
+    final colors = <Color>[
+      theme.primary,
+      theme.secondary,
+      theme.accent,
+      theme.success,
+      theme.warning,
+      theme.danger,
+      theme.primarySoft,
+    ];
+    const legacyTaskColors = <int>[
+      0xFFFFC107,
+      0xFF43A047,
+      0xFF1E88E5,
+      0xFFE53935,
+      0xFF7E57C2,
+      0xFFFF8F00,
+      0xFFE91E63,
+    ];
+    final legacyIndex = legacyTaskColors.indexOf(storedColorValue);
+    final index = legacyIndex >= 0 ? legacyIndex : storedColorValue.abs() % colors.length;
+    return colors[index % colors.length];
+  }
+
+  Color _routineMoodColor(_RoutineMood mood, AppThemeColors theme) {
+    if (mood.score >= 75) return theme.success;
+    if (mood.score >= 60) return theme.accent;
+    if (mood.score >= 40) return theme.warning;
+    if (mood.score >= 20) return Color.lerp(theme.warning, theme.danger, 0.35) ?? theme.warning;
+    return theme.danger;
+  }
+
   String _formatShortDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
 
   String _formatCompactNumber(int value) {
@@ -1701,8 +1704,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   Color _selectorTextColor(bool selected, DashboardThemeStyle style) {
-    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
-    return _readableOn(chipColor);
+    final theme = AppThemeColors.fromDashboardStyle(style);
+    final chipColor = selected ? theme.selectedBackground : theme.chipBackground;
+    return AppThemeColors.readableTextOn(chipColor, style);
   }
 
   Widget _buildThemeSelector() {
@@ -1713,24 +1717,27 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final selectedScale = widget.hiveService.getAppFontScale();
     final selectedWeight = widget.hiveService.getAppFontWeight();
 
-  Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
-    final size = compact ? 5.0 : 12.0;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: palette.colors
-          .map((color) => Container(
-                width: size,
-                height: size,
-                margin: const EdgeInsets.only(right: 2),
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black.withOpacity(0.12)),
-                ),
-              ),
-              Text('${selectedTheme.label} • ${selectedPalette.label}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 320),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: style.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: style.primary.withOpacity(0.18)),
+        boxShadow: [BoxShadow(color: style.primary.withOpacity(style.dark ? 0.18 : 0.08), blurRadius: 14, offset: const Offset(0, 6))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.palette_outlined, color: style.primary),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Dashboard Theme', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16))),
             ],
           ),
+          const SizedBox(height: 4),
+          Text('${selectedTheme.label} • ${selectedPalette.label}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -1785,6 +1792,25 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           ),
         ],
       ),
+    );
+  }
+
+  Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
+    final size = compact ? 5.0 : 12.0;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: palette.colors
+          .map((color) => Container(
+                width: size,
+                height: size,
+                margin: const EdgeInsets.only(right: 2),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppThemeColors.fromDashboardStyle(_dashboardStyle()).border),
+                ),
+              ))
+          .toList(),
     );
   }
 
@@ -1895,9 +1921,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: style.elevatedSurface,
+            color: AppThemeColors.fromDashboardStyle(style).card,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: style.primary.withOpacity(0.18)),
+            border: Border.all(color: AppThemeColors.fromDashboardStyle(style).border),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1925,8 +1951,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     required AppFontScale scale,
     required AppFontWeightChoice weight,
   }) {
-    final cardColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.38 : 0.18)! : style.elevatedSurface;
-    final foreground = _readableOn(cardColor);
+    final theme = AppThemeColors.fromDashboardStyle(style);
+    final cardColor = selected ? theme.selectedBackground : theme.card;
+    final foreground = AppThemeColors.readableTextOn(cardColor, style);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1939,7 +1966,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           decoration: BoxDecoration(
             color: cardColor,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: selected ? foreground.withOpacity(0.78) : style.primary.withOpacity(0.18), width: selected ? 1.5 : 1),
+            border: Border.all(color: selected ? theme.selectedBorder : theme.border, width: selected ? 1.5 : 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2037,8 +2064,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     required DashboardThemeStyle style,
     required VoidCallback onTap,
   }) {
-    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
-    final foreground = _readableOn(chipColor);
+    final theme = AppThemeColors.fromDashboardStyle(style);
+    final chipColor = selected ? theme.selectedBackground : theme.chipBackground;
+    final foreground = AppThemeColors.readableTextOn(chipColor, style);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -2051,7 +2079,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           decoration: BoxDecoration(
             color: chipColor,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: selected ? foreground.withOpacity(0.72) : style.primary.withOpacity(0.22), width: selected ? 1.4 : 1),
+            border: Border.all(color: selected ? theme.selectedBorder : theme.border, width: selected ? 1.4 : 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -2075,32 +2103,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Color _selectorTextColor(bool selected, DashboardThemeStyle style) {
-    final chipColor = selected ? Color.lerp(style.elevatedSurface, style.primary, style.dark ? 0.42 : 0.22)! : style.elevatedSurface;
-    return _readableOn(chipColor);
-  }
-
   Color _readableOn(Color color) {
-    return color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF17211D);
-  }
-
-  Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
-    final size = compact ? 5.0 : 12.0;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: palette.colors
-          .map((color) => Container(
-                width: size,
-                height: size,
-                margin: const EdgeInsets.only(right: 2),
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black.withOpacity(0.12)),
-                ),
-              ))
-          .toList(),
-    );
+    return AppThemeColors.readableTextOn(color, _dashboardStyle());
   }
 
   IconData _themeIcon(DashboardThemeType theme) {
@@ -2125,7 +2129,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final progress = completed / total;
 
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
+      tween: Tween(begin: 0.0, end: 1.0),
       duration: const Duration(milliseconds: 850),
       curve: Curves.easeOutCubic,
       builder: (context, intro, _) {
@@ -2302,7 +2306,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               final percent = values['percent'] ?? 0;
               final remaining = values['remaining'] ?? 0;
               return TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: 1),
+                tween: Tween(begin: 0.0, end: 1.0),
                 duration: Duration(milliseconds: 420 + (cards.indexOf(label) * 180)),
                 curve: Curves.easeOut,
                 builder: (context, t, child) => Opacity(
@@ -2385,59 +2389,19 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Widget _buildDailyFocusStrip(List<Task> tasks, DateTime today) {
-    final sorted = [...tasks]..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
-    final focus = sorted.take(3).toList();
-    return _darkSection('Daily Focus', SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(children: focus.map((t){
-        final urgent = t.priority == 'Urgent (Now)' || t.priority == 'High';
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: urgent ? 1 : 0.6),
-          duration: const Duration(milliseconds: 1200),
-          curve: Curves.easeInOut,
-          builder: (context, lift, child) =>
-              Transform.translate(offset: Offset(0, -2 * lift), child: child),
-          child: Tooltip(
-            message: 'Tap to update task',
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _editTask(t),
-                child: Container(
-                  width: 220,
-                  margin: const EdgeInsets.only(right: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A2442),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border(left: BorderSide(color: urgent ? const Color(0xFFFF6A3D) : const Color(0xFF6D7CFF), width: 4)),
-                  ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(t.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 6),
-                    Text(urgent ? '⚡ High Priority' : '• ${t.priority}', style: const TextStyle(color: Color(0xFFB9C6F3))),
-                    const SizedBox(height: 4),
-                    Text(_formatDueLabel(t), style: const TextStyle(color: Color(0xFF7F8EB9), fontSize: 12)),
-                  ]),
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList()),
-    ), action: 'View All');
-  }
-
   Widget _buildHabitRoutineSection(List<Task> routines) {
+    final theme = _dashboardThemeColors();
+    final style = _dashboardStyle();
+    final cardBackground = theme.card;
+    final onCard = AppThemeColors.readableTextOn(cardBackground, style);
     return _darkSection('Habit & Routine Tracker', Column(children: [
       if (routines.isEmpty)
-        const Padding(padding: EdgeInsets.all(8), child: Text('No enabled routines yet.', style: TextStyle(color: Color(0xFFB9C6F3))))
+        Padding(padding: const EdgeInsets.all(8), child: Text('No enabled routines yet.', style: TextStyle(color: theme.textSecondary)))
       else
         ...routines.map((task) {
-          final taskColor = Color(task.colorValue);
+          final taskColor = _dashboardThemeTaskColor(task.colorValue);
           final mood = _routineMoodForTask(task);
+          final moodColor = _routineMoodColor(mood, theme);
           final linkedInstructions = _linkedInstructionsForRoutine(task);
           final followedInstructions = linkedInstructions.where((instruction) {
             return widget.hiveService.instructionEntryForDate(instruction, task.dueDate)?.followed ?? false;
@@ -2451,7 +2415,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             child: Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: const Color(0xFF1A2442), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: cardBackground,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: theme.border),
+                boxShadow: [BoxShadow(color: theme.shadow, blurRadius: 10, offset: const Offset(0, 5))],
+              ),
               child: Row(children: [
                 Text(mood.emoji, style: const TextStyle(fontSize: 24)),
                 const SizedBox(width: 10),
@@ -2461,18 +2430,18 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(task.task, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+                      Text(task.task, style: TextStyle(color: onCard, fontWeight: FontWeight.w900)),
                       const SizedBox(height: 3),
-                      Text('${task.repeatFrequency ?? 'Daily'} • $instructionSummary', style: const TextStyle(color: Color(0xFFB9C6F3), fontSize: 12)),
-                      Text('Mood: ${mood.emoji} ${mood.label}', style: TextStyle(color: mood.color, fontSize: 12, fontWeight: FontWeight.w800)),
+                      Text('${task.repeatFrequency ?? 'Daily'} • $instructionSummary', style: TextStyle(color: theme.textSecondary, fontSize: 12)),
+                      Text('Mood: ${mood.emoji} ${mood.label}', style: TextStyle(color: moodColor, fontSize: 12, fontWeight: FontWeight.w800)),
                     ],
                   ),
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB74D), size: 18),
-                    Text('${_routineCurrentStreak(task)} streak', style: const TextStyle(color: Color(0xFFB9C6F3), fontSize: 11)),
+                    Icon(Icons.local_fire_department_rounded, color: theme.warning, size: 18),
+                    Text('${_routineCurrentStreak(task)} streak', style: TextStyle(color: theme.textSecondary, fontSize: 11)),
                   ],
                 ),
               ]),
@@ -2484,16 +2453,21 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
   Widget _buildDisabledRoutineBoard(List<_DisabledRoutineTask> disabledTasks) {
+    final theme = _dashboardThemeColors();
+    final style = _dashboardStyle();
+    final cardBackground = theme.card;
+    final onCard = AppThemeColors.readableTextOn(cardBackground, style);
+    final iconBackground = theme.warning.withOpacity(0.14);
     return _darkSection(
       'Disabled Routine Tasks',
       Column(
         children: [
           if (disabledTasks.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(8),
+            Padding(
+              padding: const EdgeInsets.all(8),
               child: Text(
                 'No disabled routines. Disable a routine to pause active tracking without losing history.',
-                style: TextStyle(color: Color(0xFFB9C6F3)),
+                style: TextStyle(color: theme.textSecondary),
               ),
             )
           else
@@ -2503,35 +2477,36 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A2442),
+                  color: cardBackground,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFFFA726).withOpacity(0.35)),
+                  border: Border.all(color: theme.border),
+                  boxShadow: [BoxShadow(color: theme.shadow, blurRadius: 10, offset: const Offset(0, 5))],
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(9),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFA726).withOpacity(0.14),
+                        color: iconBackground,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.pause_circle_outline, color: Color(0xFFFFB74D)),
+                      child: Icon(Icons.pause_circle_outline, color: AppThemeColors.readableTextOn(iconBackground, style)),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(task.task, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                          Text(task.task, style: TextStyle(color: onCard, fontWeight: FontWeight.w800)),
                           const SizedBox(height: 4),
                           Text(
                             '${task.repeatFrequency ?? 'Daily'} • ${task.category}',
-                            style: const TextStyle(color: Color(0xFFB9C6F3)),
+                            style: TextStyle(color: theme.textSecondary),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Previous streak: ${item.previousStreak} • Last updated: ${_formatShortDate(item.lastUpdated)}',
-                            style: const TextStyle(color: Color(0xFF7F8EB9), fontSize: 12),
+                            style: TextStyle(color: theme.textMuted, fontSize: 12),
                           ),
                         ],
                       ),
@@ -2541,8 +2516,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                       icon: const Icon(Icons.play_arrow, size: 18),
                       label: const Text('Enable'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF34C759),
-                        foregroundColor: Colors.white,
+                        backgroundColor: theme.success,
+                        foregroundColor: AppThemeColors.readableTextOn(theme.success, style),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                       ),
                     ),
@@ -2652,7 +2627,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   Widget _summaryHeader(Map<String, int> summary) {
     final style = _dashboardStyle();
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
+      tween: Tween(begin: 0.0, end: 1.0),
       duration: const Duration(milliseconds: 420),
       curve: Curves.easeOutCubic,
       builder: (context, intro, child) => Opacity(
@@ -2703,7 +2678,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   Widget _scopeTaskHeader(Map<String, int> scopedCounts) {
     final style = _dashboardStyle();
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
+      tween: Tween(begin: 0.0, end: 1.0),
       duration: const Duration(milliseconds: 520),
       curve: Curves.easeOutCubic,
       builder: (context, intro, child) => Opacity(opacity: intro, child: Transform.translate(offset: Offset(-18 * (1 - intro), 0), child: child)),
@@ -2812,7 +2787,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       title: 'PRODUCTIVITY ANALYTICS',
       headerColor: style.primary,
       child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: 1),
+        tween: Tween(begin: 0.0, end: 1.0),
         duration: Duration(milliseconds: style.animated ? 420 : 180),
         curve: Curves.easeOutCubic,
         builder: (context, intro, child) => Opacity(
@@ -3142,7 +3117,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final index = indexMap[label] ?? 0;
 
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
+      tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: 400 + (index * 150)),
       curve: Curves.easeOut,
       builder: (context, intro, child) => Opacity(
@@ -3211,7 +3186,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       title: "TODAY'S PRODUCTIVITY",
       headerColor: style.primary,
       child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: 1),
+        tween: Tween(begin: 0.0, end: 1.0),
         duration: Duration(milliseconds: style.animated ? 500 : 180),
         curve: Curves.easeOutCubic,
         builder: (context, animationValue, child) {
@@ -3718,7 +3693,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }) {
     final style = _dashboardStyle();
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
+      tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: style.animated ? 380 : 180),
       curve: Curves.easeOutCubic,
       builder: (context, intro, panelChild) => Opacity(
@@ -3779,7 +3754,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         itemCount: children.length,
         separatorBuilder: (context, index) => Divider(height: 1, color: style.primary.withOpacity(0.16)),
         itemBuilder: (context, index) => TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
+          tween: Tween(begin: 0.0, end: 1.0),
           duration: Duration(milliseconds: style.animated ? 240 + (index * 35) : 120),
           curve: Curves.easeOut,
           builder: (context, value, child) => Opacity(

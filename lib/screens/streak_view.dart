@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
+import '../constants/dashboard_themes.dart';
 import '../models/instruction.dart';
 import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
@@ -678,6 +679,7 @@ class _YearProgressPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = _streakThemeStyle(HiveService.instance);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: _panelDecoration(),
@@ -686,15 +688,15 @@ class _YearProgressPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.timeline, color: AppColors.primary),
+              Icon(Icons.timeline, color: style.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '${stats.year} Year Progress Overview',
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: style.textPrimary),
                 ),
               ),
-              Text('${(stats.yearCalendarRatio * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.w900)),
+              Text('${(stats.yearCalendarRatio * 100).round()}%', style: TextStyle(fontWeight: FontWeight.w900, color: style.textPrimary)),
             ],
           ),
           const SizedBox(height: 14),
@@ -702,8 +704,8 @@ class _YearProgressPanel extends StatelessWidget {
             value: stats.yearCalendarRatio.clamp(0.0, 1.0).toDouble(),
             minHeight: 12,
             borderRadius: BorderRadius.circular(99),
-            color: AppColors.primary,
-            backgroundColor: AppColors.primary.withOpacity(0.14),
+            color: style.primary,
+            backgroundColor: style.primary.withOpacity(0.14),
           ),
           const SizedBox(height: 14),
           Wrap(
@@ -1303,7 +1305,7 @@ class _StreakBoardTaskNameCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final taskColor = Color(habit.template.colorValue);
+    final taskColor = _themeDerivedTaskColor(hiveService, habit.template.colorValue);
     return InkWell(
       borderRadius: BorderRadius.circular(layout.radius),
       onTap: () => _openTaskPerformanceDetail(context, hiveService, habit, today),
@@ -1350,7 +1352,7 @@ class _StreakBoardActivityRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final taskColor = Color(habit.template.colorValue);
+    final taskColor = _themeDerivedTaskColor(hiveService, habit.template.colorValue);
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: 420 + (rowIndex * 55)),
@@ -1480,6 +1482,7 @@ class _HabitTrackerSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = _streakThemeStyle(hiveService);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: _panelDecoration(),
@@ -1488,18 +1491,18 @@ class _HabitTrackerSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.track_changes, color: habits.isEmpty ? AppColors.taskCompleted : Color(habits.first.template.colorValue)),
+              Icon(Icons.track_changes, color: habits.isEmpty ? _themeAccent(hiveService) : _themeDerivedTaskColor(hiveService, habits.first.template.colorValue)),
               const SizedBox(width: 8),
-              const Expanded(
-                child: Text('Habit & Routine Tracker', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              Expanded(
+                child: Text('Habit & Routine Tracker', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: style.textPrimary)),
               ),
-              Text('${habits.length} habits', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+              Text('${habits.length} habits', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Consistency is built one completed day at a time.',
-            style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
+            style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 14),
           if (habits.isEmpty)
@@ -1541,8 +1544,9 @@ class _HabitCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = _streakThemeStyle(hiveService);
     final todayStatus = habit.statusFor(today);
-    final taskColor = Color(habit.template.colorValue);
+    final taskColor = _themeDerivedTaskColor(hiveService, habit.template.colorValue);
 
     return InkWell(
       borderRadius: BorderRadius.circular(22),
@@ -1555,7 +1559,7 @@ class _HabitCard extends StatelessWidget {
         child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(14),
-        decoration: _softTaskDecoration(taskColor, radius: 22),
+        decoration: _softTaskDecoration(taskColor, radius: 22, style: _streakThemeStyle(hiveService)),
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1579,22 +1583,22 @@ class _HabitCard extends StatelessWidget {
                       children: [
                         Container(width: 10, height: 10, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
                         const SizedBox(width: 6),
-                        Expanded(child: Text(habit.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
+                        Expanded(child: Text(habit.title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: style.textPrimary))),
                       ],
                     ),
                     const SizedBox(height: 3),
                     Text(
                       "Streak: ${habit.currentStreak} ${habit.repeatFrequency == 'Weekly' ? 'Weeks' : 'Days'} • ${habit.repeatFrequency} • ${habit.category}",
-                      style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                      style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
               ),
-              _StatusBadge(status: todayStatus, taskColor: taskColor),
+              _StatusBadge(status: todayStatus, taskColor: taskColor, style: style),
             ],
           ),
           const SizedBox(height: 14),
-          _HabitActivityGrid(habit: habit, today: today),
+          _HabitActivityGrid(hiveService: hiveService, habit: habit, today: today),
           const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -1612,6 +1616,7 @@ class _HabitCard extends StatelessWidget {
                       selected: todayStatus == _HabitDayStatus.completed,
                       fontSize: buttonFontSize,
                       horizontalPadding: horizontalPadding,
+                      style: style,
                       onPressed: () => _setTodayStatus(context, _HabitDayStatus.completed),
                     ),
                   ),
@@ -1620,10 +1625,11 @@ class _HabitCard extends StatelessWidget {
                     child: _HabitStatusButton(
                       label: 'Missed',
                       icon: Icons.remove_circle,
-                      color: Colors.redAccent,
+                      color: style.accent,
                       selected: todayStatus == _HabitDayStatus.missed,
                       fontSize: buttonFontSize,
                       horizontalPadding: horizontalPadding,
+                      style: style,
                       onPressed: () => _setTodayStatus(context, _HabitDayStatus.missed),
                     ),
                   ),
@@ -1709,19 +1715,20 @@ class _HabitCard extends StatelessWidget {
 }
 
 class _HabitActivityGrid extends StatelessWidget {
+  final HiveService hiveService;
   final _HabitTracker habit;
   final DateTime today;
 
-  const _HabitActivityGrid({required this.habit, required this.today});
+  const _HabitActivityGrid({required this.hiveService, required this.habit, required this.today});
 
   @override
   Widget build(BuildContext context) {
     final startDate = today.subtract(const Duration(days: 27));
-    final taskColor = Color(habit.template.colorValue);
+    final taskColor = _themeDerivedTaskColor(hiveService, habit.template.colorValue);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('28-day activity', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.black54)),
+        Text('28-day activity', style: TextStyle(fontWeight: FontWeight.w800, color: _streakThemeStyle(hiveService).textMuted)),
         const SizedBox(height: 8),
         GridView.builder(
           shrinkWrap: true,
@@ -1781,6 +1788,7 @@ class _HabitStatusButton extends StatelessWidget {
   final bool selected;
   final double fontSize;
   final double horizontalPadding;
+  final DashboardThemeStyle style;
   final VoidCallback onPressed;
 
   const _HabitStatusButton({
@@ -1790,6 +1798,7 @@ class _HabitStatusButton extends StatelessWidget {
     required this.selected,
     required this.fontSize,
     required this.horizontalPadding,
+    required this.style,
     required this.onPressed,
   });
 
@@ -1809,8 +1818,8 @@ class _HabitStatusButton extends StatelessWidget {
         ),
       ),
       style: OutlinedButton.styleFrom(
-        foregroundColor: selected ? Colors.white : color,
-        backgroundColor: selected ? color : Colors.white,
+        foregroundColor: selected ? _readableThemeOn(color, style) : color,
+        backgroundColor: selected ? color : style.surface,
         side: BorderSide(color: color.withOpacity(0.7)),
         minimumSize: const Size.fromHeight(50),
         padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 12),
@@ -1824,16 +1833,19 @@ class _HabitStatusButton extends StatelessWidget {
 class _StatusBadge extends StatelessWidget {
   final _HabitDayStatus status;
   final Color? taskColor;
+  final DashboardThemeStyle? style;
 
-  const _StatusBadge({required this.status, this.taskColor});
+  const _StatusBadge({required this.status, this.taskColor, this.style});
 
   @override
   Widget build(BuildContext context) {
+    final resolvedStyle = style ?? DashboardThemeStyle.of(DashboardThemeType.light);
+    final theme = AppThemeColors.fromDashboardStyle(resolvedStyle);
     final color = switch (status) {
-      _HabitDayStatus.completed => taskColor ?? AppColors.taskCompleted,
-      _HabitDayStatus.cancelled => Colors.redAccent,
-      _HabitDayStatus.missed => Colors.redAccent,
-      _HabitDayStatus.none => AppColors.taskNone,
+      _HabitDayStatus.completed => taskColor ?? theme.success,
+      _HabitDayStatus.cancelled => theme.danger,
+      _HabitDayStatus.missed => theme.danger,
+      _HabitDayStatus.none => theme.surfaceVariant,
     };
 
     return Container(
@@ -1841,7 +1853,7 @@ class _StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(color: color.withOpacity(0.14), borderRadius: BorderRadius.circular(99)),
       child: Text(
         _statusLabel(status),
-        style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 11),
+        style: TextStyle(color: AppThemeColors.readableTextOn(color.withOpacity(0.14), resolvedStyle), fontWeight: FontWeight.w900, fontSize: 11),
       ),
     );
   }
@@ -2097,7 +2109,7 @@ class _TaskJourneyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCompleted = task.done || task.status == 'Completed';
-    final taskColor = Color(task.colorValue);
+    final taskColor = _themeDerivedTaskColor(hiveService, task.colorValue);
     final progress = isCompleted ? 1.0 : task.status == 'In Progress' ? 0.5 : 0.12;
     final difficulty = _difficultyLabel(task);
 
@@ -2110,7 +2122,7 @@ class _TaskJourneyCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
-        decoration: _softTaskDecoration(taskColor, radius: 20, borderOpacity: isCompleted ? 0.65 : 0.28),
+        decoration: _softTaskDecoration(taskColor, radius: 20, borderOpacity: isCompleted ? 0.65 : 0.28, style: _streakThemeStyle(hiveService)),
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2208,7 +2220,7 @@ class _TaskPerformanceDetailView extends StatelessWidget {
       valueListenable: hiveService.getBoxListenable(),
       builder: (context, box, _) {
         final habit = _currentHabit();
-        final taskColor = Color(habit.template.colorValue);
+        final taskColor = _themeDerivedTaskColor(hiveService, habit.template.colorValue);
         final todayStatus = habit.statusFor(today);
         final metrics = _TaskPerformanceMetrics.fromHabit(habit, today);
         final notes = hiveService
@@ -3415,14 +3427,57 @@ class _InsightRow extends StatelessWidget {
 }
 
 
-BoxDecoration _softTaskDecoration(Color taskColor, {required double radius, double borderOpacity = 0.24}) {
+Color _readableThemeOn(Color color, DashboardThemeStyle style) => AppThemeColors.readableTextOn(color, style);
+
+DashboardThemeStyle _streakThemeStyle(HiveService hiveService) {
+  return DashboardThemeStyle.of(hiveService.getDashboardTheme(), palette: hiveService.getDashboardPalette());
+}
+
+AppThemeColors _streakThemeColors(HiveService hiveService) => AppThemeColors.fromDashboardStyle(_streakThemeStyle(hiveService));
+
+Color _themeAccent(HiveService hiveService) => _streakThemeStyle(hiveService).accent;
+
+Color _themeDerivedTaskColor(HiveService hiveService, int storedColorValue) {
+  final style = _streakThemeStyle(hiveService);
+  final colors = <Color>[
+    style.primary,
+    style.secondary,
+    style.accent,
+    style.heroGradient.isNotEmpty ? style.heroGradient.last : style.accent,
+    Color.lerp(style.primary, style.accent, 0.35) ?? style.primary,
+    Color.lerp(style.secondary, style.accent, 0.42) ?? style.secondary,
+    Color.lerp(style.accent, style.primary, 0.62) ?? style.accent,
+  ];
+  const legacyTaskColors = <int>[
+    0xFFFFC107,
+    0xFF43A047,
+    0xFF1E88E5,
+    0xFFE53935,
+    0xFF7E57C2,
+    0xFFFF8F00,
+    0xFFE91E63,
+  ];
+  final legacyIndex = legacyTaskColors.indexOf(storedColorValue);
+  final index = legacyIndex >= 0 ? legacyIndex : storedColorValue.abs() % colors.length;
+  return colors[index % colors.length];
+}
+
+
+BoxDecoration _softTaskDecoration(Color taskColor, {required double radius, double borderOpacity = 0.24, DashboardThemeStyle? style}) {
+  final theme = style == null ? null : AppThemeColors.fromDashboardStyle(style);
+  final fill = theme == null
+      ? taskColor.withOpacity(0.10)
+      : style!.dark
+          ? theme.cardDark
+          : Color.lerp(theme.card, taskColor, 0.06) ?? theme.card;
+  final borderColor = theme == null ? taskColor.withOpacity(borderOpacity) : Color.lerp(theme.border, taskColor, 0.42)!.withOpacity(borderOpacity + 0.10);
   return BoxDecoration(
-    color: taskColor.withOpacity(0.10),
+    color: fill,
     borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: taskColor.withOpacity(borderOpacity)),
+    border: Border.all(color: borderColor),
     boxShadow: [
       BoxShadow(
-        color: taskColor.withOpacity(0.06),
+        color: theme?.shadow ?? taskColor.withOpacity(0.06),
         blurRadius: 12,
         offset: const Offset(0, 6),
       ),

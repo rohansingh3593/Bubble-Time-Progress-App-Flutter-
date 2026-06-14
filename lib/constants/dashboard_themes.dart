@@ -384,7 +384,7 @@ extension DashboardPaletteTypeX on DashboardPaletteType {
   List<Color> get colors {
     switch (this) {
       case DashboardPaletteType.seaCalm:
-        return const [Color(0xFF1A312C), Color(0xFF428475), Color(0xFF89D7B7), Color(0xFFFFF4E1)];
+        return const [Color(0xFF0F766E), Color(0xFF14B8A6), Color(0xFF5EEAD4), Color(0xFFECFDF5)];
       case DashboardPaletteType.emeraldGrey:
         return const [Color(0xFFEEEEEE), Color(0xFF6FCF97), Color(0xFF2FA084), Color(0xFF1F6F5F)];
       case DashboardPaletteType.springEnergy:
@@ -604,6 +604,23 @@ class DashboardThemeStyle {
       );
     }
 
+    if (palette == DashboardPaletteType.seaCalm && type == DashboardThemeType.calm) {
+      return DashboardThemeStyle(
+        type: type,
+        background: const Color(0xFFECFDF5),
+        surface: const Color(0xFFF8FFFC),
+        elevatedSurface: const Color(0xFFCCFBF1),
+        primary: primary,
+        secondary: secondary,
+        accent: accent,
+        textPrimary: const Color(0xFF0F172A),
+        textMuted: const Color(0xFF335C67),
+        heroGradient: const [Color(0xFF0F766E), Color(0xFF14B8A6), Color(0xFF5EEAD4)],
+        dark: false,
+        animated: false,
+      );
+    }
+
     switch (type) {
       case DashboardThemeType.light:
         final background = _tint(base, Colors.white, 0.36);
@@ -670,4 +687,107 @@ class DashboardThemeStyle {
     return color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF14211E);
   }
 
+}
+
+
+
+class AppThemeColors {
+  final Color background;
+  final Color surface;
+  final Color surfaceVariant;
+  final Color card;
+  final Color cardDark;
+  final Color primary;
+  final Color primarySoft;
+  final Color secondary;
+  final Color accent;
+  final Color success;
+  final Color warning;
+  final Color danger;
+  final Color border;
+  final Color divider;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textMuted;
+  final Color buttonBackground;
+  final Color buttonText;
+  final Color selectedBackground;
+  final Color selectedBorder;
+  final Color chipBackground;
+  final Color chipText;
+  final Color shadow;
+  final List<Color> chartColors;
+
+  const AppThemeColors({
+    required this.background,
+    required this.surface,
+    required this.surfaceVariant,
+    required this.card,
+    required this.cardDark,
+    required this.primary,
+    required this.primarySoft,
+    required this.secondary,
+    required this.accent,
+    required this.success,
+    required this.warning,
+    required this.danger,
+    required this.border,
+    required this.divider,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textMuted,
+    required this.buttonBackground,
+    required this.buttonText,
+    required this.selectedBackground,
+    required this.selectedBorder,
+    required this.chipBackground,
+    required this.chipText,
+    required this.shadow,
+    required this.chartColors,
+  });
+
+  factory AppThemeColors.fromDashboardStyle(DashboardThemeStyle style) {
+    final card = style.dark
+        ? DashboardThemeStyle._tint(style.surface, style.primary, 0.16)
+        : DashboardThemeStyle._tint(style.elevatedSurface, style.surface, 0.24);
+    final cardDark = style.dark
+        ? DashboardThemeStyle._tint(style.surface, style.primary, 0.26)
+        : DashboardThemeStyle._tint(style.primary, style.elevatedSurface, 0.72);
+    final selectedBackground = style.primary;
+    final chipBackground = style.surface;
+    final success = Color.lerp(style.primary, style.accent, 0.42)!;
+    final warning = Color.lerp(const Color(0xFFFACC15), style.secondary, style.dark ? 0.22 : 0.08)!;
+    final danger = Color.lerp(style.secondary, style.primary, 0.22)!;
+    return AppThemeColors(
+      background: style.background,
+      surface: style.surface,
+      surfaceVariant: style.elevatedSurface,
+      card: card,
+      cardDark: cardDark,
+      primary: style.primary,
+      primarySoft: Color.lerp(style.surface, style.primary, style.dark ? 0.30 : 0.18)!,
+      secondary: style.secondary,
+      accent: style.accent,
+      success: success,
+      warning: warning,
+      danger: danger,
+      border: Color.lerp(style.textMuted, style.primary, 0.32)!.withOpacity(style.dark ? 0.38 : 0.26),
+      divider: Color.lerp(style.surface, style.textMuted, style.dark ? 0.30 : 0.18)!,
+      textPrimary: style.textPrimary,
+      textSecondary: style.textMuted,
+      textMuted: style.textMuted,
+      buttonBackground: style.primary,
+      buttonText: readableTextOn(style.primary, style),
+      selectedBackground: selectedBackground,
+      selectedBorder: style.accent,
+      chipBackground: chipBackground,
+      chipText: readableTextOn(chipBackground, style),
+      shadow: style.primary.withOpacity(style.dark ? 0.36 : 0.24),
+      chartColors: [style.primary, style.secondary, style.accent, success, warning, danger],
+    );
+  }
+
+  static Color readableTextOn(Color background, DashboardThemeStyle style) {
+    return background.computeLuminance() < 0.45 ? (style.dark ? style.textPrimary : style.surface) : style.textPrimary;
+  }
 }

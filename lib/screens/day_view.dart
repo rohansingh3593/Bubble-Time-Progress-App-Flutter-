@@ -76,7 +76,7 @@ class _DayViewState extends State<DayView> {
   }
 
   Future<void> _editTask(Task task, {int? index}) async {
-    if (isRoutineTask(task)) {
+    if (isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task)) {
       final action = await showRoutineOccurrenceDialog(context: context, task: task, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
@@ -92,11 +92,15 @@ class _DayViewState extends State<DayView> {
             context,
             date: task.dueDate,
             initialTask: task,
-            title: 'Edit Routine Details',
-            actionLabel: 'Save Routine',
+            title: isRoutineTask(task) ? 'Edit Routine Details' : 'View Task Details',
+            actionLabel: isRoutineTask(task) ? 'Save Routine' : 'Save Task',
           );
           if (edited != null) {
-            await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+            if (isRoutineTask(task)) {
+              await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
+            } else {
+              await widget.hiveService.updateTaskByReference(task, edited);
+            }
           }
           return;
         case RoutineOccurrenceAction.missOccurrence:
