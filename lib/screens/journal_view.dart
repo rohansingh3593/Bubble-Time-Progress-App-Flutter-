@@ -312,7 +312,7 @@ class _MoodSelector extends StatelessWidget {
             itemCount: moods.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
-              childAspectRatio: 1.15,
+              childAspectRatio: 0.95,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
             ),
@@ -332,10 +332,16 @@ class _MoodSelector extends StatelessWidget {
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(mood.emoji, style: const TextStyle(fontSize: 28)),
-                      const SizedBox(height: 6),
-                      Text(mood.label, style: const TextStyle(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      Text(
+                        mood.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ],
                   ),
                 ),
