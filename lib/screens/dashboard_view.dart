@@ -436,14 +436,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       return;
     }
 
+    if (isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task)) {
+      await _editTask(task);
+      return;
+    }
+
     if (_isCompletedTask(task)) {
-      if (hasTaskLinkedInstructions(widget.hiveService, task)) {
-        await _editTask(task);
-      } else {
-        await _showTodayTaskLockedMessage(
-          '${task.task} is already completed today${_timeLabelForTask(task) == null ? '.' : ' at ${_timeLabelForTask(task)}.'}',
-        );
-      }
+      await _showTodayTaskLockedMessage(
+        '${task.task} is already completed today${_timeLabelForTask(task) == null ? '.' : ' at ${_timeLabelForTask(task)}.'}',
+      );
       return;
     }
 
@@ -453,11 +454,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         actionLabel: 'View Details',
         onAction: () => _editTaskDetails(task),
       );
-      return;
-    }
-
-    if (hasTaskLinkedInstructions(widget.hiveService, task)) {
-      await _editTask(task);
       return;
     }
 
@@ -688,6 +684,61 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
+  void _showTodayTaskOccurrenceSheet(String title, List<_DashboardTodayTask> rows) {
+    final style = _dashboardStyle();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.62,
+          minChildSize: 0.35,
+          maxChildSize: 0.9,
+          builder: (context, scrollController) => Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(color: style.textPrimary, fontSize: 20, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 8),
+                Text('${rows.length} task${rows.length == 1 ? '' : 's'}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: rows.isEmpty
+                      ? const Center(child: Text('No tasks found for this filter.'))
+                      : ListView.separated(
+                          controller: scrollController,
+                          itemBuilder: (context, index) {
+                            final row = rows[index];
+                            final task = row.task;
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Color(task.colorValue).withOpacity(0.14),
+                                child: Icon(_isCompletedTask(task) ? Icons.check : Icons.task_alt, color: Color(task.colorValue)),
+                              ),
+                              title: Text(task.task, style: const TextStyle(fontWeight: FontWeight.w800)),
+                              subtitle: Text('${task.priority} • ${row.displayStatus} • ${_formatDueLabel(task)}'),
+                              trailing: Icon(isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task) ? Icons.event_repeat_rounded : Icons.touch_app_rounded, color: style.primary),
+                              onTap: () async {
+                                Navigator.pop(context);
+                                await _openTodayTaskQuickOccurrence(row);
+                              },
+                            );
+                          },
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemCount: rows.length,
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showStandaloneInstructionActions(InstructionRule instruction, DateTime today) async {
     if (instruction.isTaskLinked) {
       await _showTodayTaskLockedMessage('This instruction is linked to a task. Update it from the related task occurrence.');
@@ -842,16 +893,16 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  List<Task> _todayTasksForFilter(List<_DashboardTodayTask> rows, String filter) {
+  List<_DashboardTodayTask> _todayRowsForFilter(List<_DashboardTodayTask> rows, String filter) {
     switch (filter) {
       case 'completed':
-        return rows.where((row) => row.group == _TodayTaskGroup.completed).map((row) => row.task).toList();
+        return rows.where((row) => row.group == _TodayTaskGroup.completed).toList();
       case 'pending':
-        return rows.where((row) => row.group == _TodayTaskGroup.pending).map((row) => row.task).toList();
+        return rows.where((row) => row.group == _TodayTaskGroup.pending).toList();
       case 'overdue':
-        return rows.where((row) => row.group == _TodayTaskGroup.overdue).map((row) => row.task).toList();
+        return rows.where((row) => row.group == _TodayTaskGroup.overdue).toList();
       default:
-        return rows.map((row) => row.task).toList();
+        return rows;
     }
   }
 
@@ -3438,11 +3489,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _todayProductivityStat('Total Tasks', stats.total, onTap: () => _showTaskListSheet("All today's tasks", _todayTasksForFilter(todayRows, 'all'))),
-                        _todayProductivityStat('Completed', stats.completed, onTap: () => _showTaskListSheet("Completed today", _todayTasksForFilter(todayRows, 'completed'))),
-                        _todayProductivityStat('Pending', stats.pending, onTap: () => _showTaskListSheet("Pending today", _todayTasksForFilter(todayRows, 'pending'))),
-                        _todayProductivityStat('Overdue', stats.overdue, onTap: () => _showTaskListSheet("Overdue today", _todayTasksForFilter(todayRows, 'overdue'))),
-                        _todayProductivityStat('Completion Rate', stats.completionRate, suffix: '%', onTap: () => _showTaskListSheet("All today's tasks", _todayTasksForFilter(todayRows, 'all'))),
+                        _todayProductivityStat('Total Tasks', stats.total, onTap: () => _showTodayTaskOccurrenceSheet("All today's tasks", _todayRowsForFilter(todayRows, 'all'))),
+                        _todayProductivityStat('Completed', stats.completed, onTap: () => _showTodayTaskOccurrenceSheet("Completed today", _todayRowsForFilter(todayRows, 'completed'))),
+                        _todayProductivityStat('Pending', stats.pending, onTap: () => _showTodayTaskOccurrenceSheet("Pending today", _todayRowsForFilter(todayRows, 'pending'))),
+                        _todayProductivityStat('Overdue', stats.overdue, onTap: () => _showTodayTaskOccurrenceSheet("Overdue today", _todayRowsForFilter(todayRows, 'overdue'))),
+                        _todayProductivityStat('Completion Rate', stats.completionRate, suffix: '%', onTap: () => _showTodayTaskOccurrenceSheet("All today's tasks", _todayRowsForFilter(todayRows, 'all'))),
                       ],
                     ),
                   ],
