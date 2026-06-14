@@ -753,7 +753,7 @@ class _TaskInstructionSection extends StatelessWidget {
             runSpacing: 8,
             children: [
               OutlinedButton.icon(
-                onPressed: taskName.trim().isEmpty ? null : () async {
+                onPressed: !isDraftMode && taskName.trim().isEmpty ? null : () async {
                   final instruction = await _showAddInstructionForTaskDialog(
                     context,
                     hiveService,
@@ -779,7 +779,7 @@ String _instructionSummary(InstructionRule instruction) {
   final phase = instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}';
   if (instruction.isLevelBased) return '${instruction.levels.length} levels${instruction.unit.isEmpty ? '' : ' • ${instruction.unit}'}$phase';
   if (instruction.isOptionBased) return '${instruction.options.length} options$phase';
-  return 'Bonus: +${instruction.bonusPoints}$phase';
+  return 'Simple • +${instruction.bonusPoints} pts • +${instruction.xpEarned} XP$phase';
 }
 
 List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, String taskName) {
