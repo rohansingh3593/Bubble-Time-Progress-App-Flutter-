@@ -366,10 +366,8 @@ class _YearViewState extends State<YearView> {
         final horizontalPadding = constraints.maxWidth < 600 ? 24.0 : 32.0;
         final maxDotSize = constraints.maxWidth < 600 ? 6.5 : constraints.maxWidth < 1024 ? 8.0 : 9.5;
         final availableDotWidth = constraints.maxWidth - horizontalPadding - (spacing * (dotsPerRow - 1));
-        final dotSize = (availableDotWidth / dotsPerRow).clamp(4.5, maxDotSize).toDouble();
-        final rowCount = (totalDays / dotsPerRow).ceil();
-        final gridHeight = (rowCount * dotSize) + ((rowCount - 1) * spacing);
-
+        final dotCellWidth = availableDotWidth / dotsPerRow;
+        final dotSize = dotCellWidth.clamp(4.5, maxDotSize).toDouble();
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -422,21 +420,16 @@ class _YearViewState extends State<YearView> {
                 children: monthLabels.map((label) => Text(label, style: TextStyle(color: theme.textMuted, fontSize: 12, fontWeight: FontWeight.w800))).toList(),
               ),
               const SizedBox(height: 8),
-              SizedBox(
-                height: gridHeight,
-                child: GridView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: dotsPerRow,
-                    childAspectRatio: 1,
-                    crossAxisSpacing: spacing,
-                    mainAxisSpacing: spacing,
-                  ),
-                  itemCount: totalDays,
-                  itemBuilder: (context, index) {
-                    final date = DateTime(_currentYear.year, 1, index + 1);
-                    final isToday = index == todayIndex;
-                    return Tooltip(
+              Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: List.generate(totalDays, (index) {
+                  final date = DateTime(_currentYear.year, 1, index + 1);
+                  final isToday = index == todayIndex;
+                  return SizedBox(
+                    width: dotCellWidth,
+                    height: dotSize,
+                    child: Tooltip(
                       message: '${date.day}/${date.month}/${date.year}',
                       child: Center(
                         child: AnimatedContainer(
@@ -450,9 +443,9 @@ class _YearViewState extends State<YearView> {
                           ),
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                }),
               ),
               const SizedBox(height: 10),
               Wrap(
