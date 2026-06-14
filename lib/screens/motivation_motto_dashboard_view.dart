@@ -14,9 +14,16 @@ class MotivationMottoDashboardView extends StatefulWidget {
 
 class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardView> {
   static const categories = ['Focus', 'Discipline', 'Health', 'Study', 'Work', 'Confidence', 'No Smoking', 'Fitness', 'Spiritual', 'Custom'];
-  static const frequencies = [15, 30, 60, 120];
+  static const frequencies = [0, 15, 30, 60, 120];
 
   DashboardThemeStyle get style => DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
+
+  String _frequencyLabel(int minutes) {
+    if (minutes <= 0) return '30 sec';
+    if (minutes == 60) return '1 hour';
+    if (minutes == 120) return '2 hours';
+    return '$minutes min';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +73,7 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
 
   Widget _settingsCard() {
     final settings = widget.hiveService.getMottoReminderSettings();
+    final selectedFrequency = frequencies.contains(settings.frequencyMinutes) ? settings.frequencyMinutes : 15;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -79,9 +87,9 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
             onChanged: (value) => widget.hiveService.saveMottoReminderSettings(MottoReminderSettings(popupEnabled: value, frequencyMinutes: settings.frequencyMinutes, activeOnly: settings.activeOnly)),
           ),
           DropdownButtonFormField<int>(
-            value: settings.frequencyMinutes,
+            value: selectedFrequency,
             decoration: const InputDecoration(labelText: 'Frequency'),
-            items: frequencies.map((m) => DropdownMenuItem(value: m, child: Text(m == 60 ? '1 hour' : m == 120 ? '2 hours' : '$m min'))).toList(),
+            items: frequencies.map((m) => DropdownMenuItem(value: m, child: Text(_frequencyLabel(m)))).toList(),
             onChanged: (value) {
               if (value != null) widget.hiveService.saveMottoReminderSettings(MottoReminderSettings(popupEnabled: settings.popupEnabled, frequencyMinutes: value, activeOnly: settings.activeOnly));
             },
