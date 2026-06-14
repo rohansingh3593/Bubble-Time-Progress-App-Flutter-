@@ -236,6 +236,7 @@ class _DayViewState extends State<DayView> {
       currentLabel: 'Now',
       remainingLabel: 'Remaining',
       tooltipBuilder: (index) => _formatHour(index),
+      bubbleLabelBuilder: (index) => _formatHour(index).replaceFirst(' ', '\n'),
     );
   }
 

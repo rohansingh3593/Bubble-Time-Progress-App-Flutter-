@@ -529,6 +529,7 @@ class _WeekViewState extends State<WeekView> {
         final date = weekDays[index];
         return '${date.month}/${date.day}/${date.year}';
       },
+      bubbleLabelBuilder: (index) => '${index + 1}',
     );
   }
 

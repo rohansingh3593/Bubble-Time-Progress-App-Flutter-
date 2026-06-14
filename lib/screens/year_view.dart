@@ -353,21 +353,23 @@ class _YearViewState extends State<YearView> {
     final progressLabel = '${(progress * 100).round()}%';
     const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    Color dayColor(int index) {
-      if (index == todayIndex) return theme.accent;
-      if (index < passedDays) return theme.primary;
+    Color dayColor(DateTime date) {
+      final normalized = DateTime(date.year, date.month, date.day);
+      if (isCurrentYear && normalized.isAtSameMomentAs(today)) return theme.accent;
+      if (selectedYearIsPast || (isCurrentYear && normalized.isBefore(today))) return theme.primary;
       return theme.textMuted.withOpacity(0.28);
     }
 
+    bool isTodayDate(DateTime date) => isCurrentYear && DateTime(date.year, date.month, date.day).isAtSameMomentAs(today);
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final dotsPerRow = constraints.maxWidth < 600 ? 21 : constraints.maxWidth < 1024 ? 23 : 28;
-        final spacing = constraints.maxWidth < 600 ? 3.0 : constraints.maxWidth < 1024 ? 3.5 : 4.0;
-        final horizontalPadding = constraints.maxWidth < 600 ? 24.0 : 32.0;
-        final maxDotSize = constraints.maxWidth < 600 ? 9.5 : constraints.maxWidth < 1024 ? 11.0 : 12.5;
-        final availableDotWidth = constraints.maxWidth - horizontalPadding - (spacing * (dotsPerRow - 1));
-        final dotCellWidth = availableDotWidth / dotsPerRow;
-        final dotSize = dotCellWidth.clamp(7.0, maxDotSize).toDouble();
+        final monthColumns = constraints.maxWidth < 600 ? 7 : constraints.maxWidth < 1024 ? 10 : 14;
+        final spacing = constraints.maxWidth < 600 ? 5.0 : 6.0;
+        final horizontalPadding = constraints.maxWidth < 600 ? 28.0 : 36.0;
+        final availableDotWidth = constraints.maxWidth - horizontalPadding - (spacing * (monthColumns - 1));
+        final dotCellWidth = availableDotWidth / monthColumns;
+        final dotSize = dotCellWidth.clamp(28.0, 42.0).toDouble();
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -413,40 +415,57 @@ class _YearViewState extends State<YearView> {
                   backgroundColor: theme.primary.withOpacity(0.12),
                 ),
               ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: monthLabels.map((label) => Text(label, style: TextStyle(color: theme.textMuted, fontSize: 12, fontWeight: FontWeight.w800))).toList(),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: List.generate(totalDays, (index) {
-                  final date = DateTime(_currentYear.year, 1, index + 1);
-                  final isToday = index == todayIndex;
-                  return SizedBox(
-                    width: dotCellWidth,
-                    height: dotSize,
-                    child: Tooltip(
-                      message: '${date.day}/${date.month}/${date.year}',
-                      child: Center(
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 220),
-                          width: dotSize,
-                          height: dotSize,
-                          decoration: BoxDecoration(
-                            color: dayColor(index),
-                            shape: BoxShape.circle,
-                            boxShadow: isToday ? [BoxShadow(color: theme.accent.withOpacity(0.55), blurRadius: 12, spreadRadius: 2)] : null,
-                          ),
-                        ),
+              const SizedBox(height: 12),
+              ...List.generate(12, (monthIndex) {
+                final month = monthIndex + 1;
+                final daysInMonth = DateTime(_currentYear.year, month + 1, 0).day;
+                return Padding(
+                  padding: EdgeInsets.only(bottom: monthIndex == 11 ? 0 : 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(monthLabels[monthIndex], style: TextStyle(color: theme.textMuted, fontSize: 13, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 7),
+                      Wrap(
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children: List.generate(daysInMonth, (dayIndex) {
+                          final date = DateTime(_currentYear.year, month, dayIndex + 1);
+                          final isToday = isTodayDate(date);
+                          return SizedBox(
+                            width: dotCellWidth,
+                            height: dotSize,
+                            child: Tooltip(
+                              message: '${date.day}/${date.month}/${date.year}',
+                              child: Center(
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 220),
+                                  width: dotSize,
+                                  height: dotSize,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: dayColor(date),
+                                    shape: BoxShape.circle,
+                                    boxShadow: isToday ? [BoxShadow(color: theme.accent.withOpacity(0.55), blurRadius: 12, spreadRadius: 2)] : null,
+                                  ),
+                                  child: Text(
+                                    '${dayIndex + 1}',
+                                    style: TextStyle(
+                                      color: selectedYearIsPast || (isCurrentYear && date.isBefore(today)) || isToday ? theme.surface : theme.textMuted,
+                                      fontSize: dotSize < 34 ? 10 : 11,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
                       ),
-                    ),
-                  );
-                }),
-              ),
+                    ],
+                  ),
+                );
+              }),
               const SizedBox(height: 10),
               Wrap(
                 spacing: 12,

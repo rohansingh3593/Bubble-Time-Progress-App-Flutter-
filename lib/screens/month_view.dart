@@ -388,6 +388,7 @@ class _MonthViewState extends State<MonthView> {
       currentIndex: isCurrentMonth ? now.day - 1 : null,
       itemsPerRow: 7,
       tooltipBuilder: (index) => '${index + 1}/${_currentMonth.month}/${_currentMonth.year}',
+      bubbleLabelBuilder: (index) => '${index + 1}',
     );
   }
 

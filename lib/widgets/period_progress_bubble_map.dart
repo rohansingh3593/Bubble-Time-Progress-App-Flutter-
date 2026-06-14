@@ -14,6 +14,7 @@ class PeriodProgressBubbleMap extends StatelessWidget {
   final String currentLabel;
   final String remainingLabel;
   final String Function(int index)? tooltipBuilder;
+  final String Function(int index)? bubbleLabelBuilder;
 
   const PeriodProgressBubbleMap({
     super.key,
@@ -28,6 +29,7 @@ class PeriodProgressBubbleMap extends StatelessWidget {
     this.currentLabel = 'Today',
     this.remainingLabel = 'Remaining',
     this.tooltipBuilder,
+    this.bubbleLabelBuilder,
   });
 
   @override
@@ -48,7 +50,7 @@ class PeriodProgressBubbleMap extends StatelessWidget {
         final horizontalPadding = constraints.maxWidth < 600 ? 28.0 : 36.0;
         final availableWidth = constraints.maxWidth - horizontalPadding - (spacing * (itemsPerRow - 1));
         final cellWidth = availableWidth / itemsPerRow;
-        final bubbleSize = cellWidth.clamp(10.0, 18.0).toDouble();
+        final bubbleSize = cellWidth.clamp(34.0, 56.0).toDouble();
 
         return Container(
           width: double.infinity,
@@ -111,10 +113,21 @@ class PeriodProgressBubbleMap extends StatelessWidget {
                           duration: const Duration(milliseconds: 220),
                           width: bubbleSize,
                           height: bubbleSize,
+                          alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: bubbleColor(index),
                             shape: BoxShape.circle,
                             boxShadow: index == normalizedCurrentIndex ? [BoxShadow(color: theme.accent.withOpacity(0.55), blurRadius: 12, spreadRadius: 2)] : null,
+                          ),
+                          child: Text(
+                            bubbleLabelBuilder?.call(index) ?? '${index + 1}',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: index < passedItems || index == normalizedCurrentIndex ? theme.surface : theme.textMuted,
+                              fontSize: bubbleSize < 40 ? 10 : 11,
+                              fontWeight: FontWeight.w900,
+                              height: 1.0,
+                            ),
                           ),
                         ),
                       ),
