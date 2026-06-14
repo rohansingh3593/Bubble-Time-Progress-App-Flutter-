@@ -357,8 +357,13 @@ enum DashboardPaletteType {
   emeraldGrey,
   springEnergy,
   happyPurple,
-  pastelSky,
-  neonPastel,
+  royalFocus,
+  minimalCream,
+  midnightNavy,
+  sunsetOrange,
+  oceanBlue,
+  roseGold,
+  forest,
 }
 
 extension DashboardPaletteTypeX on DashboardPaletteType {
@@ -374,27 +379,47 @@ extension DashboardPaletteTypeX on DashboardPaletteType {
         return 'Spring Energy';
       case DashboardPaletteType.happyPurple:
         return 'Happy Purple';
-      case DashboardPaletteType.pastelSky:
-        return 'Pastel Sky';
-      case DashboardPaletteType.neonPastel:
-        return 'Neon Pastel';
+      case DashboardPaletteType.royalFocus:
+        return 'Royal Focus';
+      case DashboardPaletteType.minimalCream:
+        return 'Minimal Cream';
+      case DashboardPaletteType.midnightNavy:
+        return 'Midnight Navy';
+      case DashboardPaletteType.sunsetOrange:
+        return 'Sunset Orange';
+      case DashboardPaletteType.oceanBlue:
+        return 'Ocean Blue';
+      case DashboardPaletteType.roseGold:
+        return 'Rose Gold';
+      case DashboardPaletteType.forest:
+        return 'Forest';
     }
   }
 
   List<Color> get colors {
     switch (this) {
       case DashboardPaletteType.seaCalm:
-        return const [Color(0xFF0F766E), Color(0xFF14B8A6), Color(0xFF5EEAD4), Color(0xFFECFDF5)];
+        return const [Color(0xFF0F8F83), Color(0xFF2EC4B6), Color(0xFFFFD166), Color(0xFFEAFBF7), Color(0xFFFFFFFF), Color(0xFF0F766E), Color(0xFF14B8A6), Color(0xFF5EEAD4)];
       case DashboardPaletteType.emeraldGrey:
-        return const [Color(0xFFEEEEEE), Color(0xFF6FCF97), Color(0xFF2FA084), Color(0xFF1F6F5F)];
+        return const [Color(0xFF047857), Color(0xFF10B981), Color(0xFFA7F3D0), Color(0xFFF3F7F5), Color(0xFFFFFFFF), Color(0xFF065F46), Color(0xFF047857), Color(0xFF34D399)];
       case DashboardPaletteType.springEnergy:
-        return const [Color(0xFFF72C5B), Color(0xFFFF748B), Color(0xFFA7D477), Color(0xFFE4F1AC)];
+        return const [Color(0xFF16A34A), Color(0xFF84CC16), Color(0xFFFB923C), Color(0xFFF7FEE7), Color(0xFFFFFFFF), Color(0xFF16A34A), Color(0xFF65A30D), Color(0xFFFACC15)];
       case DashboardPaletteType.happyPurple:
-        return const [Color(0xFFFBF5A7), Color(0xFFFF97D0), Color(0xFFFF62BB), Color(0xFFB331F1)];
-      case DashboardPaletteType.pastelSky:
-        return const [Color(0xFF9FA1FF), Color(0xFFB5BAFF), Color(0xFFAEE2FF), Color(0xFFD9F9DF)];
-      case DashboardPaletteType.neonPastel:
-        return const [Color(0xFF45FFCA), Color(0xFFFEFFAC), Color(0xFFFFB6D9), Color(0xFFD67BFF)];
+        return const [Color(0xFF7C3AED), Color(0xFFA78BFA), Color(0xFFF472B6), Color(0xFFF5F3FF), Color(0xFFFFFFFF), Color(0xFF6D28D9), Color(0xFF8B5CF6), Color(0xFFC084FC)];
+      case DashboardPaletteType.royalFocus:
+        return const [Color(0xFF2563EB), Color(0xFF38BDF8), Color(0xFFF59E0B), Color(0xFFEFF6FF), Color(0xFFFFFFFF), Color(0xFF1D4ED8), Color(0xFF2563EB), Color(0xFF60A5FA)];
+      case DashboardPaletteType.minimalCream:
+        return const [Color(0xFF92400E), Color(0xFFD97706), Color(0xFFFBBF24), Color(0xFFFFFBEB), Color(0xFFFFFFFF), Color(0xFF92400E), Color(0xFFD97706), Color(0xFFFBBF24)];
+      case DashboardPaletteType.midnightNavy:
+        return const [Color(0xFF2563EB), Color(0xFF38BDF8), Color(0xFF22C55E), Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF1E3A8A), Color(0xFF2563EB), Color(0xFF38BDF8)];
+      case DashboardPaletteType.sunsetOrange:
+        return const [Color(0xFFEA580C), Color(0xFFFB923C), Color(0xFFFACC15), Color(0xFFFFF7ED), Color(0xFFFFFFFF), Color(0xFFC2410C), Color(0xFFEA580C), Color(0xFFFB923C)];
+      case DashboardPaletteType.oceanBlue:
+        return const [Color(0xFF0284C7), Color(0xFF38BDF8), Color(0xFF7DD3FC), Color(0xFFF0F9FF), Color(0xFFFFFFFF), Color(0xFF0369A1), Color(0xFF0284C7), Color(0xFF38BDF8)];
+      case DashboardPaletteType.roseGold:
+        return const [Color(0xFFDB2777), Color(0xFFF472B6), Color(0xFFFB7185), Color(0xFFFFF1F2), Color(0xFFFFFFFF), Color(0xFFBE185D), Color(0xFFDB2777), Color(0xFFF472B6)];
+      case DashboardPaletteType.forest:
+        return const [Color(0xFF166534), Color(0xFF22C55E), Color(0xFFA3E635), Color(0xFFF0FDF4), Color(0xFFFFFFFF), Color(0xFF14532D), Color(0xFF166534), Color(0xFF22C55E)];
     }
   }
 
@@ -402,6 +427,8 @@ extension DashboardPaletteTypeX on DashboardPaletteType {
   Color get secondary => colors[1];
   Color get accent => colors[2];
   Color get background => colors[3];
+  Color get surface => colors[4];
+  List<Color> get heroGradient => [colors[5], colors[6], colors[7]];
 }
 
 DashboardPaletteType dashboardPaletteTypeFromStorage(String? value) {
@@ -572,11 +599,12 @@ class DashboardThemeStyle {
   }
 
   static DashboardThemeStyle _fromPalette(DashboardThemeType type, DashboardPaletteType palette) {
-    final colors = palette.colors;
-    final primary = colors[0];
-    final secondary = colors[1];
-    final accent = colors[2];
-    final base = colors[3];
+    final primary = palette.primary;
+    final secondary = palette.secondary;
+    final accent = palette.accent;
+    final base = palette.background;
+    final paletteSurface = palette.surface;
+    final paletteHero = palette.heroGradient;
 
     DashboardThemeStyle build({
       required Color background,
@@ -604,20 +632,37 @@ class DashboardThemeStyle {
       );
     }
 
-    if (palette == DashboardPaletteType.seaCalm && type == DashboardThemeType.calm) {
+    if (palette == DashboardPaletteType.midnightNavy) {
       return DashboardThemeStyle(
         type: type,
-        background: const Color(0xFFECFDF5),
-        surface: const Color(0xFFF8FFFC),
-        elevatedSurface: const Color(0xFFCCFBF1),
+        background: base,
+        surface: paletteSurface,
+        elevatedSurface: _tint(paletteSurface, secondary, 0.16),
         primary: primary,
         secondary: secondary,
         accent: accent,
-        textPrimary: const Color(0xFF0F172A),
-        textMuted: const Color(0xFF335C67),
-        heroGradient: const [Color(0xFF0F766E), Color(0xFF14B8A6), Color(0xFF5EEAD4)],
+        textPrimary: Colors.white,
+        textMuted: _tint(secondary, Colors.white, 0.42),
+        heroGradient: paletteHero,
+        dark: true,
+        animated: true,
+      );
+    }
+
+    if (type == DashboardThemeType.calm || type == DashboardThemeType.light || type == DashboardThemeType.minimal) {
+      return DashboardThemeStyle(
+        type: type,
+        background: base,
+        surface: paletteSurface,
+        elevatedSurface: _tint(base, primary, 0.08),
+        primary: primary,
+        secondary: secondary,
+        accent: accent,
+        textPrimary: _readableTextOn(base),
+        textMuted: Color.lerp(primary, Colors.black54, 0.56)!,
+        heroGradient: paletteHero,
         dark: false,
-        animated: false,
+        animated: type != DashboardThemeType.calm && type != DashboardThemeType.minimal,
       );
     }
 
@@ -691,7 +736,7 @@ class DashboardThemeStyle {
 
 
 
-class AppThemeColors {
+class AppThemeColors extends ThemeExtension<AppThemeColors> {
   final Color background;
   final Color surface;
   final Color surfaceVariant;
@@ -787,7 +832,62 @@ class AppThemeColors {
     );
   }
 
+  Color get secondaryBackground => surfaceVariant;
+  Color get dialogBackground => surface;
+  Color get sheetBackground => surface;
+  Color get primaryCard => card;
+  Color get secondaryCard => surfaceVariant;
+  Color get elevatedCard => surfaceVariant;
+  Color get disabledCard => surfaceVariant.withOpacity(0.62);
+  Color get selectedCard => selectedBackground;
+  Color get cardTint => primarySoft;
+  Color get filledButton => buttonBackground;
+  Color get outlinedButton => primary;
+  Color get ghostButton => primarySoft;
+  Color get disabledButton => disabledCard;
+  Color get dangerButton => danger;
+  Color get successButton => success;
+  Color get heading => textPrimary;
+  Color get subtitle => textSecondary;
+  Color get body => textPrimary;
+  Color get caption => textMuted;
+  Color get hint => textMuted;
+  Color get disabledText => textMuted.withOpacity(0.64);
+  Color get inverseText => buttonText;
+  Color get progress => primary;
+  Color get track => surfaceVariant;
+  Color get completed => success;
+  Color get pending => warning;
+  Color get overdue => danger;
+  Color get disabled => textMuted;
+  Color get instruction => primary;
+  Color get goal => secondary;
+  Color get reward => accent;
+  Color get skipped => textMuted;
+  Color get bonus => success;
+  Color get coins => accent;
+  Color get xp => secondary;
+  Color get muted => textMuted;
+  Color get mutedSurface => surfaceVariant.withOpacity(0.70);
+  Color get primaryLight => primarySoft;
+  Color get successLight => success.withOpacity(0.18);
+  Color get neutral => secondary;
+  Color get primaryGlow => primary.withOpacity(0.08);
+
   static Color readableTextOn(Color background, DashboardThemeStyle style) {
     return background.computeLuminance() < 0.45 ? (style.dark ? style.textPrimary : style.surface) : style.textPrimary;
   }
+
+  @override
+  AppThemeColors copyWith() => this;
+
+  @override
+  AppThemeColors lerp(ThemeExtension<AppThemeColors>? other, double t) => this;
+}
+
+
+
+extension DashboardThemeContext on BuildContext {
+  AppThemeColors get dashboardTheme => Theme.of(this).extension<AppThemeColors>() ??
+      AppThemeColors.fromDashboardStyle(DashboardThemeStyle.of(DashboardThemeType.light));
 }

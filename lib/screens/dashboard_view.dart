@@ -3177,10 +3177,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _todaysProductivitySection(_TodayProductivityStats stats, List<_DashboardTodayTask> todayRows) {
     final style = _dashboardStyle();
+    final theme = AppThemeColors.fromDashboardStyle(style);
     final badge = _productivityBadge(stats.completionRate);
-    const completedColor = Color(0xFF2ECC71);
-    const pendingColor = Color(0xFFFFA726);
-    const overdueColor = Color(0xFFFF5252);
+    final completedColor = theme.completed;
+    final pendingColor = theme.pending;
+    final overdueColor = theme.overdue;
 
     return _panel(
       title: "TODAY'S PRODUCTIVITY",
@@ -3341,10 +3342,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   _ProductivityBadge _productivityBadge(int rate) {
-    if (rate <= 25) return const _ProductivityBadge(label: 'Needs Attention', emoji: '🔴', color: Color(0xFFFF5252));
-    if (rate <= 50) return const _ProductivityBadge(label: 'Getting Started', emoji: '🟠', color: Color(0xFFFFA726));
-    if (rate <= 75) return const _ProductivityBadge(label: 'Productive', emoji: '🟢', color: Color(0xFF2ECC71));
-    return const _ProductivityBadge(label: 'Excellent', emoji: '🔥', color: Color(0xFFFF7043));
+    final theme = AppThemeColors.fromDashboardStyle(_dashboardStyle());
+    if (rate <= 25) return _ProductivityBadge(label: 'Needs Attention', emoji: '🔴', color: theme.danger);
+    if (rate <= 50) return _ProductivityBadge(label: 'Getting Started', emoji: '🟠', color: theme.warning);
+    if (rate <= 75) return _ProductivityBadge(label: 'Productive', emoji: '🟢', color: theme.success);
+    return _ProductivityBadge(label: 'Excellent', emoji: '🔥', color: theme.accent);
   }
 
   Widget _instructionProductivitySection(DateTime today) {
@@ -3370,11 +3372,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             runSpacing: 10,
             children: [
               _instructionProductivityStat('Standalone Instructions', instructions.length, style.primary, onTap: () => _showInstructionFilterSheet('All standalone instructions', enabled, today)),
-              _instructionProductivityStat('😀 Followed Today', followed, Colors.green, onTap: () => _showInstructionFilterSheet('Followed instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).toList(), today)),
-              _instructionProductivityStat('😞 Missed', missed, Colors.redAccent, onTap: () => _showInstructionFilterSheet('Missed instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.missed ?? false).toList(), today)),
-              _instructionProductivityStat('😐 Pending', pending, Colors.orangeAccent, onTap: () => _showInstructionFilterSheet('Pending instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today) == null).toList(), today)),
+              _instructionProductivityStat('😀 Followed Today', followed, AppThemeColors.fromDashboardStyle(style).success, onTap: () => _showInstructionFilterSheet('Followed instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).toList(), today)),
+              _instructionProductivityStat('😞 Missed', missed, AppThemeColors.fromDashboardStyle(style).danger, onTap: () => _showInstructionFilterSheet('Missed instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.missed ?? false).toList(), today)),
+              _instructionProductivityStat('😐 Pending', pending, AppThemeColors.fromDashboardStyle(style).warning, onTap: () => _showInstructionFilterSheet('Pending instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today) == null).toList(), today)),
               _instructionProductivityStat('⭐ Completion', score, style.primary, suffix: '%', onTap: () => _showInstructionFilterSheet('All standalone instructions', enabled, today)),
-              _instructionProductivityStat('🎁 Bonus Points', bonus, Colors.green, prefix: '+', onTap: () => _showInstructionFilterSheet('Bonus-earning instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).toList(), today)),
+              _instructionProductivityStat('🎁 Bonus Points', bonus, AppThemeColors.fromDashboardStyle(style).bonus, prefix: '+', onTap: () => _showInstructionFilterSheet('Bonus-earning instructions', enabled.where((instruction) => widget.hiveService.instructionEntryForDate(instruction, today)?.followed ?? false).toList(), today)),
               ],
             ),
             const SizedBox(height: 14),
@@ -3385,11 +3387,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             else
               ...enabled.take(6).map((instruction) {
               final entry = widget.hiveService.instructionEntryForDate(instruction, today);
+              final dashboardTheme = AppThemeColors.fromDashboardStyle(style);
               final statusColor = entry?.followed == true
-                  ? Colors.green
+                  ? dashboardTheme.success
                   : entry?.missed == true
-                      ? Colors.redAccent
-                      : Colors.grey;
+                      ? dashboardTheme.danger
+                      : dashboardTheme.muted;
               return ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
@@ -3801,13 +3804,21 @@ class _InstructionDonutChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = followed + pending + missed;
     if (total == 0) return const SizedBox.shrink();
+    final theme = context.dashboardTheme;
     return SizedBox(
       width: 128,
       height: 128,
       child: CustomPaint(
-        painter: _InstructionDonutPainter(followed: followed, pending: pending, missed: missed),
+        painter: _InstructionDonutPainter(
+          followed: followed,
+          pending: pending,
+          missed: missed,
+          followedColor: theme.success,
+          pendingColor: theme.warning,
+          missedColor: theme.danger,
+        ),
         child: Center(
-          child: Text('$total\nRules', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900)),
+          child: Text('$total\nRules', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900, color: theme.textPrimary)),
         ),
       ),
     );
@@ -3818,8 +3829,18 @@ class _InstructionDonutPainter extends CustomPainter {
   final int followed;
   final int pending;
   final int missed;
+  final Color followedColor;
+  final Color pendingColor;
+  final Color missedColor;
 
-  const _InstructionDonutPainter({required this.followed, required this.pending, required this.missed});
+  const _InstructionDonutPainter({
+    required this.followed,
+    required this.pending,
+    required this.missed,
+    required this.followedColor,
+    required this.pendingColor,
+    required this.missedColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3838,14 +3859,19 @@ class _InstructionDonutPainter extends CustomPainter {
       canvas.drawArc(rect.deflate(12), start, sweep, false, paint);
       start += sweep;
     }
-    draw(followed, Colors.green);
-    draw(pending, Colors.amber);
-    draw(missed, Colors.redAccent);
+    draw(followed, followedColor);
+    draw(pending, pendingColor);
+    draw(missed, missedColor);
   }
 
   @override
   bool shouldRepaint(covariant _InstructionDonutPainter oldDelegate) {
-    return oldDelegate.followed != followed || oldDelegate.pending != pending || oldDelegate.missed != missed;
+    return oldDelegate.followed != followed ||
+        oldDelegate.pending != pending ||
+        oldDelegate.missed != missed ||
+        oldDelegate.followedColor != followedColor ||
+        oldDelegate.pendingColor != pendingColor ||
+        oldDelegate.missedColor != missedColor;
   }
 }
 
