@@ -59,7 +59,7 @@ class PeriodProgressBubbleMap extends StatelessWidget {
         final horizontalPadding = constraints.maxWidth < 600 ? 28.0 : 36.0;
         final availableWidth = constraints.maxWidth - horizontalPadding - (spacing * (itemsPerRow - 1));
         final cellWidth = availableWidth / itemsPerRow;
-        final bubbleSize = cellWidth.clamp(minBubbleSize, maxBubbleSize).toDouble();
+        final bubbleSize = cellWidth < minBubbleSize ? cellWidth : cellWidth.clamp(minBubbleSize, maxBubbleSize).toDouble();
         final cellHeight = belowLabelBuilder == null ? bubbleSize : bubbleSize + 18;
 
         return Container(
@@ -109,59 +109,73 @@ class PeriodProgressBubbleMap extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: List.generate(visibleItems, (index) {
-                  final isPlaceholder = index >= totalItems;
-                  final label = isPlaceholder ? '' : bubbleLabelBuilder?.call(index) ?? '${index + 1}';
-                  final belowLabel = isPlaceholder ? '' : belowLabelBuilder?.call(index);
-                  final bubble = Center(
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 220),
-                      width: bubbleSize,
-                      height: bubbleSize,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: isPlaceholder ? theme.textMuted.withOpacity(0.12) : bubbleColor(index),
-                        shape: BoxShape.circle,
-                        boxShadow: !isPlaceholder && index == normalizedCurrentIndex ? [BoxShadow(color: theme.accent.withOpacity(0.55), blurRadius: 12, spreadRadius: 2)] : null,
-                      ),
-                      child: Text(
-                        label,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: !isPlaceholder && (index < passedItems || index == normalizedCurrentIndex) ? theme.surface : theme.textMuted,
-                          fontSize: bubbleSize < 40 ? 10 : 11,
-                          fontWeight: FontWeight.w900,
-                          height: 1.0,
-                        ),
-                      ),
-                    ),
-                  );
-                  return SizedBox(
-                    width: cellWidth,
-                    height: cellHeight,
-                    child: isPlaceholder
-                        ? bubble
-                        : Tooltip(
-                            message: tooltipBuilder?.call(index) ?? '${index + 1}',
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                bubble,
-                                if (belowLabel != null) ...[
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    belowLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: theme.textMuted, fontSize: 9, fontWeight: FontWeight.w800),
-                                  ),
-                                ],
-                              ],
+              Column(
+                children: List.generate((visibleItems / itemsPerRow).ceil(), (rowIndex) {
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: rowIndex == (visibleItems / itemsPerRow).ceil() - 1 ? 0 : spacing),
+                    child: Row(
+                      children: List.generate(itemsPerRow, (columnIndex) {
+                        final index = (rowIndex * itemsPerRow) + columnIndex;
+                        if (index >= visibleItems) {
+                          return const Expanded(child: SizedBox.shrink());
+                        }
+                        final isPlaceholder = index >= totalItems;
+                        final label = isPlaceholder ? '' : bubbleLabelBuilder?.call(index) ?? '${index + 1}';
+                        final belowLabel = isPlaceholder ? null : belowLabelBuilder?.call(index);
+                        final bubble = Center(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 220),
+                            width: bubbleSize,
+                            height: bubbleSize,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isPlaceholder ? theme.textMuted.withOpacity(0.12) : bubbleColor(index),
+                              shape: BoxShape.circle,
+                              boxShadow: !isPlaceholder && index == normalizedCurrentIndex ? [BoxShadow(color: theme.accent.withOpacity(0.55), blurRadius: 12, spreadRadius: 2)] : null,
+                            ),
+                            child: Text(
+                              label,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: !isPlaceholder && (index < passedItems || index == normalizedCurrentIndex) ? theme.surface : theme.textMuted,
+                                fontSize: bubbleSize < 40 ? 10 : 11,
+                                fontWeight: FontWeight.w900,
+                                height: 1.0,
+                              ),
                             ),
                           ),
+                        );
+                        final cell = SizedBox(
+                          height: cellHeight,
+                          child: isPlaceholder
+                              ? bubble
+                              : Tooltip(
+                                  message: tooltipBuilder?.call(index) ?? '${index + 1}',
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      bubble,
+                                      if (belowLabel != null) ...[
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          belowLabel,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(color: theme.textMuted, fontSize: 9, fontWeight: FontWeight.w800),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                        );
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(right: columnIndex == itemsPerRow - 1 ? 0 : spacing),
+                            child: cell,
+                          ),
+                        );
+                      }),
+                    ),
                   );
                 }),
               ),
