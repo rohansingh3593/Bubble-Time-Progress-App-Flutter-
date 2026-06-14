@@ -111,54 +111,60 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
-              subtitle: Text(entry == null ? 'Pending for current period' : 'Already updated: ${entry.status}'),
-            ),
-            if (instruction.isTaskLinked)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text(
-                  'This instruction is linked to a task. Update it from the task occurrence screen.',
-                  style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.86),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ListTile(
+                  title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  subtitle: Text(entry == null ? 'Pending for current period' : 'Already updated: ${entry.status}'),
                 ),
-              )
-            else if (entry == null && instruction.enabled) ...[
-              if (instruction.isOptionBased) ...[
-                ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
-                ...instruction.options.map((option) => ListTile(
-                      leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
-                      title: Text('${option.name} (+${option.bonusPoints})'),
-                      subtitle: Text('${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
-                      onTap: () => Navigator.pop(context, 'option:${option.id}'),
-                    )),
-              ] else if (instruction.isLevelBased) ...[
-                ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
-                ...instruction.levels.map((level) => ListTile(
-                      leading: const Icon(Icons.emoji_events_outlined, color: Colors.green),
-                      title: Text('${level.displayLabel} (+${level.bonusPoints})'),
-                      subtitle: Text('${level.xpEarned} XP'),
-                      onTap: () => Navigator.pop(context, 'level:${level.id}'),
-                    )),
-              ] else ...[
-                ListTile(leading: const Icon(Icons.check_circle_outline, color: Colors.green), title: const Text('Followed'), onTap: () => Navigator.pop(context, 'followed')),
-                ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
+                if (instruction.isTaskLinked)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      'This instruction is linked to a task. Update it from the task occurrence screen.',
+                      style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54),
+                    ),
+                  )
+                else if (entry == null && instruction.enabled) ...[
+                  if (instruction.isOptionBased) ...[
+                    ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
+                    ...instruction.options.map((option) => ListTile(
+                          leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
+                          title: Text('${option.name} (+${option.bonusPoints})'),
+                          subtitle: Text('${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
+                          onTap: () => Navigator.pop(context, 'option:${option.id}'),
+                        )),
+                  ] else if (instruction.isLevelBased) ...[
+                    ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
+                    ...instruction.levels.map((level) => ListTile(
+                          leading: const Icon(Icons.emoji_events_outlined, color: Colors.green),
+                          title: Text('${level.displayLabel} (+${level.bonusPoints})'),
+                          subtitle: Text('${level.xpEarned} XP'),
+                          onTap: () => Navigator.pop(context, 'level:${level.id}'),
+                        )),
+                  ] else ...[
+                    ListTile(leading: const Icon(Icons.check_circle_outline, color: Colors.green), title: const Text('Followed'), onTap: () => Navigator.pop(context, 'followed')),
+                    ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
+                  ],
+                ] else
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text('Instruction already updated for this period.', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                  ),
+                ListTile(leading: const Icon(Icons.visibility_outlined), title: const Text('View Details'), onTap: () => Navigator.pop(context, 'details')),
+                ListTile(leading: Icon(instruction.enabled ? Icons.pause_circle_outline : Icons.play_circle_outline), title: Text(instruction.enabled ? 'Disable' : 'Enable'), onTap: () => Navigator.pop(context, 'toggle')),
+                ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Edit'), onTap: () => Navigator.pop(context, 'edit')),
+                ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Delete from dashboard'), onTap: () => Navigator.pop(context, 'delete')),
               ],
-            ] else
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text('Instruction already updated for this period.', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
-              ),
-            ListTile(leading: const Icon(Icons.visibility_outlined), title: const Text('View Details'), onTap: () => Navigator.pop(context, 'details')),
-            ListTile(leading: Icon(instruction.enabled ? Icons.pause_circle_outline : Icons.play_circle_outline), title: Text(instruction.enabled ? 'Disable' : 'Enable'), onTap: () => Navigator.pop(context, 'toggle')),
-            ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Edit'), onTap: () => Navigator.pop(context, 'edit')),
-            ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Delete from dashboard'), onTap: () => Navigator.pop(context, 'delete')),
-          ],
+            ),
+          ),
         ),
       ),
     );
