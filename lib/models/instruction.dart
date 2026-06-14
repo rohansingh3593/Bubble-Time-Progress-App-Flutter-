@@ -8,6 +8,10 @@ class InstructionHistoryEntry {
   final int bonusPoints;
   final int xpEarned;
   final String note;
+  final String levelId;
+  final String levelName;
+  final double completedTarget;
+  final String unit;
 
   const InstructionHistoryEntry({
     required this.date,
@@ -15,11 +19,22 @@ class InstructionHistoryEntry {
     this.bonusPoints = 0,
     this.xpEarned = 0,
     this.note = '',
+    this.levelId = '',
+    this.levelName = '',
+    this.completedTarget = 0,
+    this.unit = '',
   });
 
   bool get followed => status == statusFollowed;
   bool get missed => status == statusMissed;
   bool get notApplicable => status == statusNotApplicable;
+  bool get hasLevel => levelId.isNotEmpty;
+
+  String get levelSummary {
+    if (!hasLevel) return '';
+    final targetText = completedTarget % 1 == 0 ? completedTarget.toStringAsFixed(0) : completedTarget.toStringAsFixed(1);
+    return '$levelName - $targetText $unit'.trim();
+  }
 
   List<dynamic> toStorageList() => [
         date.toIso8601String(),
@@ -27,6 +42,10 @@ class InstructionHistoryEntry {
         bonusPoints,
         xpEarned,
         note,
+        levelId,
+        levelName,
+        completedTarget,
+        unit,
       ];
 
   factory InstructionHistoryEntry.fromStorageList(List<dynamic> raw) {
@@ -36,6 +55,48 @@ class InstructionHistoryEntry {
       bonusPoints: _readInt(raw, 2),
       xpEarned: _readInt(raw, 3),
       note: raw.length > 4 ? '${raw[4]}' : '',
+      levelId: raw.length > 5 ? '${raw[5]}' : '',
+      levelName: raw.length > 6 ? '${raw[6]}' : '',
+      completedTarget: _readDouble(raw, 7),
+      unit: raw.length > 8 ? '${raw[8]}' : '',
+    );
+  }
+}
+
+class InstructionLevel {
+  final String id;
+  final String name;
+  final double target;
+  final String unit;
+  final int bonusPoints;
+  final int xpEarned;
+
+  const InstructionLevel({
+    required this.id,
+    required this.name,
+    required this.target,
+    required this.unit,
+    required this.bonusPoints,
+    required this.xpEarned,
+  });
+
+  String get targetLabel {
+    final targetText = target % 1 == 0 ? target.toStringAsFixed(0) : target.toStringAsFixed(1);
+    return '$targetText $unit'.trim();
+  }
+
+  String get displayLabel => '$name - $targetLabel';
+
+  List<dynamic> toStorageList() => [id, name, target, unit, bonusPoints, xpEarned];
+
+  factory InstructionLevel.fromStorageList(List<dynamic> raw) {
+    return InstructionLevel(
+      id: raw.isNotEmpty ? '${raw[0]}' : 'level_${DateTime.now().microsecondsSinceEpoch}',
+      name: raw.length > 1 ? '${raw[1]}' : 'Level',
+      target: _readDouble(raw, 2),
+      unit: raw.length > 3 ? '${raw[3]}' : '',
+      bonusPoints: _readInt(raw, 4),
+      xpEarned: _readInt(raw, 5),
     );
   }
 }
@@ -48,6 +109,8 @@ class InstructionRule {
   static const String repeatOneTime = 'One-Time';
 
   static const String linkDelimiter = '|||';
+  static const String typeSimple = 'Simple';
+  static const String typeLevelBased = 'Level-Based';
 
   final String id;
   final String name;
@@ -55,6 +118,9 @@ class InstructionRule {
   final String linkedTask;
   final String linkedPhase;
   final String repeatType;
+  final String instructionType;
+  final String unit;
+  final List<InstructionLevel> levels;
   final int bonusPoints;
   final int xpEarned;
   final int colorValue;
@@ -70,6 +136,9 @@ class InstructionRule {
     this.linkedTask = '',
     this.linkedPhase = '',
     this.repeatType = repeatDaily,
+    this.instructionType = typeSimple,
+    this.unit = '',
+    this.levels = const [],
     this.bonusPoints = 20,
     this.xpEarned = 5,
     this.colorValue = 0xFF43A047,
@@ -86,6 +155,8 @@ class InstructionRule {
   bool get isTaskLinked => linkedTasks.isNotEmpty || linkedPhases.isNotEmpty;
 
   bool get isStandalone => !isTaskLinked;
+  bool get isLevelBased => instructionType == typeLevelBased;
+  bool get isSimple => !isLevelBased;
 
   bool isLinkedToTask(String taskName) {
     final normalizedTaskName = _normalizeLink(taskName);
@@ -127,6 +198,9 @@ class InstructionRule {
     String? linkedTask,
     String? linkedPhase,
     String? repeatType,
+    String? instructionType,
+    String? unit,
+    List<InstructionLevel>? levels,
     int? bonusPoints,
     int? xpEarned,
     int? colorValue,
@@ -141,6 +215,9 @@ class InstructionRule {
       linkedTask: linkedTask ?? this.linkedTask,
       linkedPhase: linkedPhase ?? this.linkedPhase,
       repeatType: repeatType ?? this.repeatType,
+      instructionType: instructionType ?? this.instructionType,
+      unit: unit ?? this.unit,
+      levels: levels ?? this.levels,
       bonusPoints: bonusPoints ?? this.bonusPoints,
       xpEarned: xpEarned ?? this.xpEarned,
       colorValue: colorValue ?? this.colorValue,
@@ -165,6 +242,9 @@ class InstructionRule {
         streakTracking,
         createdAt.toIso8601String(),
         history.map((entry) => entry.toStorageList()).toList(),
+        instructionType,
+        unit,
+        levels.map((level) => level.toStorageList()).toList(),
       ];
 
   factory InstructionRule.fromStorageList(List<dynamic> raw) {
@@ -174,6 +254,12 @@ class InstructionRule {
         if (entry is List) parsedHistory.add(InstructionHistoryEntry.fromStorageList(entry.cast<dynamic>()));
       }
     }
+    final parsedLevels = <InstructionLevel>[];
+    if (raw.length > 15 && raw[15] is Iterable) {
+      for (final level in raw[15] as Iterable) {
+        if (level is List) parsedLevels.add(InstructionLevel.fromStorageList(level.cast<dynamic>()));
+      }
+    }
     return InstructionRule(
       id: raw.isNotEmpty ? '${raw[0]}' : 'instruction_${DateTime.now().microsecondsSinceEpoch}',
       name: raw.length > 1 ? '${raw[1]}' : 'Instruction',
@@ -181,6 +267,9 @@ class InstructionRule {
       linkedTask: raw.length > 3 ? '${raw[3]}' : '',
       linkedPhase: raw.length > 4 ? '${raw[4]}' : '',
       repeatType: raw.length > 5 ? '${raw[5]}' : repeatDaily,
+      instructionType: raw.length > 13 ? '${raw[13]}' : typeSimple,
+      unit: raw.length > 14 ? '${raw[14]}' : '',
+      levels: parsedLevels,
       bonusPoints: _readInt(raw, 6, fallback: 20),
       xpEarned: _readInt(raw, 7, fallback: 5),
       colorValue: _readInt(raw, 8, fallback: 0xFF43A047),
@@ -199,4 +288,12 @@ int _readInt(List<dynamic> raw, int index, {int fallback = 0}) {
   final value = raw[index];
   if (value is num) return value.round();
   return int.tryParse('$value') ?? fallback;
+}
+
+
+double _readDouble(List<dynamic> raw, int index, {double fallback = 0}) {
+  if (raw.length <= index) return fallback;
+  final value = raw[index];
+  if (value is num) return value.toDouble();
+  return double.tryParse('$value') ?? fallback;
 }

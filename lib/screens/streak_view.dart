@@ -163,7 +163,7 @@ class _InstructionStreakPanel extends StatelessWidget {
                       child: Row(
                         children: bubbleDates.map((date) {
                           final dateEntry = hiveService.instructionEntryForDate(instruction, date);
-                          return _InstructionDateBubble(date: date, completed: dateEntry?.followed == true);
+                          return _InstructionDateBubble(date: date, entry: dateEntry, instruction: instruction, today: today);
                         }).toList(),
                       ),
                     ),
@@ -185,14 +185,33 @@ List<DateTime> _instructionBubbleDates(DateTime today) {
 
 class _InstructionDateBubble extends StatelessWidget {
   final DateTime date;
-  final bool completed;
+  final InstructionHistoryEntry? entry;
+  final InstructionRule instruction;
+  final DateTime today;
 
-  const _InstructionDateBubble({required this.date, required this.completed});
+  const _InstructionDateBubble({required this.date, required this.entry, required this.instruction, required this.today});
 
   @override
   Widget build(BuildContext context) {
-    final color = completed ? Colors.green : Colors.red;
-    final label = completed ? 'Completed' : 'Missed';
+    final isFuture = date.isAfter(DateTime(today.year, today.month, today.day));
+    final levelIndex = entry?.hasLevel == true ? instruction.levels.indexWhere((level) => level.id == entry!.levelId) : -1;
+    final repeatedMisses = instruction.history.where((item) => item.missed && !item.date.isAfter(date)).length;
+    final emoji = isFuture
+        ? '➖'
+        : entry?.hasLevel == true
+            ? (levelIndex >= 2 ? '🤩' : levelIndex == 1 ? '😊' : '🙂')
+            : entry?.followed == true
+                ? '🙂'
+                : entry?.missed == true
+                    ? (repeatedMisses >= 5 ? '😵' : repeatedMisses >= 3 ? '😫' : repeatedMisses >= 2 ? '😠' : '😞')
+                    : '➖';
+    final theme = context.dashboardTheme;
+    final color = entry?.followed == true
+        ? theme.success
+        : entry?.missed == true
+            ? theme.danger
+            : theme.muted;
+    final label = entry?.hasLevel == true ? entry!.levelSummary : entry?.status ?? 'Future / Pending';
     return Tooltip(
       message: '${date.day}/${date.month}/${date.year} • $label',
       child: Container(
@@ -203,11 +222,9 @@ class _InstructionDateBubble extends StatelessWidget {
           shape: BoxShape.circle,
           color: color.withOpacity(0.16),
           border: Border.all(color: color.withOpacity(0.55), width: 1.2),
-          boxShadow: [
-            BoxShadow(color: color.withOpacity(0.12), blurRadius: 8, offset: const Offset(0, 3)),
-          ],
+          boxShadow: [BoxShadow(color: color.withOpacity(0.12), blurRadius: 8, offset: const Offset(0, 3))],
         ),
-        child: Icon(completed ? Icons.check_rounded : Icons.close_rounded, size: 16, color: color),
+        child: Center(child: Text(emoji, style: const TextStyle(fontSize: 14))),
       ),
     );
   }

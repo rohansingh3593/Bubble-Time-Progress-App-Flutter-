@@ -97,7 +97,8 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
   final linkedInstructions = _linkedInstructionsForTask(hiveService, task);
   final selectedStatuses = <String, String>{};
   for (final instruction in linkedInstructions) {
-    selectedStatuses[instruction.id] = hiveService.instructionEntryForDate(instruction, task.dueDate)?.status ?? InstructionHistoryEntry.statusNotApplicable;
+    final entry = hiveService.instructionEntryForDate(instruction, task.dueDate);
+    selectedStatuses[instruction.id] = entry?.hasLevel == true ? 'level:${entry!.levelId}' : (entry?.status ?? InstructionHistoryEntry.statusNotApplicable);
   }
   var occurrenceStatus = '';
 
@@ -191,29 +192,53 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                             const SizedBox(height: 6),
                             Wrap(
                               spacing: 6,
-                              children: [
-                                _instructionStatusChoice(
-                                  label: 'Followed +${instruction.bonusPoints}',
-                                  value: InstructionHistoryEntry.statusFollowed,
-                                  selected: selected,
-                                  enabled: instructionChoicesEnabled,
-                                  onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusFollowed),
-                                ),
-                                _instructionStatusChoice(
-                                  label: 'Missed',
-                                  value: InstructionHistoryEntry.statusMissed,
-                                  selected: selected,
-                                  enabled: instructionChoicesEnabled,
-                                  onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusMissed),
-                                ),
-                                _instructionStatusChoice(
-                                  label: 'N/A',
-                                  value: InstructionHistoryEntry.statusNotApplicable,
-                                  selected: selected,
-                                  enabled: instructionChoicesEnabled,
-                                  onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusNotApplicable),
-                                ),
-                              ],
+                              children: instruction.isLevelBased
+                                  ? [
+                                      _instructionStatusChoice(
+                                        label: 'Missed',
+                                        value: InstructionHistoryEntry.statusMissed,
+                                        selected: selected,
+                                        enabled: instructionChoicesEnabled,
+                                        onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusMissed),
+                                      ),
+                                      ...instruction.levels.map((level) => _instructionStatusChoice(
+                                            label: '${level.displayLabel} (+${level.bonusPoints})',
+                                            value: 'level:${level.id}',
+                                            selected: selected,
+                                            enabled: instructionChoicesEnabled,
+                                            onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = 'level:${level.id}'),
+                                          )),
+                                      _instructionStatusChoice(
+                                        label: 'N/A',
+                                        value: InstructionHistoryEntry.statusNotApplicable,
+                                        selected: selected,
+                                        enabled: instructionChoicesEnabled,
+                                        onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusNotApplicable),
+                                      ),
+                                    ]
+                                  : [
+                                      _instructionStatusChoice(
+                                        label: 'Followed +${instruction.bonusPoints}',
+                                        value: InstructionHistoryEntry.statusFollowed,
+                                        selected: selected,
+                                        enabled: instructionChoicesEnabled,
+                                        onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusFollowed),
+                                      ),
+                                      _instructionStatusChoice(
+                                        label: 'Missed',
+                                        value: InstructionHistoryEntry.statusMissed,
+                                        selected: selected,
+                                        enabled: instructionChoicesEnabled,
+                                        onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusMissed),
+                                      ),
+                                      _instructionStatusChoice(
+                                        label: 'N/A',
+                                        value: InstructionHistoryEntry.statusNotApplicable,
+                                        selected: selected,
+                                        enabled: instructionChoicesEnabled,
+                                        onSelected: () => setDialogState(() => selectedStatuses[instruction.id] = InstructionHistoryEntry.statusNotApplicable),
+                                      ),
+                                    ],
                             ),
                           ],
                         ),
@@ -417,13 +442,18 @@ Future<void> _saveLinkedInstructionStatuses(
   required bool occurrenceCompleted,
 }) async {
   for (final instruction in instructions) {
-    final status = occurrenceCompleted
+    final rawStatus = occurrenceCompleted
         ? selectedStatuses[instruction.id] ?? InstructionHistoryEntry.statusNotApplicable
         : InstructionHistoryEntry.statusMissed;
+    final isLevelStatus = rawStatus.startsWith('level:');
+    final level = isLevelStatus
+        ? instruction.levels.firstWhere((item) => item.id == rawStatus.substring('level:'.length), orElse: () => instruction.levels.first)
+        : null;
     await hiveService.updateInstructionStatus(
       instruction,
       task.dueDate,
-      status,
+      isLevelStatus ? InstructionHistoryEntry.statusFollowed : rawStatus,
+      level: level,
       note: 'Task occurrence: ${task.task} • ${routineOccurrenceLabel(task)} • ${occurrenceCompleted ? 'completed' : 'missed'}',
     );
   }

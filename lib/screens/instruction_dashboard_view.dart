@@ -128,8 +128,18 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 ),
               )
             else if (entry == null && instruction.enabled) ...[
-              ListTile(leading: const Icon(Icons.check_circle_outline, color: Colors.green), title: const Text('Followed'), onTap: () => Navigator.pop(context, 'followed')),
-              ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
+              if (instruction.isLevelBased) ...[
+                ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
+                ...instruction.levels.map((level) => ListTile(
+                      leading: const Icon(Icons.emoji_events_outlined, color: Colors.green),
+                      title: Text('${level.displayLabel} (+${level.bonusPoints})'),
+                      subtitle: Text('${level.xpEarned} XP'),
+                      onTap: () => Navigator.pop(context, 'level:${level.id}'),
+                    )),
+              ] else ...[
+                ListTile(leading: const Icon(Icons.check_circle_outline, color: Colors.green), title: const Text('Followed'), onTap: () => Navigator.pop(context, 'followed')),
+                ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
+              ],
             ] else
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -143,6 +153,12 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
       ),
     );
     if (!mounted || action == null) return;
+    if (action.startsWith('level:') && instruction.levels.isNotEmpty) {
+      final levelId = action.substring('level:'.length);
+      final level = instruction.levels.firstWhere((item) => item.id == levelId, orElse: () => instruction.levels.first);
+      await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed, level: level);
+      return;
+    }
     switch (action) {
       case 'followed':
         await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed);
@@ -167,6 +183,16 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     final descriptionController = TextEditingController(text: instruction?.description ?? '');
     final bonusController = TextEditingController(text: instruction == null ? '20' : '${instruction.bonusPoints}');
     final xpController = TextEditingController(text: instruction == null ? '5' : '${instruction.xpEarned}');
+    final unitController = TextEditingController(text: instruction?.unit ?? 'km');
+    var instructionType = instruction?.instructionType ?? InstructionRule.typeSimple;
+    var levels = [...(instruction?.levels ?? const <InstructionLevel>[])];
+    if (levels.isEmpty) {
+      levels = const [
+        InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, xpEarned: 5),
+        InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, xpEarned: 8),
+        InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, xpEarned: 12),
+      ];
+    }
     var linkedTasks = [...(instruction?.linkedTasks ?? const <String>[])];
     final initialPhases = instruction?.linkedPhases ?? const <String>[];
     var linkedPhase = initialPhases.isEmpty ? '' : initialPhases.first;
@@ -196,6 +222,15 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   children: [
                     TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
                     TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: instructionType,
+                      decoration: const InputDecoration(labelText: 'Instruction Type'),
+                      items: const [InstructionRule.typeSimple, InstructionRule.typeLevelBased]
+                          .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                          .toList(),
+                      onChanged: (value) => setDialogState(() => instructionType = value ?? instructionType),
+                    ),
                     const SizedBox(height: 12),
                     const Text('Linked Task (Optional)', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black54)),
                     const SizedBox(height: 6),
@@ -271,8 +306,46 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                           .toList(),
                       onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
                     ),
-                    TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-                    TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                    if (instructionType == InstructionRule.typeSimple) ...[
+                      TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+                      TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                    ] else ...[
+                      TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Expanded(child: Text('Levels', style: TextStyle(fontWeight: FontWeight.w900))),
+                          TextButton.icon(
+                            onPressed: () async {
+                              final level = await _showInstructionLevelDialog(defaultUnit: unitController.text.trim(), index: levels.length);
+                              if (level != null) setDialogState(() => levels = [...levels, level]);
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Level'),
+                          ),
+                        ],
+                      ),
+                      ...levels.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final level = entry.value;
+                        return Card(
+                          child: ListTile(
+                            dense: true,
+                            title: Text(level.displayLabel, style: const TextStyle(fontWeight: FontWeight.w900)),
+                            subtitle: Text('+${level.bonusPoints} points • ${level.xpEarned} XP'),
+                            trailing: Wrap(
+                              spacing: 2,
+                              children: [
+                                IconButton(tooltip: 'Move up', icon: const Icon(Icons.arrow_upward, size: 18), onPressed: index == 0 ? null : () => setDialogState(() { final updated = [...levels]; final item = updated.removeAt(index); updated.insert(index - 1, item); levels = updated; })),
+                                IconButton(tooltip: 'Move down', icon: const Icon(Icons.arrow_downward, size: 18), onPressed: index == levels.length - 1 ? null : () => setDialogState(() { final updated = [...levels]; final item = updated.removeAt(index); updated.insert(index + 1, item); levels = updated; })),
+                                IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () async { final updatedLevel = await _showInstructionLevelDialog(existing: level, defaultUnit: unitController.text.trim(), index: index); if (updatedLevel != null) setDialogState(() { final updated = [...levels]; updated[index] = updatedLevel; levels = updated; }); }),
+                                IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => setDialogState(() => levels = levels.where((item) => item.id != level.id).toList())),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 8,
@@ -304,6 +377,9 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     linkedTask: InstructionRule.encodeLinks(linkedTasks),
                     linkedPhase: linkedPhase.trim(),
                     repeatType: repeatType,
+                    instructionType: instructionType,
+                    unit: instructionType == InstructionRule.typeLevelBased ? unitController.text.trim() : '',
+                    levels: instructionType == InstructionRule.typeLevelBased ? levels : const [],
                     bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
                     xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
                     colorValue: colorValue,
@@ -325,6 +401,50 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     // Disposing immediately caused "TextEditingController was used after being
     // disposed" crashes while the Add/Edit Instruction dialog was closing.
     if (saved != null) await widget.hiveService.saveInstruction(saved);
+  }
+
+
+  Future<InstructionLevel?> _showInstructionLevelDialog({InstructionLevel? existing, required String defaultUnit, required int index}) async {
+    final nameController = TextEditingController(text: existing?.name ?? 'Level ${index + 1}');
+    final targetController = TextEditingController(text: existing == null ? '' : (existing.target % 1 == 0 ? existing.target.toStringAsFixed(0) : existing.target.toStringAsFixed(1)));
+    final unitController = TextEditingController(text: existing?.unit ?? (defaultUnit.isEmpty ? 'km' : defaultUnit));
+    final bonusController = TextEditingController(text: existing == null ? '30' : '${existing.bonusPoints}');
+    final xpController = TextEditingController(text: existing == null ? '5' : '${existing.xpEarned}');
+    return showDialog<InstructionLevel>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(existing == null ? 'Add Level' : 'Edit Level'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Level Name')),
+              TextField(controller: targetController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Target')),
+              TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
+              TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(
+              context,
+              InstructionLevel(
+                id: existing?.id ?? 'level_${DateTime.now().microsecondsSinceEpoch}',
+                name: nameController.text.trim().isEmpty ? 'Level ${index + 1}' : nameController.text.trim(),
+                target: double.tryParse(targetController.text.trim()) ?? 0,
+                unit: unitController.text.trim(),
+                bonusPoints: int.tryParse(bonusController.text.trim()) ?? 0,
+                xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
+              ),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   List<_InstructionTaskOption> _taskOptions() {
@@ -493,7 +613,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 if (instruction.history.isEmpty)
                   const Text('No updates yet.')
                 else
-                  ...instruction.history.reversed.take(10).map((entry) => Text('• ${_formatDate(entry.date)} — ${entry.status}${entry.followed ? ' (+${entry.bonusPoints} pts)' : ''}')),
+                  ...instruction.history.reversed.take(10).map((entry) => Text('• ${_formatDate(entry.date)} — ${entry.hasLevel ? entry.levelSummary : entry.status}${entry.followed ? ' (+${entry.bonusPoints} pts)' : ''}')),
               ],
             ),
           ),
@@ -582,7 +702,7 @@ class _InstructionCard extends StatelessWidget {
     final entry = hiveService.instructionEntryForDate(instruction, today);
     final color = Color(instruction.colorValue);
     final statusColor = entry?.followed == true ? Colors.green : entry?.missed == true ? Colors.red : Colors.grey;
-    final status = !instruction.enabled ? 'Disabled' : entry?.status ?? 'Pending';
+    final status = !instruction.enabled ? 'Disabled' : (entry?.levelName.isNotEmpty == true ? entry!.levelName : (entry?.status ?? 'Pending'));
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(22),
@@ -598,7 +718,7 @@ class _InstructionCard extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
-                Text('${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • +${instruction.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                Text(entry?.hasLevel == true ? 'Today: ${entry!.levelSummary} • +${entry.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • ${instruction.isLevelBased ? '${instruction.levels.length} levels' : '+${instruction.bonusPoints} points'} • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
                 if (instruction.linkedTasks.isNotEmpty) Text('Linked: ${_linkedTaskSummary(instruction)}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: const TextStyle(fontSize: 12, color: Colors.black45)),
               ]),
             ),

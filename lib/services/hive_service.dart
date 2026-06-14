@@ -1048,19 +1048,24 @@ class HiveService {
     return null;
   }
 
-  Future<void> updateInstructionStatus(InstructionRule instruction, DateTime date, String status, {String note = ''}) async {
+  Future<void> updateInstructionStatus(InstructionRule instruction, DateTime date, String status, {String note = '', InstructionLevel? level}) async {
     final occurrence = _instructionOccurrenceDate(instruction, date);
     final updatedHistory = instruction.history
         .where((entry) => !_isSameDate(_instructionOccurrenceDate(instruction, entry.date), occurrence))
         .toList();
     final followed = status == InstructionHistoryEntry.statusFollowed;
+    final selectedLevel = followed ? level : null;
     updatedHistory.add(
       InstructionHistoryEntry(
         date: occurrence,
         status: status,
-        bonusPoints: followed ? instruction.bonusPoints : 0,
-        xpEarned: followed ? instruction.xpEarned : 0,
+        bonusPoints: followed ? (selectedLevel?.bonusPoints ?? instruction.bonusPoints) : 0,
+        xpEarned: followed ? (selectedLevel?.xpEarned ?? instruction.xpEarned) : 0,
         note: note.trim(),
+        levelId: selectedLevel?.id ?? '',
+        levelName: selectedLevel?.name ?? '',
+        completedTarget: selectedLevel?.target ?? 0,
+        unit: selectedLevel?.unit ?? instruction.unit,
       ),
     );
     await saveInstruction(instruction.copyWith(history: updatedHistory));
