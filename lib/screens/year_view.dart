@@ -362,12 +362,12 @@ class _YearViewState extends State<YearView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final dotsPerRow = constraints.maxWidth < 600 ? 21 : constraints.maxWidth < 1024 ? 23 : 28;
-        final spacing = constraints.maxWidth < 600 ? 2.5 : constraints.maxWidth < 1024 ? 3.0 : 3.5;
+        final spacing = constraints.maxWidth < 600 ? 3.0 : constraints.maxWidth < 1024 ? 3.5 : 4.0;
         final horizontalPadding = constraints.maxWidth < 600 ? 24.0 : 32.0;
-        final maxDotSize = constraints.maxWidth < 600 ? 6.5 : constraints.maxWidth < 1024 ? 8.0 : 9.5;
+        final maxDotSize = constraints.maxWidth < 600 ? 9.5 : constraints.maxWidth < 1024 ? 11.0 : 12.5;
         final availableDotWidth = constraints.maxWidth - horizontalPadding - (spacing * (dotsPerRow - 1));
         final dotCellWidth = availableDotWidth / dotsPerRow;
-        final dotSize = dotCellWidth.clamp(4.5, maxDotSize).toDouble();
+        final dotSize = dotCellWidth.clamp(7.0, maxDotSize).toDouble();
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
