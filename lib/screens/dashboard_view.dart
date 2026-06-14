@@ -1732,6 +1732,18 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
 
+  Color _headerTabBackground(DashboardThemeStyle style) {
+    return Color.lerp(style.surface, style.primary, style.dark ? 0.18 : 0.10) ?? style.surface;
+  }
+
+  BoxShadow _headerTabShadow(DashboardThemeStyle style) {
+    return BoxShadow(
+      color: style.primary.withOpacity(style.dark ? 0.22 : 0.12),
+      blurRadius: 10,
+      offset: const Offset(0, 6),
+    );
+  }
+
   Widget _rewardMoneyBadge(DashboardThemeStyle style) {
     final rewardSummary = widget.hiveService.getRewardMoneySummary();
     return Tooltip(
@@ -1745,10 +1757,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             duration: const Duration(milliseconds: 220),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             decoration: BoxDecoration(
-              color: style.primary.withOpacity(0.12),
+              color: _headerTabBackground(style),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: style.primary.withOpacity(0.22)),
-              boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
+              boxShadow: [_headerTabShadow(style)],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1785,10 +1797,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             duration: const Duration(milliseconds: 220),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: style.surface,
+              color: _headerTabBackground(style),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: style.primary.withOpacity(0.12)),
-              boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 10, offset: Offset(0, 6))],
+              border: Border.all(color: style.primary.withOpacity(0.22)),
+              boxShadow: [_headerTabShadow(style)],
             ),
             child: Icon(icon, color: style.primary, size: 22),
           ),
