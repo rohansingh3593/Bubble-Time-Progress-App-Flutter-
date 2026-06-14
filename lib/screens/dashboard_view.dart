@@ -1760,23 +1760,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           const SizedBox(height: 10),
           Text('Color Palette', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: dashboardThemePickerPalettes.map((palette) {
-                final isSelected = palette == selectedPalette;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: _themeSelectorChip(
-                    selected: isSelected,
-                    label: palette.label,
-                    leading: _paletteDots(palette, compact: true),
-                    style: style,
-                    onTap: () => widget.hiveService.setDashboardPalette(palette),
-                  ),
-                );
-              }).toList(),
-            ),
+          _paletteSelectorGrid(
+            style: style,
+            selectedPalette: selectedPalette,
           ),
           const SizedBox(height: 14),
           _buildTypographySelector(
@@ -1793,6 +1779,146 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         ],
       ),
     );
+  }
+
+
+
+  Widget _paletteSelectorGrid({
+    required DashboardThemeStyle style,
+    required DashboardPaletteType selectedPalette,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        final crossAxisCount = availableWidth >= 620
+            ? 4
+            : availableWidth >= 430
+                ? 3
+                : 2;
+        final spacing = 10.0;
+        final tileWidth = (availableWidth - (spacing * (crossAxisCount - 1))) / crossAxisCount;
+
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 280),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          child: Wrap(
+            key: ValueKey(selectedPalette.storageKey),
+            spacing: spacing,
+            runSpacing: spacing,
+            children: dashboardThemePickerPalettes.map((palette) {
+              final isSelected = palette == selectedPalette;
+              return SizedBox(
+                width: tileWidth.clamp(132.0, 220.0).toDouble(),
+                child: _paletteSelectorTile(
+                  palette: palette,
+                  selected: isSelected,
+                  style: style,
+                  onTap: () => widget.hiveService.setDashboardPalette(palette),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _paletteSelectorTile({
+    required DashboardPaletteType palette,
+    required bool selected,
+    required DashboardThemeStyle style,
+    required VoidCallback onTap,
+  }) {
+    final theme = AppThemeColors.fromDashboardStyle(style);
+    final background = selected ? theme.primaryLight : theme.surface;
+    final borderColor = selected ? theme.primary : theme.border;
+    final textColor = selected ? theme.primary : theme.textPrimary;
+    final recommendation = _paletteRecommendation(palette);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor, width: selected ? 1.8 : 1),
+            boxShadow: [
+              BoxShadow(
+                color: selected ? theme.primary.withOpacity(0.18) : theme.shadow.withOpacity(0.35),
+                blurRadius: selected ? 18 : 10,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _paletteDots(palette, compact: false)),
+                  AnimatedOpacity(
+                    opacity: selected ? 1 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Icon(Icons.check_circle_rounded, size: 18, color: theme.primary),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                palette.label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: textColor, fontWeight: FontWeight.w900, fontSize: 12.5, height: 1.05),
+              ),
+              if (recommendation != null) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.accent.withOpacity(style.dark ? 0.20 : 0.16),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: theme.accent.withOpacity(0.28)),
+                  ),
+                  child: Text(
+                    recommendation,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: theme.accent, fontWeight: FontWeight.w900, fontSize: 10),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String? _paletteRecommendation(DashboardPaletteType palette) {
+    switch (palette) {
+      case DashboardPaletteType.earthyForestHues:
+        return 'Calm app';
+      case DashboardPaletteType.refreshingSummerFun:
+        return 'Eye-catching';
+      case DashboardPaletteType.vividNightfall:
+        return 'Premium';
+      case DashboardPaletteType.aquaFocus:
+        return 'Focused';
+      case DashboardPaletteType.fieryOcean:
+        return 'Bold';
+      case DashboardPaletteType.oliveGardenFeast:
+        return 'Journal';
+      default:
+        return null;
+    }
   }
 
   Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
