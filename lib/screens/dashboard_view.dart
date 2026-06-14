@@ -1763,7 +1763,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: DashboardPaletteType.values.map((palette) {
+              children: dashboardThemePickerPalettes.map((palette) {
                 final isSelected = palette == selectedPalette;
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
