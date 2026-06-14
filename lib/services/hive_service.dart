@@ -3,6 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/instruction.dart';
 import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
+import '../models/motivation_motto.dart';
 import '../models/productivity_snapshot.dart';
 import '../models/reward_money.dart';
 import '../models/task_model.dart';
@@ -37,6 +38,8 @@ class HiveService {
   static const _instructionPrefix = '__instruction__';
   static const _rewardLedgerPrefix = '__reward_ledger__';
   static const _rewardGoalPrefix = '__reward_goal__';
+  static const _mottoListKey = '__motivation_mottos__';
+  static const _mottoSettingsKey = '__motivation_motto_settings__';
   static const _autoJourneyPrefix = 'auto_journey_';
   static const _schemaVersionKey = '__meta_schema_version__';
   static const _dashboardThemeKey = '__meta_dashboard_theme__';
@@ -1831,6 +1834,94 @@ class HiveService {
     }
 
     return result;
+  }
+
+
+  List<MotivationMotto> getMotivationMottos() {
+    final raw = (_box.get(_mottoListKey) ?? <Map<String, dynamic>>[]);
+    return raw
+        .whereType<Map>()
+        .map(MotivationMotto.fromMap)
+        .where((motto) => motto.quote.trim().isNotEmpty)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  Future<void> saveMotivationMotto(MotivationMotto motto) async {
+    final mottos = getMotivationMottos();
+    final index = mottos.indexWhere((item) => item.id == motto.id);
+    if (index >= 0) {
+      mottos[index] = motto;
+    } else {
+      mottos.insert(0, motto);
+    }
+    await _saveMotivationMottos(mottos);
+  }
+
+  Future<void> deleteMotivationMotto(String id) async {
+    final mottos = getMotivationMottos()..removeWhere((item) => item.id == id);
+    await _saveMotivationMottos(mottos);
+  }
+
+  Future<void> setMotivationMottoFlag(String id, {bool? favorite, bool? pinned, bool? todaysMotto, bool? enabled}) async {
+    final mottos = getMotivationMottos()
+        .map((motto) => motto.copyWith(
+              favorite: motto.id == id ? (favorite ?? motto.favorite) : motto.favorite,
+              pinned: pinned == true ? motto.id == id : (motto.id == id ? (pinned ?? motto.pinned) : motto.pinned),
+              todaysMotto: todaysMotto == true ? motto.id == id : (motto.id == id ? (todaysMotto ?? motto.todaysMotto) : motto.todaysMotto),
+              enabled: motto.id == id ? (enabled ?? motto.enabled) : motto.enabled,
+            ))
+        .toList();
+    await _saveMotivationMottos(mottos);
+  }
+
+  MotivationMotto? getFeaturedMotivationMotto() {
+    final active = getMotivationMottos().where((motto) => motto.enabled).toList();
+    if (active.isEmpty) return null;
+    for (final predicate in [
+      (MotivationMotto motto) => motto.todaysMotto,
+      (MotivationMotto motto) => motto.pinned,
+      (MotivationMotto motto) => motto.favorite,
+    ]) {
+      final matches = active.where(predicate).toList();
+      if (matches.isNotEmpty) return matches.first;
+    }
+    return active.first;
+  }
+
+  MotivationMotto? getNextMotivationMotto({String? excludeId}) {
+    final active = getMotivationMottos().where((motto) => motto.enabled && motto.id != excludeId).toList();
+    if (active.isEmpty) {
+      final fallback = getMotivationMottos().where((motto) => motto.enabled).toList();
+      return fallback.isEmpty ? null : fallback.first;
+    }
+    active.sort((a, b) {
+      final shownCompare = (a.lastShownAt ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(b.lastShownAt ?? DateTime.fromMillisecondsSinceEpoch(0));
+      if (shownCompare != 0) return shownCompare;
+      return a.showCount.compareTo(b.showCount);
+    });
+    return active.first;
+  }
+
+  Future<void> markMotivationMottoShown(String id) async {
+    final mottos = getMotivationMottos()
+        .map((motto) => motto.id == id ? motto.copyWith(lastShownAt: DateTime.now(), showCount: motto.showCount + 1) : motto)
+        .toList();
+    await _saveMotivationMottos(mottos);
+  }
+
+  MottoReminderSettings getMottoReminderSettings() {
+    final raw = _box.get(_mottoSettingsKey);
+    if (raw is List && raw.isNotEmpty && raw.first is Map) return MottoReminderSettings.fromMap(raw.first as Map);
+    return const MottoReminderSettings();
+  }
+
+  Future<void> saveMottoReminderSettings(MottoReminderSettings settings) async {
+    await _box.put(_mottoSettingsKey, <Map<String, dynamic>>[settings.toMap()]);
+  }
+
+  Future<void> _saveMotivationMottos(List<MotivationMotto> mottos) async {
+    await _box.put(_mottoListKey, mottos.map((motto) => motto.toMap()).toList());
   }
 
   /// Returns a ValueListenable that rebuilds when the box changes

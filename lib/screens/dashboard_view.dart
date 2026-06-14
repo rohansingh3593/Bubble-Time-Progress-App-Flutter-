@@ -18,6 +18,7 @@ import 'instruction_dashboard_view.dart';
 import 'reward_money_history_view.dart';
 import 'journal_view.dart';
 import 'journey_timeline_view.dart';
+import 'motivation_motto_dashboard_view.dart';
 import 'productivity_timeline_view.dart';
 
 class DashboardView extends StatefulWidget {
@@ -153,6 +154,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 14),
               _buildHeroCard(rankProfile, summary),
               const SizedBox(height: 14),
+              _buildMottoHeroCard(),
+              const SizedBox(height: 14),
               _summaryHeader(summary),
               const SizedBox(height: 14),
               _buildProgressOverviewStrip(timeProgress),
@@ -200,6 +203,38 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
 
+
+
+  Widget _buildMottoHeroCard() {
+    final motto = widget.hiveService.getFeaturedMotivationMotto();
+    if (motto == null) return const SizedBox.shrink();
+    final style = _dashboardStyle();
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: _openMotivationMottoDashboard,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: style.secondary.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: style.secondary.withOpacity(0.24)),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(backgroundColor: style.secondary.withOpacity(0.2), child: Icon(Icons.chat_bubble_outline_rounded, color: style.secondary)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Today’s Motto:', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text('“${motto.quote}”', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)),
+              ]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   List<Task> _dedupeTasksForDashboard(List<Task> tasks) {
     final oneTimeTasks = <Task>[];
@@ -320,6 +355,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => GoalDashboardView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+  void _openMotivationMottoDashboard() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => MotivationMottoDashboardView(hiveService: widget.hiveService),
       ),
     );
   }
@@ -1598,6 +1641,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       ),
       _instructionHeaderButton(style),
       _goalHeaderButton(style),
+      _mottoHeaderButton(style),
       _rewardMoneyBadge(style),
       _headerActionButton(
         icon: Icons.settings_rounded,
@@ -1668,6 +1712,16 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       tooltip: 'Goal dashboard',
       style: style,
       onTap: _openGoalDashboard,
+    );
+  }
+
+
+  Widget _mottoHeaderButton(DashboardThemeStyle style) {
+    return _headerActionButton(
+      icon: Icons.chat_bubble_outline_rounded,
+      tooltip: 'Motivation Motto',
+      style: style,
+      onTap: _openMotivationMottoDashboard,
     );
   }
 

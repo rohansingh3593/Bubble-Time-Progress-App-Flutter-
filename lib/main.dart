@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'models/task_model.dart';
+import 'models/motivation_motto.dart';
 import 'services/hive_service.dart';
 import 'screens/dashboard_view.dart';
 import 'screens/year_view.dart';
@@ -205,14 +208,18 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _selectedIndex = 2; // Default to Month view (index 2)
+  Timer? _mottoTimer;
+  bool _mottoDialogOpen = false;
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
 
   late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _screens = [
       DashboardView(hiveService: widget.hiveService, onGoToDashboard: _goToDashboardTab),
       YearView(hiveService: widget.hiveService),
@@ -221,6 +228,73 @@ class _MainScreenState extends State<MainScreen> {
       DayView(hiveService: widget.hiveService),
       StreakView(hiveService: widget.hiveService, onGoToDashboard: _goToDashboardTab),
     ];
+    _scheduleMottoReminder();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _mottoTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+    if (state == AppLifecycleState.resumed) _scheduleMottoReminder();
+  }
+
+  void _scheduleMottoReminder() {
+    _mottoTimer?.cancel();
+    final settings = widget.hiveService.getMottoReminderSettings();
+    if (!settings.popupEnabled) return;
+    _mottoTimer = Timer(Duration(minutes: settings.frequencyMinutes), _showMottoReminderIfReady);
+  }
+
+  Future<void> _showMottoReminderIfReady() async {
+    final settings = widget.hiveService.getMottoReminderSettings();
+    if (!mounted || !settings.popupEnabled) return;
+    if (settings.activeOnly && _lifecycleState != AppLifecycleState.resumed) {
+      _scheduleMottoReminder();
+      return;
+    }
+    final motto = widget.hiveService.getNextMotivationMotto();
+    if (motto == null || _mottoDialogOpen) {
+      _scheduleMottoReminder();
+      return;
+    }
+    _mottoDialogOpen = true;
+    await _showMottoDialog(motto);
+    _mottoDialogOpen = false;
+    _scheduleMottoReminder();
+  }
+
+  Future<void> _showMottoDialog(MotivationMotto initialMotto) async {
+    MotivationMotto current = initialMotto;
+    await widget.hiveService.markMotivationMottoShown(current.id);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('💬 Motivation'),
+          content: Text('“${current.quote}”', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, height: 1.25)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+            TextButton(
+              onPressed: () async {
+                final next = widget.hiveService.getNextMotivationMotto(excludeId: current.id);
+                if (next == null) return;
+                await widget.hiveService.markMotivationMottoShown(next.id);
+                setDialogState(() => current = next);
+              },
+              child: const Text('Next Quote'),
+            ),
+            ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('Got it')),
+          ],
+        ),
+      ),
+    );
   }
 
   void _onItemTapped(int index) {
