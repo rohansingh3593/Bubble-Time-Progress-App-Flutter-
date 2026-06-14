@@ -15,6 +15,10 @@ class PeriodProgressBubbleMap extends StatelessWidget {
   final String remainingLabel;
   final String Function(int index)? tooltipBuilder;
   final String Function(int index)? bubbleLabelBuilder;
+  final String Function(int index)? belowLabelBuilder;
+  final int? displayItemCount;
+  final double minBubbleSize;
+  final double maxBubbleSize;
 
   const PeriodProgressBubbleMap({
     super.key,
@@ -30,11 +34,16 @@ class PeriodProgressBubbleMap extends StatelessWidget {
     this.remainingLabel = 'Remaining',
     this.tooltipBuilder,
     this.bubbleLabelBuilder,
+    this.belowLabelBuilder,
+    this.displayItemCount,
+    this.minBubbleSize = 34,
+    this.maxBubbleSize = 44,
   });
 
   @override
   Widget build(BuildContext context) {
     final normalizedCurrentIndex = currentIndex != null && currentIndex! >= 0 && currentIndex! < totalItems ? currentIndex : null;
+    final visibleItems = displayItemCount ?? totalItems;
     final progress = totalItems == 0 ? 0.0 : (passedItems / totalItems).clamp(0.0, 1.0).toDouble();
     final progressLabel = '${(progress * 100).round()}%';
 
@@ -50,7 +59,8 @@ class PeriodProgressBubbleMap extends StatelessWidget {
         final horizontalPadding = constraints.maxWidth < 600 ? 28.0 : 36.0;
         final availableWidth = constraints.maxWidth - horizontalPadding - (spacing * (itemsPerRow - 1));
         final cellWidth = availableWidth / itemsPerRow;
-        final bubbleSize = cellWidth.clamp(34.0, 56.0).toDouble();
+        final bubbleSize = cellWidth.clamp(minBubbleSize, maxBubbleSize).toDouble();
+        final cellHeight = belowLabelBuilder == null ? bubbleSize : bubbleSize + 18;
 
         return Container(
           width: double.infinity,
@@ -102,36 +112,56 @@ class PeriodProgressBubbleMap extends StatelessWidget {
               Wrap(
                 spacing: spacing,
                 runSpacing: spacing,
-                children: List.generate(totalItems, (index) {
-                  return SizedBox(
-                    width: cellWidth,
-                    height: bubbleSize,
-                    child: Tooltip(
-                      message: tooltipBuilder?.call(index) ?? '${index + 1}',
-                      child: Center(
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 220),
-                          width: bubbleSize,
-                          height: bubbleSize,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: bubbleColor(index),
-                            shape: BoxShape.circle,
-                            boxShadow: index == normalizedCurrentIndex ? [BoxShadow(color: theme.accent.withOpacity(0.55), blurRadius: 12, spreadRadius: 2)] : null,
-                          ),
-                          child: Text(
-                            bubbleLabelBuilder?.call(index) ?? '${index + 1}',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: index < passedItems || index == normalizedCurrentIndex ? theme.surface : theme.textMuted,
-                              fontSize: bubbleSize < 40 ? 10 : 11,
-                              fontWeight: FontWeight.w900,
-                              height: 1.0,
-                            ),
-                          ),
+                children: List.generate(visibleItems, (index) {
+                  final isPlaceholder = index >= totalItems;
+                  final label = isPlaceholder ? '' : bubbleLabelBuilder?.call(index) ?? '${index + 1}';
+                  final belowLabel = isPlaceholder ? '' : belowLabelBuilder?.call(index);
+                  final bubble = Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 220),
+                      width: bubbleSize,
+                      height: bubbleSize,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isPlaceholder ? theme.textMuted.withOpacity(0.12) : bubbleColor(index),
+                        shape: BoxShape.circle,
+                        boxShadow: !isPlaceholder && index == normalizedCurrentIndex ? [BoxShadow(color: theme.accent.withOpacity(0.55), blurRadius: 12, spreadRadius: 2)] : null,
+                      ),
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: !isPlaceholder && (index < passedItems || index == normalizedCurrentIndex) ? theme.surface : theme.textMuted,
+                          fontSize: bubbleSize < 40 ? 10 : 11,
+                          fontWeight: FontWeight.w900,
+                          height: 1.0,
                         ),
                       ),
                     ),
+                  );
+                  return SizedBox(
+                    width: cellWidth,
+                    height: cellHeight,
+                    child: isPlaceholder
+                        ? bubble
+                        : Tooltip(
+                            message: tooltipBuilder?.call(index) ?? '${index + 1}',
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                bubble,
+                                if (belowLabel != null) ...[
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    belowLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: theme.textMuted, fontSize: 9, fontWeight: FontWeight.w800),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
                   );
                 }),
               ),

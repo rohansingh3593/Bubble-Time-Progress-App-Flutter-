@@ -229,6 +229,8 @@ class _DayViewState extends State<DayView> {
       title: 'Day Hour Progress',
       subtitle: '$passedHours hours passed • $remainingHours hours left',
       totalItems: 24,
+      minBubbleSize: 42,
+      maxBubbleSize: 56,
       passedItems: passedHours,
       currentIndex: isToday ? now.hour : null,
       itemsPerRow: 6,

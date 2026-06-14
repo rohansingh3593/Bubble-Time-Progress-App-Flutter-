@@ -379,11 +379,15 @@ class _MonthViewState extends State<MonthView> {
     final isFutureMonth = monthStart.isAfter(currentMonthStart);
     final passedDays = isPastMonth ? daysInMonth : isFutureMonth ? 0 : (now.day - 1).clamp(0, daysInMonth).toInt();
     final remainingDays = isPastMonth ? 0 : isFutureMonth ? daysInMonth : (daysInMonth - passedDays - 1).clamp(0, daysInMonth).toInt();
+    final displayDays = ((daysInMonth + 6) ~/ 7) * 7;
     return PeriodProgressBubbleMap(
       theme: theme,
       title: 'Month Day Progress',
       subtitle: '$passedDays days passed • $remainingDays days left',
       totalItems: daysInMonth,
+      displayItemCount: displayDays,
+      minBubbleSize: 30,
+      maxBubbleSize: 38,
       passedItems: passedDays,
       currentIndex: isCurrentMonth ? now.day - 1 : null,
       itemsPerRow: 7,

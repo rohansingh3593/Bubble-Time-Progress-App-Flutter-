@@ -522,6 +522,8 @@ class _WeekViewState extends State<WeekView> {
       title: 'Week Day Progress',
       subtitle: '$passedDays days passed • $remainingDays days left',
       totalItems: 7,
+      minBubbleSize: 30,
+      maxBubbleSize: 38,
       passedItems: passedDays,
       currentIndex: isCurrentWeek ? todayIndex : null,
       itemsPerRow: 7,
@@ -530,6 +532,7 @@ class _WeekViewState extends State<WeekView> {
         return '${date.month}/${date.day}/${date.year}';
       },
       bubbleLabelBuilder: (index) => '${index + 1}',
+      belowLabelBuilder: (index) => _getDayLabels()[index],
     );
   }
 
