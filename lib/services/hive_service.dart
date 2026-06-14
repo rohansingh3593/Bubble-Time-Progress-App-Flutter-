@@ -1208,7 +1208,7 @@ class HiveService {
     if (existing == null) {
       history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Goal created', note: updated.name));
     } else {
-      if (existing.imagePath != updated.imagePath) {
+      if (existing.imagePath != updated.imagePath || existing.galleryImages.length != updated.galleryImages.length) {
         history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Goal image updated'));
       }
       if (existing.effectiveStatus != updated.effectiveStatus) {
@@ -1228,7 +1228,7 @@ class HiveService {
 
   RewardGoal _normalizeRewardGoal(RewardGoal goal) {
     if (goal.targetAmountRupees > 0 && goal.savedAmountRupees >= goal.targetAmountRupees) {
-      return goal.copyWith(status: RewardGoal.statusAchieved);
+      return goal.copyWith(status: RewardGoal.statusAchieved, completedAt: goal.completedAt ?? DateTime.now());
     }
     return goal;
   }
@@ -1290,6 +1290,7 @@ class HiveService {
       goal.copyWith(
         savedAmountRupees: newSavedAmount,
         status: goal.targetAmountRupees > 0 && newSavedAmount >= goal.targetAmountRupees ? RewardGoal.statusAchieved : goal.status,
+        completedAt: goal.targetAmountRupees > 0 && newSavedAmount >= goal.targetAmountRupees ? (goal.completedAt ?? DateTime.now()) : goal.completedAt,
         history: history,
       ),
     );
