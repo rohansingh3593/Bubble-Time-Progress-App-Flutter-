@@ -73,6 +73,7 @@ class StreakView extends StatelessWidget {
                     JournalView.route(hiveService: hiveService, onGoToDashboard: onGoToDashboard),
                   ),
                   userProfile: hiveService.getUserProfile(),
+                  dashboardStyle: style,
                   onJourneyTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => JourneyTimelineView(hiveService: hiveService),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
+import '../constants/dashboard_themes.dart';
 import '../models/rank_profile.dart';
 import '../models/user_profile.dart';
 import 'profile_avatar.dart';
@@ -13,6 +14,7 @@ class RankProfileCard extends StatelessWidget {
   final bool compact;
   final UserProfile? userProfile;
   final VoidCallback? onProfilePhotoTap;
+  final DashboardThemeStyle? dashboardStyle;
 
   const RankProfileCard({
     super.key,
@@ -23,12 +25,19 @@ class RankProfileCard extends StatelessWidget {
     this.compact = false,
     this.userProfile,
     this.onProfilePhotoTap,
+    this.dashboardStyle,
   });
 
   @override
   Widget build(BuildContext context) {
     final rankColor = Color(profile.currentRank.colorValue);
     final effectiveProfile = userProfile ?? UserProfile.defaults(fullName: profile.username);
+    final style = dashboardStyle;
+    final gradientColors = style?.heroGradient.isNotEmpty == true
+        ? style!.heroGradient
+        : [rankColor.withOpacity(0.95), AppColors.primaryDark];
+    final accentColor = style?.accent ?? rankColor;
+    final contentColor = style == null ? Colors.white : AppThemeColors.readableTextOn(gradientColors.first, style);
 
     return GestureDetector(
       onTap: onTap,
@@ -37,14 +46,14 @@ class RankProfileCard extends StatelessWidget {
         padding: EdgeInsets.all(compact ? 14 : 18),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [rankColor.withOpacity(0.95), AppColors.primaryDark],
+            colors: gradientColors,
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: rankColor.withOpacity(0.22),
+              color: (style?.primary ?? rankColor).withOpacity(0.22),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -56,7 +65,7 @@ class RankProfileCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ProfileAvatar(profile: effectiveProfile, accentColor: rankColor, badge: profile.currentRank.emoji, radius: 31, onTap: onProfilePhotoTap),
+                ProfileAvatar(profile: effectiveProfile, accentColor: accentColor, badge: profile.currentRank.emoji, radius: 31, onTap: onProfilePhotoTap),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -67,8 +76,8 @@ class RankProfileCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               profile.username,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: contentColor,
                                 fontSize: 20,
                                 fontWeight: FontWeight.w900,
                               ),
@@ -77,7 +86,7 @@ class RankProfileCard extends StatelessWidget {
                           if (onUsernameChanged != null)
                             IconButton(
                               tooltip: 'Edit username',
-                              icon: const Icon(Icons.edit, color: Colors.white, size: 20),
+                              icon: Icon(Icons.edit, color: contentColor, size: 20),
                               onPressed: () => _showEditUsernameDialog(context),
                             ),
                         ],
@@ -85,11 +94,11 @@ class RankProfileCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         'Rank: ${profile.currentRank.name} ${profile.currentRank.emoji}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                        style: TextStyle(color: contentColor, fontWeight: FontWeight.w700),
                       ),
                       Text(
                         'Level: ${profile.level}  •  Current Streak: ${profile.activeStreak} Days',
-                        style: TextStyle(color: Colors.white.withOpacity(0.86), fontWeight: FontWeight.w600),
+                        style: TextStyle(color: contentColor.withOpacity(0.86), fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
@@ -102,11 +111,11 @@ class RankProfileCard extends StatelessWidget {
               children: [
                 Text(
                   '${profile.currentLevelXp}/${profile.xpForNextLevel} XP to Level ${profile.level + 1}',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: contentColor, fontWeight: FontWeight.w700),
                 ),
                 Text(
                   profile.nextRank == null ? 'Top Rank' : 'Next: ${profile.nextRank!.name}',
-                  style: TextStyle(color: Colors.white.withOpacity(0.88), fontWeight: FontWeight.w600),
+                  style: TextStyle(color: contentColor.withOpacity(0.88), fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -116,8 +125,8 @@ class RankProfileCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: profile.levelProgress.clamp(0.0, 1.0).toDouble(),
                 minHeight: 10,
-                color: Colors.white,
-                backgroundColor: Colors.white.withOpacity(0.25),
+                color: contentColor,
+                backgroundColor: contentColor.withOpacity(0.25),
               ),
             ),
             if (!compact) ...[
@@ -126,17 +135,17 @@ class RankProfileCard extends StatelessWidget {
                 onTap == null
                     ? 'Your productivity growth dashboard'
                     : 'Tap your profile to reflect on your day and track your growth journey.',
-                style: TextStyle(color: Colors.white.withOpacity(0.84), fontWeight: FontWeight.w600),
+                style: TextStyle(color: contentColor.withOpacity(0.84), fontWeight: FontWeight.w600),
               ),
               if (onJourneyTap != null) ...[
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: onJourneyTap,
-                  icon: const Icon(Icons.auto_stories, color: Colors.white),
+                  icon: Icon(Icons.auto_stories, color: contentColor),
                   label: const Text('Open Journey Timeline'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: BorderSide(color: Colors.white.withOpacity(0.65)),
+                    foregroundColor: contentColor,
+                    side: BorderSide(color: contentColor.withOpacity(0.65)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                   ),
                 ),
@@ -146,11 +155,11 @@ class RankProfileCard extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _RankMetric(label: 'Completed', value: '${profile.totalTasksCompleted}'),
-                  _RankMetric(label: 'Important', value: '${profile.importantTasksCompleted}'),
-                  _RankMetric(label: 'Active days', value: '${profile.totalActiveDays}'),
-                  _RankMetric(label: 'Score', value: '${profile.productivityScore}%'),
-                  _RankMetric(label: 'Journal', value: '${profile.journalEntries}'),
+                  _RankMetric(label: 'Completed', value: '${profile.totalTasksCompleted}', contentColor: contentColor),
+                  _RankMetric(label: 'Important', value: '${profile.importantTasksCompleted}', contentColor: contentColor),
+                  _RankMetric(label: 'Active days', value: '${profile.totalActiveDays}', contentColor: contentColor),
+                  _RankMetric(label: 'Score', value: '${profile.productivityScore}%', contentColor: contentColor),
+                  _RankMetric(label: 'Journal', value: '${profile.journalEntries}', contentColor: contentColor),
                 ],
               ),
             ],
@@ -191,23 +200,25 @@ class RankProfileCard extends StatelessWidget {
 class _RankMetric extends StatelessWidget {
   final String label;
   final String value;
+  final Color contentColor;
 
-  const _RankMetric({required this.label, required this.value});
+  const _RankMetric({required this.label, required this.value, required this.contentColor});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.16),
+        color: contentColor.withOpacity(0.16),
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: contentColor.withOpacity(0.12)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.82), fontSize: 11)),
+          Text(value, style: TextStyle(color: contentColor, fontWeight: FontWeight.w900, fontSize: 16)),
+          Text(label, style: TextStyle(color: contentColor.withOpacity(0.82), fontSize: 11)),
         ],
       ),
     );
