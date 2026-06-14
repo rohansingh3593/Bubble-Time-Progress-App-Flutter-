@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../widgets/bubble_widget.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/period_progress_bubble_map.dart';
@@ -37,39 +36,12 @@ class _DayViewState extends State<DayView> {
     super.dispose();
   }
 
-  Color _getBubbleColor(int hour, bool isToday, bool isPastDay, List<Task> tasksInHour, int currentHour) {
-    if (isToday && hour == currentHour) return Colors.orange;
-    if (isPastDay || (isToday && hour < currentHour)) return AppColors.passed;
-
-    final completed = tasksInHour.where((task) => task.status == 'Completed').length;
-    if (tasksInHour.isNotEmpty && completed == tasksInHour.length) return AppColors.taskCompleted;
-    if (tasksInHour.isNotEmpty) return AppColors.taskPending;
-    return AppColors.taskNone;
-  }
-
-
-  Future<void> _openHourTaskDialog(int hour) async {
-    final task = await showTaskFormDialog(
-      context,
-      date: _currentDay,
-      initialHourSlot: hour,
-      title: 'Add Task for ${_formatHour(hour)}',
-      actionLabel: 'Save Task',
-    );
-
-    if (task != null) {
-      await widget.hiveService.addTask(_currentDay, task);
-    }
-  }
-
   String _formatHour(int hour) {
     if (hour == 0) return '12 AM';
     if (hour < 12) return '$hour AM';
     if (hour == 12) return '12 PM';
     return '${hour - 12} PM';
   }
-
-
 
   void _openJournalForTask(Task task) {
     Navigator.of(context).push(
@@ -208,9 +180,6 @@ class _DayViewState extends State<DayView> {
     return 'Poor ❌';
   }
 
-
-
-
   DashboardThemeStyle _selectedDashboardTheme() {
     return DashboardThemeStyle.of(
       widget.hiveService.getDashboardTheme(),
@@ -282,41 +251,6 @@ class _DayViewState extends State<DayView> {
             child: Column(
               children: [
                 _dayHourProgressMap(selectedDashboardTheme, now, isToday, isPastDay),
-                const SizedBox(height: 10),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 6,
-                    childAspectRatio: 0.78,
-                    crossAxisSpacing: 8.0,
-                    mainAxisSpacing: 8.0,
-                  ),
-                  itemCount: 24,
-                  itemBuilder: (context, index) {
-                    final hour = index;
-                    final isCurrentHour = isToday && hour == now.hour;
-                    final tasksInHour = todayTasks.where((task) => task.hourSlot == hour).toList();
-
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Expanded(
-                          child: BubbleWidget(
-                            color: _getBubbleColor(hour, isToday, isPastDay, tasksInHour, now.hour),
-                            isHighlighted: isCurrentHour,
-                            onTap: () => _openHourTaskDialog(hour),
-                          ),
-                        ),
-                        const SizedBox(height: 4.0),
-                        Text(
-                          _formatHour(hour),
-                          style: const TextStyle(fontSize: 10.0),
-                        ),
-                      ],
-                    );
-                  },
-                ),
                 const SizedBox(height: 10),
                 _metricsPanel(matrix),
                 const SizedBox(height: 10),
@@ -620,7 +554,6 @@ class _DayViewState extends State<DayView> {
       ),
     );
   }
-
 
   String _taskSubtitle(Task task) {
     final phases = parseTaskPhases(task.description);
