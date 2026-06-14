@@ -690,7 +690,7 @@ class _TaskInstructionSection extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            isRoutine ? 'Configure routine rules here. Update them from the occurrence popup.' : 'Attach rules to the whole task or a phase. Status updates happen during completion.',
+            isRoutine ? 'Create private routine rules here. Update them from the occurrence popup.' : 'Create private rules for the whole task or a phase. Status updates happen during completion.',
             style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 10),
@@ -767,15 +767,6 @@ class _TaskInstructionSection extends StatelessWidget {
                 icon: const Icon(Icons.add),
                 label: const Text('Add Instruction'),
               ),
-              if (!isDraftMode)
-                OutlinedButton.icon(
-                  onPressed: taskName.trim().isEmpty ? null : () async {
-                    await _showLinkInstructionDialog(context, hiveService, taskName, phaseNames);
-                    onChanged();
-                  },
-                  icon: const Icon(Icons.link_rounded),
-                  label: const Text('Link Existing Instruction'),
-                ),
             ],
           ),
         ],
@@ -831,7 +822,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
-        title: Text(initialInstruction == null ? 'Add Instruction' : 'Edit Instruction'),
+        title: Text(initialInstruction == null ? 'Add Task Instruction' : 'Edit Task Instruction'),
         content: SingleChildScrollView(
           child: SizedBox(
             width: 420,
@@ -947,91 +938,6 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
   unitController.dispose();
   if (instruction != null && saveImmediately) await hiveService.saveInstruction(instruction);
   return instruction;
-}
-
-Future<void> _showLinkInstructionDialog(BuildContext context, HiveService hiveService, String taskName, List<String> phaseNames) async {
-  final searchController = TextEditingController();
-  var selectedIds = <String>{};
-  var linkedPhase = '';
-  final selected = await showDialog<Set<String>>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setDialogState) {
-        final query = searchController.text.trim().toLowerCase();
-        final instructions = hiveService.getInstructions().where((instruction) {
-          if (instruction.isLinkedToTask(taskName)) return false;
-          if (query.isEmpty) return true;
-          return instruction.name.toLowerCase().contains(query) || instruction.description.toLowerCase().contains(query);
-        }).toList();
-        return AlertDialog(
-          title: const Text('Link Existing Instruction'),
-          content: SizedBox(
-            width: 460,
-            height: 460,
-            child: Column(
-              children: [
-                TextField(
-                  controller: searchController,
-                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search instructions...'),
-                  onChanged: (_) => setDialogState(() {}),
-                ),
-                if (phaseNames.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: linkedPhase.isEmpty ? '__whole_task__' : linkedPhase,
-                    decoration: const InputDecoration(labelText: 'Attach To'),
-                    items: [
-                      const DropdownMenuItem(value: '__whole_task__', child: Text('Whole Task')),
-                      ...phaseNames.map((phase) => DropdownMenuItem(value: phase, child: Text('Phase: $phase'))),
-                    ],
-                    onChanged: (value) => setDialogState(() => linkedPhase = value == '__whole_task__' ? '' : value ?? ''),
-                  ),
-                ],
-                const SizedBox(height: 10),
-                Expanded(
-                  child: instructions.isEmpty
-                      ? const Center(child: Text('No matching instructions found.'))
-                      : ListView(
-                          children: instructions.map((instruction) {
-                            final checked = selectedIds.contains(instruction.id);
-                            return CheckboxListTile(
-                              value: checked,
-                              title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                              subtitle: Text('+${instruction.bonusPoints} bonus points'),
-                              onChanged: (value) => setDialogState(() {
-                                selectedIds = {...selectedIds};
-                                if (value == true) {
-                                  selectedIds.add(instruction.id);
-                                } else {
-                                  selectedIds.remove(instruction.id);
-                                }
-                              }),
-                            );
-                          }).toList(),
-                        ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(onPressed: selectedIds.isEmpty ? null : () => Navigator.pop(context, selectedIds), child: const Text('Link Selected')),
-          ],
-        );
-      },
-    ),
-  );
-  if (selected == null || selected.isEmpty) return;
-  for (final instruction in hiveService.getInstructions()) {
-    if (!selected.contains(instruction.id)) continue;
-    final linkedTasks = [...instruction.linkedTasks, taskName];
-    await hiveService.saveInstruction(
-      instruction.copyWith(
-        linkedTask: InstructionRule.encodeLinks(linkedTasks),
-        linkedPhase: linkedPhase.trim().isEmpty ? instruction.linkedPhase : linkedPhase.trim(),
-      ),
-    );
-  }
 }
 
 class _ScheduleDraft {
