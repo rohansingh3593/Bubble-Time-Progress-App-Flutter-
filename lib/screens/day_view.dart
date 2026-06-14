@@ -3,6 +3,7 @@ import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/period_progress_bubble_map.dart';
 import '../services/hive_service.dart';
+import '../models/journal_entry.dart';
 import '../models/task_model.dart';
 import '../constants/colors.dart';
 import '../constants/dashboard_themes.dart';
@@ -21,19 +22,11 @@ class DayView extends StatefulWidget {
 class _DayViewState extends State<DayView> {
   late DateTime _currentDay;
   bool _showTodayTasks = true;
-  bool? _happyWithDay;
-  final TextEditingController _reflectionController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _currentDay = DateTime.now();
-  }
-
-  @override
-  void dispose() {
-    _reflectionController.dispose();
-    super.dispose();
   }
 
   String _formatHour(int hour) {
@@ -46,6 +39,12 @@ class _DayViewState extends State<DayView> {
   void _openJournalForTask(Task task) {
     Navigator.of(context).push(
       JournalView.route(hiveService: widget.hiveService, initialDate: task.dueDate),
+    );
+  }
+
+  void _openJournalForDate(DateTime date) {
+    Navigator.of(context).push(
+      JournalView.route(hiveService: widget.hiveService, initialDate: date),
     );
   }
 
@@ -294,6 +293,7 @@ class _DayViewState extends State<DayView> {
           final todayTasks = _tasksForCurrentDay();
           final matrix = _calculateMatrix(todayTasks);
           final selectedDashboardTheme = _selectedDashboardTheme();
+          final journalEntry = widget.hiveService.getJournalEntryForDate(_currentDay);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 110),
@@ -305,7 +305,7 @@ class _DayViewState extends State<DayView> {
                 const SizedBox(height: 10),
                 _todayTasksPanel(todayTasks, selectedDashboardTheme),
                 const SizedBox(height: 10),
-                _reflectionPanel(),
+                _journalReflectionPanel(selectedDashboardTheme, journalEntry),
               ],
             ),
           );
@@ -642,37 +642,63 @@ class _DayViewState extends State<DayView> {
     return '${task.priority} • ${task.status} • ${taskPlannedMinutes(task)} min';
   }
 
-  Widget _reflectionPanel() {
+  Widget _journalReflectionPanel(DashboardThemeStyle theme, JournalEntry? entry) {
+    final hasEntry = entry != null && entry.reflection.trim().isNotEmpty;
     return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(border: Border.all(color: Colors.black38), borderRadius: BorderRadius.circular(12), color: Colors.white),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.surface,
+        border: Border.all(color: theme.primary.withOpacity(0.18)),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: theme.primary.withOpacity(theme.dark ? 0.16 : 0.08), blurRadius: 16, offset: const Offset(0, 8))],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Do I feel happy with my day?', style: TextStyle(fontWeight: FontWeight.w600)),
           Row(
             children: [
-              Expanded(child: RadioListTile<bool>(value: true, groupValue: _happyWithDay, title: const Text('Yes'), dense: true, contentPadding: EdgeInsets.zero, onChanged: (v) => setState(() => _happyWithDay = v))),
-              Expanded(child: RadioListTile<bool>(value: false, groupValue: _happyWithDay, title: const Text('No'), dense: true, contentPadding: EdgeInsets.zero, onChanged: (v) => setState(() => _happyWithDay = v))),
+              Icon(Icons.edit_note_rounded, color: theme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Journal & Reflection',
+                  style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900, fontSize: 18),
+                ),
+              ),
             ],
           ),
-          TextField(
-            controller: _reflectionController,
-            decoration: const InputDecoration(labelText: 'Why do you feel this way? (Optional)', border: OutlineInputBorder()),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Text(
-            _happyWithDay == true
-                ? 'Advice: Keep this momentum and continue important work.'
-                : _happyWithDay == false
-                    ? 'Advice: Reduce time waste and plan focused time blocks.'
-                    : 'Advice: Reflect at end of day for better insights.',
+            hasEntry ? 'Saved mood: ${entry.mood}' : 'No reflection saved for this day yet.',
+            style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Tip: You can log waste reasons (e.g., YouTube) and waste hours in future enhancement.',
-            style: TextStyle(color: Colors.grey[700], fontSize: 12),
+          if (hasEntry) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: (theme.cardTint ?? theme.elevatedSurface).withOpacity(theme.dark ? 0.34 : 0.58),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: theme.primary.withOpacity(0.14)),
+              ),
+              child: Text(
+                entry.reflection,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w700, height: 1.25),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => _openJournalForDate(_currentDay),
+              icon: Icon(hasEntry ? Icons.auto_stories_rounded : Icons.edit_note_rounded),
+              label: Text(hasEntry ? 'Open Journal & Reflection' : 'Write Journal & Reflection'),
+            ),
           ),
         ],
       ),
