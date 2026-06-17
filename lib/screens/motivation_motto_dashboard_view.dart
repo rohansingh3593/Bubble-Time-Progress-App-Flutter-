@@ -63,12 +63,15 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
   Widget _heroCard(MotivationMotto? motto) => Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(color: style.primary.withOpacity(0.14), borderRadius: BorderRadius.circular(22), border: Border.all(color: style.primary.withOpacity(0.24))),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Today’s Motto:', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 8),
-          Text(motto == null ? 'Add your first motivation motto to pin it here.' : '“${motto.quote}”', style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900, height: 1.2)),
-          if (motto != null && motto.author.isNotEmpty) ...[const SizedBox(height: 6), Text('— ${motto.author}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700))],
-        ]),
+        child: motto == null
+            ? Text('Add your first motivation motto to pin it here.', style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900, height: 1.2))
+            : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Today’s Motto:', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 10),
+                _premiumQuoteBlock(motto, quoteFontSize: 24),
+                const SizedBox(height: 8),
+                Text('${motto.category} • ${motto.enabled ? 'Active' : 'Disabled'}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+              ]),
       );
 
   Widget _settingsCard() {
@@ -110,12 +113,12 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
   Widget _mottoCard(MotivationMotto motto) => Card(
         margin: const EdgeInsets.only(bottom: 10),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('“${motto.quote}”', style: TextStyle(color: style.textPrimary, fontSize: 17, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 8),
-            Text('Category: ${motto.category} • Status: ${motto.enabled ? 'Active' : 'Disabled'}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
-            if (motto.description.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(motto.description)),
+            _premiumQuoteBlock(motto, quoteFontSize: 24),
+            const SizedBox(height: 10),
+            Text('${motto.category} • ${motto.enabled ? 'Active' : 'Disabled'}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+            if (motto.title.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(motto.title, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700))),
             Wrap(spacing: 8, children: [
               FilterChip(label: const Text('Favorite'), selected: motto.favorite, onSelected: (_) => widget.hiveService.setMotivationMottoFlag(motto.id, favorite: !motto.favorite)),
               FilterChip(label: const Text('Pinned'), selected: motto.pinned, onSelected: (_) => widget.hiveService.setMotivationMottoFlag(motto.id, pinned: !motto.pinned)),
@@ -130,29 +133,46 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
         ),
       );
 
+  Widget _premiumQuoteBlock(MotivationMotto motto, {double quoteFontSize = 24}) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('❝', style: TextStyle(color: style.primary.withOpacity(0.25), fontSize: 42, fontWeight: FontWeight.w900, height: 0.85)),
+          Text(motto.quote, style: TextStyle(color: style.textPrimary, fontSize: quoteFontSize, fontWeight: FontWeight.w700, height: 1.18)),
+          Align(alignment: Alignment.centerRight, child: Text('❞', style: TextStyle(color: style.primary.withOpacity(0.25), fontSize: 42, fontWeight: FontWeight.w900, height: 0.85))),
+          if (motto.author.trim().isNotEmpty)
+            Text('— ${motto.author.trim()}', style: TextStyle(color: style.textMuted, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700)),
+        ],
+      );
+
   Future<void> _showMottoEditor({MotivationMotto? motto}) async {
+    final title = TextEditingController(text: motto?.title ?? motto?.description ?? '');
     final quote = TextEditingController(text: motto?.quote ?? '');
-    final description = TextEditingController(text: motto?.description ?? '');
-    final mood = TextEditingController(text: motto?.mood ?? '');
     final author = TextEditingController(text: motto?.author ?? '');
+    final mood = TextEditingController(text: motto?.mood ?? '');
     var category = categories.contains(motto?.category) ? motto!.category : 'Focus';
     var enabled = motto?.enabled ?? true;
     await showDialog<void>(context: context, builder: (context) => StatefulBuilder(builder: (context, setDialogState) => AlertDialog(
       title: Text(motto == null ? 'Add Motivation Motto' : 'Edit Motivation Motto'),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: quote, decoration: const InputDecoration(labelText: 'Quote / Motto *')),
-        TextField(controller: description, decoration: const InputDecoration(labelText: 'Description optional')),
+        TextField(controller: title, decoration: const InputDecoration(labelText: 'Title (Optional)')),
+        TextField(controller: quote, maxLines: 3, decoration: const InputDecoration(labelText: 'Quote / Motto *')),
+        TextField(controller: author, decoration: const InputDecoration(labelText: 'Author / Source (Optional)')),
         DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'Category'), items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(), onChanged: (v) => setDialogState(() => category = v ?? category)),
         TextField(controller: mood, decoration: const InputDecoration(labelText: 'Mood')),
-        TextField(controller: author, decoration: const InputDecoration(labelText: 'Author optional')),
         SwitchListTile(value: enabled, title: const Text('Enable'), onChanged: (v) => setDialogState(() => enabled = v)),
       ])),
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), ElevatedButton(onPressed: () async {
         if (quote.text.trim().isEmpty) return;
-        final saved = (motto ?? MotivationMotto.create(quote: quote.text.trim())).copyWith(quote: quote.text.trim(), description: description.text.trim(), category: category, mood: mood.text.trim(), author: author.text.trim(), enabled: enabled);
+        final titleText = title.text.trim();
+        final saved = (motto ?? MotivationMotto.create(quote: quote.text.trim())).copyWith(quote: quote.text.trim(), title: titleText, description: titleText, category: category, mood: mood.text.trim(), author: author.text.trim(), enabled: enabled);
         await widget.hiveService.saveMotivationMotto(saved);
         if (mounted) Navigator.pop(context);
       }, child: const Text('Save'))],
     )));
+    title.dispose();
+    quote.dispose();
+    author.dispose();
+    mood.dispose();
   }
+
 }

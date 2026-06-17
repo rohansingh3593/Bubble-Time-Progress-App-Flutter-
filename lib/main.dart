@@ -296,9 +296,25 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('💬 Motivation'),
-          content: Text('“${current.quote}”', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, height: 1.25)),
+        builder: (context, setDialogState) {
+          final dashboardStyle = DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
+          return AlertDialog(
+          title: const Text('💡 Daily Motivation'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('❝', style: TextStyle(color: dashboardStyle.primary.withOpacity(0.25), fontSize: 42, fontWeight: FontWeight.w900, height: 0.85)),
+              Text(current.quote, style: TextStyle(color: dashboardStyle.textPrimary, fontSize: 24, fontWeight: FontWeight.w700, height: 1.2)),
+              Align(alignment: Alignment.centerRight, child: Text('❞', style: TextStyle(color: dashboardStyle.primary.withOpacity(0.25), fontSize: 42, fontWeight: FontWeight.w900, height: 0.85))),
+              if (current.author.trim().isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text('— ${current.author.trim()}', style: TextStyle(color: dashboardStyle.textMuted, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700)),
+              ],
+              const SizedBox(height: 12),
+              Text('Category: ${current.category}', style: TextStyle(color: dashboardStyle.textMuted, fontWeight: FontWeight.w700)),
+            ],
+          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
             TextButton(
@@ -310,9 +326,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               },
               child: const Text('Next Quote'),
             ),
-            ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('Got it')),
+            ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('Got It')),
           ],
-        ),
+        );
+        },
       ),
     );
   }
