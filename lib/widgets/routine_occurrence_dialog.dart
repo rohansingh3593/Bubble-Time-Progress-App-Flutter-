@@ -365,8 +365,10 @@ AlertDialog _completionSummaryDialog(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                          if (history?.selectionSummary.isNotEmpty == true)
+                            Text('Selected: ${history!.selectionSummary}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                           Text(
-                            '${followed ? 'Followed' : 'Missed'} • +$points bonus points',
+                            'Status: ${followed ? 'Followed ✅' : history?.notApplicable == true ? 'Not Applicable' : 'Missed'} • Bonus: +$points points • +${history?.xpEarned ?? 0} XP',
                             style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w700),
                           ),
                         ],
