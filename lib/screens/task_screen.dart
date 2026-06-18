@@ -313,90 +313,168 @@ class _TaskScreenState extends State<TaskScreen> {
                               borderRadius: BorderRadius.circular(18),
                               side: BorderSide(color: taskColor.withOpacity(isCompleted ? 0.65 : 0.32), width: 1.4),
                             ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              leading: Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: taskColor.withOpacity(isCompleted ? 0.22 : 0.16),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: taskColor.withOpacity(0.45)),
-                                ),
-                                child: Icon(
-                                  isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                                  color: taskColor,
-                                ),
-                              ),
-                              title: Text(
-                                task.task,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  decoration: isCompleted ? TextDecoration.lineThrough : null,
-                                  color: isCompleted ? taskColor.withOpacity(0.72) : AppColors.textPrimary,
-                                ),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (task.description.isNotEmpty)
-                                    Text(task.description),
-                                  const SizedBox(height: 6),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 6,
-                                    children: [
-                                      _TaskColorChip(label: 'Repeat: $repeatType', icon: Icons.repeat_rounded, color: taskColor),
-                                      _TaskColorChip(label: 'Status: ${task.status}', icon: Icons.timeline, color: taskColor),
-                                      _TaskColorChip(label: 'Category: ${task.category}', icon: Icons.category, color: taskColor),
-                                      _TaskColorChip(label: 'Priority: ${task.priority}', icon: Icons.flag, color: taskColor),
-                                      _TaskColorChip(label: 'Instructions: $instructionCount', icon: Icons.rule_rounded, color: taskColor),
-                                      _TaskColorChip(label: 'Goal Linked: ${hasGoalLink ? 'Yes' : 'No'}', icon: Icons.flag_circle_rounded, color: taskColor),
-                                      if (hasProjectPhases) _TaskColorChip(label: 'Project Phases', icon: Icons.account_tree_rounded, color: taskColor),
-                                      if (task.repeatTask && !task.routineEnabled) _TaskColorChip(label: 'Disabled Routine', icon: Icons.pause_circle_rounded, color: Colors.orange),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Due: ${task.dueDate.month}/${task.dueDate.day}/${task.dueDate.year}',
-                                    style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
-                                  ),
-                                  Text('Urgent: ${task.urgent ? 'Yes' : 'No'} • Important: ${task.important ? 'Yes' : 'No'} • ${task.estimatedMinutes} min'),
-                                  if (task.delegatedTo != null && task.delegatedTo!.isNotEmpty)
-                                    Text('Delegate: ${task.delegatedTo}'),
-                                  Text('Repeat Type: $repeatType'),
-                                ],
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: Icon(Icons.edit, color: taskColor),
-                                    onPressed: () => _editTaskByReference(task),
-                                    tooltip: 'Update task',
-                                  ),
-                                  if (!task.repeatTask)
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () => _deleteTaskByReference(task),
-                                      tooltip: 'Delete task',
-                                    )
-                                  else if (isDailyJournalSystemTask(task))
-                                    IconButton(
-                                      icon: Icon(Icons.menu_book_rounded, color: taskColor),
-                                      onPressed: () => _openJournalForTask(task),
-                                      tooltip: 'Open journal',
-                                    )
-                                  else
-                                    IconButton(
-                                      icon: Icon(
-                                        task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline,
-                                        color: task.routineEnabled ? Colors.orange : Colors.green,
-                                      ),
-                                      onPressed: () => widget.hiveService.setRecurringTaskEnabledByReference(task, !task.routineEnabled),
-                                      tooltip: task.routineEnabled ? 'Disable routine' : 'Enable routine',
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final compact = constraints.maxWidth < 430;
+                                  final statusIcon = Container(
+                                    width: compact ? 40 : 44,
+                                    height: compact ? 40 : 44,
+                                    decoration: BoxDecoration(
+                                      color: taskColor.withOpacity(isCompleted ? 0.22 : 0.16),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: taskColor.withOpacity(0.45)),
                                     ),
-                                ],
+                                    child: Icon(
+                                      isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                                      color: taskColor,
+                                    ),
+                                  );
+                                  final titleBlock = Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        task.task,
+                                        maxLines: compact ? 2 : 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                          color: isCompleted ? taskColor.withOpacity(0.72) : AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      if (task.description.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          task.description,
+                                          maxLines: compact ? 2 : 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(color: Colors.black54),
+                                        ),
+                                      ],
+                                    ],
+                                  );
+                                  final actionButtons = Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    alignment: compact ? WrapAlignment.end : WrapAlignment.start,
+                                    children: [
+                                      IconButton(
+                                        icon: Icon(Icons.edit, color: taskColor),
+                                        onPressed: () => _editTaskByReference(task),
+                                        tooltip: 'Update task',
+                                        constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                        padding: EdgeInsets.zero,
+                                      ),
+                                      if (!task.repeatTask)
+                                        IconButton(
+                                          icon: const Icon(Icons.delete, color: Colors.red),
+                                          onPressed: () => _deleteTaskByReference(task),
+                                          tooltip: 'Delete task',
+                                          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                          padding: EdgeInsets.zero,
+                                        )
+                                      else if (isDailyJournalSystemTask(task))
+                                        IconButton(
+                                          icon: Icon(Icons.menu_book_rounded, color: taskColor),
+                                          onPressed: () => _openJournalForTask(task),
+                                          tooltip: 'Open journal',
+                                          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                          padding: EdgeInsets.zero,
+                                        )
+                                      else
+                                        IconButton(
+                                          icon: Icon(
+                                            task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                                            color: task.routineEnabled ? Colors.orange : Colors.green,
+                                          ),
+                                          onPressed: () => widget.hiveService.setRecurringTaskEnabledByReference(task, !task.routineEnabled),
+                                          tooltip: task.routineEnabled ? 'Disable routine' : 'Enable routine',
+                                          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                    ],
+                                  );
+                                  final details = Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 6,
+                                        children: [
+                                          _TaskColorChip(label: 'Repeat: $repeatType', icon: Icons.repeat_rounded, color: taskColor),
+                                          _TaskColorChip(label: 'Status: ${task.status}', icon: Icons.timeline, color: taskColor),
+                                          _TaskColorChip(label: 'Category: ${task.category}', icon: Icons.category, color: taskColor),
+                                          _TaskColorChip(label: 'Priority: ${task.priority}', icon: Icons.flag, color: taskColor),
+                                          _TaskColorChip(label: 'Instructions: $instructionCount', icon: Icons.rule_rounded, color: taskColor),
+                                          _TaskColorChip(label: 'Goal Linked: ${hasGoalLink ? 'Yes' : 'No'}', icon: Icons.flag_circle_rounded, color: taskColor),
+                                          if (hasProjectPhases) _TaskColorChip(label: 'Project Phases', icon: Icons.account_tree_rounded, color: taskColor),
+                                          if (task.repeatTask && !task.routineEnabled) _TaskColorChip(label: 'Disabled Routine', icon: Icons.pause_circle_rounded, color: Colors.orange),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Due: ${task.dueDate.month}/${task.dueDate.day}/${task.dueDate.year}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
+                                      ),
+                                      Text(
+                                        'Urgent: ${task.urgent ? 'Yes' : 'No'} • Important: ${task.important ? 'Yes' : 'No'} • ${task.estimatedMinutes} min',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (task.delegatedTo != null && task.delegatedTo!.isNotEmpty)
+                                        Text('Delegate: ${task.delegatedTo}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      Text('Repeat Type: $repeatType', maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    ],
+                                  );
+
+                                  if (compact) {
+                                    return Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            statusIcon,
+                                            const SizedBox(width: 10),
+                                            Expanded(child: titleBlock),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 10),
+                                        details,
+                                        const SizedBox(height: 8),
+                                        Align(alignment: Alignment.centerRight, child: actionButtons),
+                                      ],
+                                    );
+                                  }
+
+                                  return Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      statusIcon,
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            titleBlock,
+                                            const SizedBox(height: 8),
+                                            details,
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      actionButtons,
+                                    ],
+                                  );
+                                },
                               ),
                             ),
                           );
