@@ -240,6 +240,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       DayView(hiveService: widget.hiveService),
       StreakView(hiveService: widget.hiveService, onGoToDashboard: _goToDashboardTab),
       TaskScreen(date: DateTime.now(), hiveService: widget.hiveService),
+      TaskScreen(date: DateTime.now(), hiveService: widget.hiveService),
+      InstructionDashboardView(hiveService: widget.hiveService),
+      GoalDashboardView(hiveService: widget.hiveService),
+      RewardMoneyHistoryView(hiveService: widget.hiveService),
+      MotivationMottoDashboardView(hiveService: widget.hiveService),
+      ProductivityTimelineView(hiveService: widget.hiveService),
+      ProductivityTimelineView(hiveService: widget.hiveService),
+      DashboardView(hiveService: widget.hiveService, onGoToDashboard: _goToDashboardTab),
     ];
     _scheduleMottoReminder();
   }
@@ -345,6 +353,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
+      _sidebarExpanded = false;
     });
   }
 
@@ -352,10 +361,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     setState(() {
       _selectedIndex = 0;
     });
-  }
-
-  void _openLeftNavRoute(Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (context) => screen));
   }
 
   Widget _buildAnimatedSidebar(DashboardThemeStyle style, RankProfile profile) {
@@ -367,14 +372,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _SidebarNavItem(icon: Icons.today_rounded, label: 'Day', selectedIndex: 4),
       _SidebarNavItem(icon: Icons.local_fire_department_rounded, label: 'Streak', selectedIndex: 5),
       _SidebarNavItem(icon: Icons.task_alt_rounded, label: 'Tasks', selectedIndex: 6),
-      _SidebarNavItem(icon: Icons.repeat_rounded, label: 'Routine', selectedIndex: 4),
-      _SidebarNavItem(icon: Icons.rule_folder_rounded, label: 'Instructions', onTap: () => _openLeftNavRoute(InstructionDashboardView(hiveService: widget.hiveService))),
-      _SidebarNavItem(icon: Icons.flag_circle_rounded, label: 'Goals', onTap: () => _openLeftNavRoute(GoalDashboardView(hiveService: widget.hiveService))),
-      _SidebarNavItem(icon: Icons.account_balance_wallet_rounded, label: 'Money', onTap: () => _openLeftNavRoute(RewardMoneyHistoryView(hiveService: widget.hiveService))),
-      _SidebarNavItem(icon: Icons.lightbulb_rounded, label: 'Motivation', onTap: () => _openLeftNavRoute(MotivationMottoDashboardView(hiveService: widget.hiveService))),
-      _SidebarNavItem(icon: Icons.insert_chart_outlined_rounded, label: 'Progress', selectedIndex: 1),
-      _SidebarNavItem(icon: Icons.analytics_rounded, label: 'Reports', onTap: () => _openLeftNavRoute(ProductivityTimelineView(hiveService: widget.hiveService))),
-      _SidebarNavItem(icon: Icons.settings_rounded, label: 'Settings', selectedIndex: 0),
+      _SidebarNavItem(icon: Icons.repeat_rounded, label: 'Routine', selectedIndex: 7),
+      _SidebarNavItem(icon: Icons.rule_folder_rounded, label: 'Instructions', selectedIndex: 8),
+      _SidebarNavItem(icon: Icons.flag_circle_rounded, label: 'Goals', selectedIndex: 9),
+      _SidebarNavItem(icon: Icons.account_balance_wallet_rounded, label: 'Money', selectedIndex: 10),
+      _SidebarNavItem(icon: Icons.lightbulb_rounded, label: 'Motivation', selectedIndex: 11),
+      _SidebarNavItem(icon: Icons.insert_chart_outlined_rounded, label: 'Progress', selectedIndex: 12),
+      _SidebarNavItem(icon: Icons.analytics_rounded, label: 'Reports', selectedIndex: 13),
+      _SidebarNavItem(icon: Icons.settings_rounded, label: 'Settings', selectedIndex: 14),
     ];
     final expanded = _sidebarExpanded;
     return MouseRegion(
