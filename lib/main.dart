@@ -247,7 +247,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       MotivationMottoDashboardView(hiveService: widget.hiveService),
       ProductivityTimelineView(hiveService: widget.hiveService),
       ProductivityTimelineView(hiveService: widget.hiveService),
-      DashboardView(hiveService: widget.hiveService, onGoToDashboard: _goToDashboardTab),
     ];
     _scheduleMottoReminder();
   }
@@ -379,7 +378,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _SidebarNavItem(icon: Icons.lightbulb_rounded, label: 'Motivation', selectedIndex: 11),
       _SidebarNavItem(icon: Icons.insert_chart_outlined_rounded, label: 'Progress', selectedIndex: 12),
       _SidebarNavItem(icon: Icons.analytics_rounded, label: 'Reports', selectedIndex: 13),
-      _SidebarNavItem(icon: Icons.settings_rounded, label: 'Settings', selectedIndex: 14),
     ];
     final expanded = _sidebarExpanded;
     return MouseRegion(
