@@ -237,16 +237,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                     ),
                   ],
                 );
-                return Row(
-                  children: [
-                    if (wide) _buildModernSidebar(rankProfile),
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(wide ? 20 : 16, 10, 16, 18),
-                        child: content,
-                      ),
-                    ),
-                  ],
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(wide ? 20 : 16, 10, 16, 18),
+                  child: content,
                 );
               },
             ),

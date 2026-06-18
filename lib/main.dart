@@ -12,6 +12,13 @@ import 'screens/month_view.dart';
 import 'screens/week_view.dart';
 import 'screens/day_view.dart';
 import 'screens/streak_view.dart';
+import 'screens/task_screen.dart';
+import 'screens/instruction_dashboard_view.dart';
+import 'screens/goal_dashboard_view.dart';
+import 'screens/reward_money_history_view.dart';
+import 'screens/motivation_motto_dashboard_view.dart';
+import 'screens/productivity_timeline_view.dart';
+import 'models/rank_profile.dart';
 import 'constants/dashboard_themes.dart';
 import 'utils/text_formatters.dart';
 
@@ -216,6 +223,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   Listenable? _mottoStorageListenable;
   String? _mottoReminderSignature;
+  bool _sidebarExpanded = false;
 
   late final List<Widget> _screens;
 
@@ -345,82 +353,162 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     });
   }
 
+  void _openLeftNavRoute(Widget screen) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (context) => screen));
+  }
+
+  Widget _buildAnimatedSidebar(DashboardThemeStyle style, RankProfile profile) {
+    final items = <_SidebarNavItem>[
+      _SidebarNavItem(icon: Icons.dashboard_rounded, label: 'Dashboard', selectedIndex: 0),
+      _SidebarNavItem(icon: Icons.calendar_today_rounded, label: 'Year', selectedIndex: 1),
+      _SidebarNavItem(icon: Icons.calendar_view_month_rounded, label: 'Month', selectedIndex: 2),
+      _SidebarNavItem(icon: Icons.view_week_rounded, label: 'Week', selectedIndex: 3),
+      _SidebarNavItem(icon: Icons.today_rounded, label: 'Day', selectedIndex: 4),
+      _SidebarNavItem(icon: Icons.local_fire_department_rounded, label: 'Streak', selectedIndex: 5),
+      _SidebarNavItem(icon: Icons.task_alt_rounded, label: 'Tasks', onTap: () => _openLeftNavRoute(TaskScreen(date: DateTime.now(), hiveService: widget.hiveService))),
+      _SidebarNavItem(icon: Icons.repeat_rounded, label: 'Routine', selectedIndex: 4),
+      _SidebarNavItem(icon: Icons.rule_folder_rounded, label: 'Instructions', onTap: () => _openLeftNavRoute(InstructionDashboardView(hiveService: widget.hiveService))),
+      _SidebarNavItem(icon: Icons.flag_circle_rounded, label: 'Goals', onTap: () => _openLeftNavRoute(GoalDashboardView(hiveService: widget.hiveService))),
+      _SidebarNavItem(icon: Icons.account_balance_wallet_rounded, label: 'Money', onTap: () => _openLeftNavRoute(RewardMoneyHistoryView(hiveService: widget.hiveService))),
+      _SidebarNavItem(icon: Icons.lightbulb_rounded, label: 'Motivation', onTap: () => _openLeftNavRoute(MotivationMottoDashboardView(hiveService: widget.hiveService))),
+      _SidebarNavItem(icon: Icons.insert_chart_outlined_rounded, label: 'Progress', selectedIndex: 1),
+      _SidebarNavItem(icon: Icons.analytics_rounded, label: 'Reports', onTap: () => _openLeftNavRoute(ProductivityTimelineView(hiveService: widget.hiveService))),
+      _SidebarNavItem(icon: Icons.settings_rounded, label: 'Settings', selectedIndex: 0),
+    ];
+    final expanded = _sidebarExpanded;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _sidebarExpanded = true),
+      onExit: (_) => setState(() => _sidebarExpanded = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _sidebarExpanded = !_sidebarExpanded),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          width: expanded ? 260 : 80,
+          decoration: BoxDecoration(
+            color: style.surface,
+            border: Border(right: BorderSide(color: style.primary.withOpacity(0.12))),
+          ),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(expanded ? 18 : 10, 14, expanded ? 18 : 10, 14),
+              child: Column(
+                crossAxisAlignment: expanded ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+                children: [
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: expanded
+                        ? Column(
+                            key: const ValueKey('expanded_header'),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Momentum', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 26, fontWeight: FontWeight.w900)),
+                              const SizedBox(height: 4),
+                              Text(profile.currentRank.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 16, fontWeight: FontWeight.w800)),
+                            ],
+                          )
+                        : Icon(Icons.dashboard_rounded, key: const ValueKey('collapsed_header'), color: style.primary, size: 30),
+                  ),
+                  const SizedBox(height: 18),
+                  ...items.map((item) => _buildSidebarNavTile(style, item, expanded)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSidebarNavTile(DashboardThemeStyle style, _SidebarNavItem item, bool expanded) {
+    final selected = item.selectedIndex != null && item.selectedIndex == _selectedIndex;
+    final foreground = selected ? style.primary : style.textPrimary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Tooltip(
+        message: expanded ? '' : item.label,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: () {
+            if (item.selectedIndex != null) {
+              _onItemTapped(item.selectedIndex!);
+            } else {
+              item.onTap?.call();
+            }
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            width: expanded ? double.infinity : 56,
+            padding: EdgeInsets.symmetric(horizontal: expanded ? 14 : 0, vertical: 12),
+            decoration: BoxDecoration(
+              color: selected ? style.primary.withOpacity(0.14) : Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisAlignment: expanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(item.icon, color: foreground, size: 22),
+                if (expanded) ...[
+                  const SizedBox(width: 14),
+                  Expanded(child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground, fontWeight: selected ? FontWeight.w900 : FontWeight.w800, fontSize: 16))),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
       valueListenable: widget.hiveService.getBoxListenable(),
       builder: (context, box, _) {
         final dashboardStyle = DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
-        final destinations = const <NavigationRailDestination>[
-          NavigationRailDestination(
-            icon: Icon(Icons.dashboard),
-            selectedIcon: Icon(Icons.dashboard_rounded),
-            label: Text('Home'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.calendar_today),
-            selectedIcon: Icon(Icons.calendar_today_rounded),
-            label: Text('Year'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.calendar_view_month),
-            selectedIcon: Icon(Icons.calendar_view_month_rounded),
-            label: Text('Month'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.view_week),
-            selectedIcon: Icon(Icons.view_week_rounded),
-            label: Text('Week'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.today),
-            selectedIcon: Icon(Icons.today_rounded),
-            label: Text('Day'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.local_fire_department),
-            selectedIcon: Icon(Icons.local_fire_department_rounded),
-            label: Text('Streak'),
-          ),
-        ];
+        final allByDate = widget.hiveService.getAllTasksByDate();
+        final profile = RankProfile.calculate(
+          username: widget.hiveService.getUsername(),
+          allTasksByDate: allByDate,
+          journalEntries: widget.hiveService.getAllJournalEntries(),
+          lifetimeStats: widget.hiveService.getLifetimeProductivityStats(),
+        );
+        final content = IndexedStack(
+          index: _selectedIndex,
+          children: _screens.asMap().entries.map((entry) {
+            return HeroMode(
+              enabled: entry.key == _selectedIndex,
+              child: entry.value,
+            );
+          }).toList(),
+        );
         return Scaffold(
           body: Row(
             children: [
-              SafeArea(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: dashboardStyle.surface,
-                    border: Border(right: BorderSide(color: dashboardStyle.primary.withOpacity(0.12))),
-                  ),
-                  child: NavigationRail(
-                    backgroundColor: dashboardStyle.surface,
-                    selectedIndex: _selectedIndex,
-                    onDestinationSelected: _onItemTapped,
-                    labelType: NavigationRailLabelType.all,
-                    minWidth: 86,
-                    selectedIconTheme: IconThemeData(color: dashboardStyle.primary),
-                    unselectedIconTheme: IconThemeData(color: dashboardStyle.textMuted),
-                    selectedLabelTextStyle: TextStyle(color: dashboardStyle.primary, fontWeight: FontWeight.w900, fontSize: 12),
-                    unselectedLabelTextStyle: TextStyle(color: dashboardStyle.textMuted, fontWeight: FontWeight.w700, fontSize: 12),
-                    destinations: destinations,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: IndexedStack(
-                  index: _selectedIndex,
-                  children: _screens.asMap().entries.map((entry) {
-                    return HeroMode(
-                      enabled: entry.key == _selectedIndex,
-                      child: entry.value,
-                    );
-                  }).toList(),
-                ),
-              ),
+              _buildAnimatedSidebar(dashboardStyle, profile),
+              Expanded(child: content),
             ],
           ),
         );
       },
     );
   }
+}
+
+
+class _SidebarNavItem {
+  final IconData icon;
+  final String label;
+  final int? selectedIndex;
+  final VoidCallback? onTap;
+
+  const _SidebarNavItem({
+    required this.icon,
+    required this.label,
+    this.selectedIndex,
+    this.onTap,
+  });
 }
