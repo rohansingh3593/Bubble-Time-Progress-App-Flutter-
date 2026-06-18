@@ -426,43 +426,40 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final foreground = selected ? style.primary : style.textPrimary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Tooltip(
-        message: expanded ? '' : item.label,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: () {
-            if (item.selectedIndex != null) {
-              _onItemTapped(item.selectedIndex!);
-            } else {
-              item.onTap?.call();
-            }
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOutCubic,
-            width: expanded ? double.infinity : 56,
-            padding: EdgeInsets.symmetric(horizontal: expanded ? 14 : 0, vertical: 12),
-            decoration: BoxDecoration(
-              color: selected ? style.primary.withOpacity(0.14) : Colors.transparent,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final showLabel = expanded && constraints.maxWidth >= 96;
-                final icon = Icon(item.icon, color: foreground, size: 22);
-                if (!showLabel) {
-                  return Center(child: FittedBox(fit: BoxFit.scaleDown, child: icon));
-                }
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    icon,
-                    const SizedBox(width: 14),
-                    Expanded(child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground, fontWeight: selected ? FontWeight.w900 : FontWeight.w800, fontSize: 16))),
-                  ],
-                );
-              },
-            ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () {
+          if (item.selectedIndex != null) {
+            _onItemTapped(item.selectedIndex!);
+          } else {
+            item.onTap?.call();
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+          width: expanded ? double.infinity : 56,
+          padding: EdgeInsets.symmetric(horizontal: expanded ? 14 : 0, vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? style.primary.withOpacity(0.14) : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final showLabel = expanded && constraints.maxWidth >= 96;
+              final icon = Icon(item.icon, color: foreground, size: 22);
+              if (!showLabel) {
+                return Semantics(label: item.label, button: true, child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: icon)));
+              }
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  icon,
+                  const SizedBox(width: 14),
+                  Expanded(child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground, fontWeight: selected ? FontWeight.w900 : FontWeight.w800, fontSize: 16))),
+                ],
+              );
+            },
           ),
         ),
       ),
