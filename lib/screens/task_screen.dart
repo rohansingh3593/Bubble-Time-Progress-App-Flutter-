@@ -484,10 +484,13 @@ class _TaskScreenState extends State<TaskScreen> {
               const SizedBox(height: 16),
 
               // Add task button
-              ElevatedButton.icon(
-                onPressed: _addTaskWithDialog,
-                icon: const Icon(Icons.add),
-                label: const Text('Add Task'),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _addTaskWithDialog,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Task'),
+                ),
               ),
             ],
           ),

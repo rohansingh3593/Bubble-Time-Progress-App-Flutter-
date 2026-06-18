@@ -389,14 +389,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
-          width: expanded ? 260 : 80,
+          width: expanded ? 220 : 64,
           decoration: BoxDecoration(
             color: style.surface,
             border: Border(right: BorderSide(color: style.primary.withOpacity(0.12))),
           ),
           child: SafeArea(
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(expanded ? 18 : 10, 14, expanded ? 18 : 10, 14),
+              padding: EdgeInsets.fromLTRB(expanded ? 14 : 8, 14, expanded ? 14 : 8, 14),
               child: Column(
                 crossAxisAlignment: expanded ? CrossAxisAlignment.start : CrossAxisAlignment.center,
                 children: [
@@ -404,13 +404,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Momentum', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 26, fontWeight: FontWeight.w900)),
+                        Text('Momentum', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
                         const SizedBox(height: 4),
-                        Text(profile.currentRank.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 16, fontWeight: FontWeight.w800)),
+                        Text(profile.currentRank.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 14, fontWeight: FontWeight.w800)),
                       ],
                     )
                   else
-                    Icon(Icons.dashboard_rounded, color: style.primary, size: 30),
+                    Icon(Icons.dashboard_rounded, color: style.primary, size: 26),
                   const SizedBox(height: 18),
                   ...items.map((item) => _buildSidebarNavTile(style, item, expanded)),
                 ],
@@ -437,8 +437,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           }
         },
         child: Container(
-          width: expanded ? 224 : 56,
-          padding: EdgeInsets.symmetric(horizontal: expanded ? 14 : 0, vertical: 12),
+          width: expanded ? 192 : 48,
+          padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0, vertical: 12),
           decoration: BoxDecoration(
             color: selected ? style.primary.withOpacity(0.14) : Colors.transparent,
             borderRadius: BorderRadius.circular(999),
@@ -446,7 +446,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final showLabel = expanded && constraints.maxWidth >= 96;
-              final icon = Icon(item.icon, color: foreground, size: 22);
+              final icon = Icon(item.icon, color: foreground, size: 21);
               if (!showLabel) {
                 return Semantics(label: item.label, button: true, child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: icon)));
               }
@@ -454,8 +454,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   icon,
-                  const SizedBox(width: 14),
-                  Expanded(child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground, fontWeight: selected ? FontWeight.w900 : FontWeight.w800, fontSize: 16))),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground, fontWeight: selected ? FontWeight.w900 : FontWeight.w800, fontSize: 15))),
                 ],
               );
             },
@@ -491,7 +491,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           body: Stack(
             children: [
               Padding(
-                padding: const EdgeInsets.only(left: 80),
+                padding: const EdgeInsets.only(left: 64),
                 child: content,
               ),
               Positioned(

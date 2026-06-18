@@ -347,6 +347,8 @@ class _YearViewState extends State<YearView> {
         final availableWidth = constraints.maxWidth - 28;
         final bubbleSize = ((availableWidth - (spacing * (columns - 1))) / columns).clamp(13.0, 20.0).toDouble();
         final fontSize = bubbleSize <= 14 ? 6.5 : bubbleSize <= 16 ? 7.2 : 8.0;
+        final compactMonthLabels = constraints.maxWidth < 520;
+        const shortMonthLabels = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -397,13 +399,18 @@ class _YearViewState extends State<YearView> {
                               borderRadius: BorderRadius.circular(999),
                               boxShadow: isRunningMonth ? [BoxShadow(color: theme.primary.withOpacity(0.24), blurRadius: 14, spreadRadius: 1)] : null,
                             ),
-                            child: Text(
-                              monthLabels[index],
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: isRunningMonth ? theme.primary : theme.textMuted,
-                                fontSize: isRunningMonth ? 11 : 10,
-                                fontWeight: isRunningMonth ? FontWeight.w900 : FontWeight.w500,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                compactMonthLabels ? shortMonthLabels[index] : monthLabels[index],
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: isRunningMonth ? theme.primary : theme.textMuted,
+                                  fontSize: isRunningMonth ? 11 : 10,
+                                  fontWeight: isRunningMonth ? FontWeight.w900 : FontWeight.w500,
+                                ),
                               ),
                             ),
                           ),
