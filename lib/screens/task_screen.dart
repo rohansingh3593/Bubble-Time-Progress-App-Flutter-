@@ -4,6 +4,7 @@ import '../services/hive_service.dart';
 import '../models/task_model.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
+import '../utils/text_formatters.dart';
 import 'journal_view.dart';
 
 class TaskScreen extends StatefulWidget {
@@ -21,6 +22,10 @@ class TaskScreen extends StatefulWidget {
 }
 
 class _TaskScreenState extends State<TaskScreen> {
+  String _selectedTaskFilter = 'All';
+
+  static const List<String> _taskFilters = ['All', 'Daily', 'Weekly', 'Monthly', 'Yearly', 'Non-Routine', 'Completed', 'Disabled'];
+
   /// Adds a new task with full details dialog.
   /// No setState needed - reactive ValueListenableBuilder will trigger rebuild.
   Future<void> _addTaskWithDialog() async {
@@ -122,13 +127,120 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
+  Future<void> _editTaskByReference(Task currentTask) async {
+    if (isRoutineTask(currentTask) || hasTaskLinkedInstructions(widget.hiveService, currentTask)) {
+      final action = await showRoutineOccurrenceDialog(context: context, task: currentTask, hiveService: widget.hiveService);
+      if (action == null || action == RoutineOccurrenceAction.close) return;
+
+      switch (action) {
+        case RoutineOccurrenceAction.openJournal:
+          _openJournalForTask(currentTask);
+          return;
+        case RoutineOccurrenceAction.disableRoutine:
+          await widget.hiveService.setRecurringTaskEnabledByReference(currentTask, false);
+          return;
+        case RoutineOccurrenceAction.editDetails:
+          final edited = await showTaskFormDialog(
+            context,
+            date: currentTask.dueDate,
+            initialTask: currentTask,
+            title: isRoutineTask(currentTask) ? 'Edit Routine Details' : 'View Task Details',
+            actionLabel: isRoutineTask(currentTask) ? 'Save Routine' : 'Save Task',
+          );
+          if (edited != null) {
+            if (isRoutineTask(currentTask)) {
+              await widget.hiveService.updateRecurringTaskSeriesByReference(currentTask, edited.copyWith(repeatTask: true));
+            } else {
+              await widget.hiveService.updateTaskByReference(currentTask, edited);
+            }
+          }
+          return;
+        case RoutineOccurrenceAction.missOccurrence:
+          await widget.hiveService.updateTaskByReference(currentTask, currentTask.copyWith(done: false, status: 'Missed'));
+          return;
+        case RoutineOccurrenceAction.completeOccurrence:
+          await widget.hiveService.updateTaskByReference(currentTask, currentTask.copyWith(done: true, status: 'Completed'));
+          return;
+        case RoutineOccurrenceAction.close:
+          return;
+      }
+    }
+
+    final updated = await showTaskFormDialog(
+      context,
+      date: currentTask.dueDate,
+      initialTask: currentTask,
+      title: 'Update Task',
+      actionLabel: 'Save Task',
+      onDelete: () => widget.hiveService.deleteTaskByReference(currentTask),
+    );
+    if (updated != null) {
+      await widget.hiveService.updateTaskByReference(currentTask, updated);
+    }
+  }
+
+  Future<void> _deleteTaskByReference(Task task) async {
+    if (task.repeatTask) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Task'),
+        content: const Text('Are you sure you want to delete this task?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await widget.hiveService.deleteTaskByReference(task);
+    }
+  }
+
+  String _repeatTypeFor(Task task) {
+    if (!task.repeatTask) return 'One-Time';
+    final frequency = task.repeatFrequency?.trim();
+    if (frequency == null || frequency.isEmpty) return 'Daily';
+    return frequency[0].toUpperCase() + frequency.substring(1).toLowerCase();
+  }
+
+  int _instructionCountFor(Task task) {
+    return widget.hiveService.getTaskLinkedInstructions().where((instruction) => instruction.enabled && instruction.isLinkedToTask(task.task)).length;
+  }
+
+  bool _hasProjectPhases(Task task) => parseTaskPhases(task.description).isNotEmpty;
+
+  bool _matchesTaskFilter(Task task) {
+    final repeatType = _repeatTypeFor(task);
+    switch (_selectedTaskFilter) {
+      case 'Daily':
+      case 'Weekly':
+      case 'Monthly':
+      case 'Yearly':
+        return task.repeatTask && repeatType == _selectedTaskFilter;
+      case 'Non-Routine':
+        return !task.repeatTask;
+      case 'Completed':
+        return task.done || task.status.trim().toLowerCase() == 'completed';
+      case 'Disabled':
+        return task.repeatTask && !task.routineEnabled;
+      default:
+        return true;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
       valueListenable: widget.hiveService.getBoxListenable(),
       builder: (context, box, _) {
-        final allTasks = widget.hiveService.getTasksForDate(widget.date);
-        final taskEntries = allTasks.asMap().entries.where((entry) => !isDailyJournalSystemTask(entry.value)).toList();
+        final allTaskEntries = widget.hiveService
+            .getAllTasksByDate()
+            .entries
+            .expand((entry) => entry.value.map((task) => _TaskListEntry(date: entry.key, task: task)))
+            .where((entry) => !isDailyJournalSystemTask(entry.task))
+            .toList();
+        final taskEntries = allTaskEntries.where((entry) => _matchesTaskFilter(entry.task)).toList();
 
         return Container(
           padding: const EdgeInsets.all(16.0),
@@ -146,10 +258,27 @@ class _TaskScreenState extends State<TaskScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Date header
+              // Master task list header and filters
               Text(
-                '${widget.date.month}/${widget.date.day}/${widget.date.year}',
+                'Master Tasks • ${taskEntries.length}/${allTaskEntries.length}',
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _taskFilters.map((filter) {
+                    final selected = filter == _selectedTaskFilter;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        selected: selected,
+                        label: Text(filter),
+                        onSelected: (_) => setState(() => _selectedTaskFilter = filter),
+                      ),
+                    );
+                  }).toList(),
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -158,7 +287,7 @@ class _TaskScreenState extends State<TaskScreen> {
                 child: taskEntries.isEmpty
                     ? const Center(
                         child: Text(
-                          'No non-journal tasks for this date',
+                          'No tasks match this filter',
                           style: TextStyle(color: Colors.grey),
                         ),
                       )
@@ -167,10 +296,13 @@ class _TaskScreenState extends State<TaskScreen> {
                         itemCount: taskEntries.length,
                         itemBuilder: (context, index) {
                           final taskEntry = taskEntries[index];
-                          final originalIndex = taskEntry.key;
-                          final task = taskEntry.value;
+                          final task = taskEntry.task;
                           final taskColor = Color(task.colorValue);
                           final isCompleted = task.done || task.status == 'Completed';
+                          final repeatType = _repeatTypeFor(task);
+                          final instructionCount = _instructionCountFor(task);
+                          final hasGoalLink = task.category.toLowerCase().contains('goal') || task.description.toLowerCase().contains('goal');
+                          final hasProjectPhases = _hasProjectPhases(task);
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 10),
@@ -214,9 +346,14 @@ class _TaskScreenState extends State<TaskScreen> {
                                     spacing: 6,
                                     runSpacing: 6,
                                     children: [
-                                      _TaskColorChip(label: task.priority, icon: Icons.flag, color: taskColor),
-                                      _TaskColorChip(label: task.status, icon: Icons.timeline, color: taskColor),
-                                      _TaskColorChip(label: task.category, icon: Icons.category, color: taskColor),
+                                      _TaskColorChip(label: 'Repeat: $repeatType', icon: Icons.repeat_rounded, color: taskColor),
+                                      _TaskColorChip(label: 'Status: ${task.status}', icon: Icons.timeline, color: taskColor),
+                                      _TaskColorChip(label: 'Category: ${task.category}', icon: Icons.category, color: taskColor),
+                                      _TaskColorChip(label: 'Priority: ${task.priority}', icon: Icons.flag, color: taskColor),
+                                      _TaskColorChip(label: 'Instructions: $instructionCount', icon: Icons.rule_rounded, color: taskColor),
+                                      _TaskColorChip(label: 'Goal Linked: ${hasGoalLink ? 'Yes' : 'No'}', icon: Icons.flag_circle_rounded, color: taskColor),
+                                      if (hasProjectPhases) _TaskColorChip(label: 'Project Phases', icon: Icons.account_tree_rounded, color: taskColor),
+                                      if (task.repeatTask && !task.routineEnabled) _TaskColorChip(label: 'Disabled Routine', icon: Icons.pause_circle_rounded, color: Colors.orange),
                                     ],
                                   ),
                                   const SizedBox(height: 6),
@@ -227,8 +364,7 @@ class _TaskScreenState extends State<TaskScreen> {
                                   Text('Urgent: ${task.urgent ? 'Yes' : 'No'} • Important: ${task.important ? 'Yes' : 'No'} • ${task.estimatedMinutes} min'),
                                   if (task.delegatedTo != null && task.delegatedTo!.isNotEmpty)
                                     Text('Delegate: ${task.delegatedTo}'),
-                                  if (task.repeatTask)
-                                    Text('Repeats: ${task.repeatFrequency ?? 'Daily'}'),
+                                  Text('Repeat Type: $repeatType'),
                                 ],
                               ),
                               trailing: Row(
@@ -236,13 +372,13 @@ class _TaskScreenState extends State<TaskScreen> {
                                 children: [
                                   IconButton(
                                     icon: Icon(Icons.edit, color: taskColor),
-                                    onPressed: () => _editTask(originalIndex),
+                                    onPressed: () => _editTaskByReference(task),
                                     tooltip: 'Update task',
                                   ),
                                   if (!task.repeatTask)
                                     IconButton(
                                       icon: const Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () => _deleteTask(originalIndex),
+                                      onPressed: () => _deleteTaskByReference(task),
                                       tooltip: 'Delete task',
                                     )
                                   else if (isDailyJournalSystemTask(task))
@@ -309,4 +445,12 @@ class _TaskColorChip extends StatelessWidget {
       ),
     );
   }
+}
+
+
+class _TaskListEntry {
+  final DateTime date;
+  final Task task;
+
+  const _TaskListEntry({required this.date, required this.task});
 }
