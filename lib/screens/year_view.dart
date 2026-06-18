@@ -23,6 +23,7 @@ class _YearViewState extends State<YearView> {
   late DateTime _currentYear;
   final ScrollController _yearSelectorController = ScrollController();
   bool _showYearlyTasks = true;
+  int? _highlightedProgressMonth;
 
   @override
   void initState() {
@@ -294,11 +295,38 @@ class _YearViewState extends State<YearView> {
     final todayDayOfYear = isCurrentYear ? today.difference(yearStart).inDays + 1 : -1;
     final selectedYearIsPast = _currentYear.year < today.year;
     final selectedYearIsFuture = _currentYear.year > today.year;
+    final currentMonth = isCurrentYear ? today.month : null;
     final passedDays = selectedYearIsPast ? totalDays : selectedYearIsFuture ? 0 : (todayDayOfYear - 1).clamp(0, totalDays).toInt();
     final remainingDays = selectedYearIsPast ? 0 : selectedYearIsFuture ? totalDays : (totalDays - todayDayOfYear).clamp(0, totalDays).toInt();
     final progress = totalDays == 0 ? 0.0 : (passedDays / totalDays).clamp(0.0, 1.0);
     final progressLabel = '${(progress * 100).round()}%';
     const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    int monthStartDay(int month) => DateTime(_currentYear.year, month, 1).difference(yearStart).inDays + 1;
+    int monthEndDay(int month) => DateTime(_currentYear.year, month + 1, 1).difference(yearStart).inDays;
+
+    bool isHighlightedMonthDay(int dayOfYear) {
+      final highlighted = _highlightedProgressMonth;
+      if (highlighted == null) return false;
+      return dayOfYear >= monthStartDay(highlighted) && dayOfYear <= monthEndDay(highlighted);
+    }
+
+    void showCurrentMonthSummary() {
+      final month = currentMonth;
+      if (month == null) return;
+      final daysInMonth = DateTime(today.year, month + 1, 0).day;
+      final monthPassed = (today.day - 1).clamp(0, daysInMonth).toInt();
+      final monthRemaining = (daysInMonth - today.day).clamp(0, daysInMonth).toInt();
+      final monthProgress = daysInMonth == 0 ? 0 : ((monthPassed / daysInMonth) * 100).round();
+      setState(() => _highlightedProgressMonth = month);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$monthPassed Days Passed • $monthRemaining Days Remaining • $monthProgress% Complete')),
+      );
+      Future<void>.delayed(const Duration(seconds: 2), () {
+        if (!mounted || _highlightedProgressMonth != month) return;
+        setState(() => _highlightedProgressMonth = null);
+      });
+    }
 
     Color dayColor(int dayOfYear) {
       if (isCurrentYear && dayOfYear == todayDayOfYear) return theme.accent;
@@ -347,11 +375,43 @@ class _YearViewState extends State<YearView> {
               ),
               const SizedBox(height: 12),
               Row(
-                children: monthLabels
-                    .map((label) => Expanded(
-                          child: Text(label, textAlign: TextAlign.center, style: TextStyle(color: theme.textMuted, fontSize: 10, fontWeight: FontWeight.w700)),
-                        ))
-                    .toList(),
+                children: List.generate(monthLabels.length, (index) {
+                  final month = index + 1;
+                  final isRunningMonth = currentMonth == month;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 1),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: isRunningMonth ? showCurrentMonthSummary : null,
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween<double>(begin: 0.96, end: isRunningMonth ? 1.04 : 1.0),
+                          duration: const Duration(milliseconds: 900),
+                          curve: Curves.easeInOut,
+                          builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 260),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isRunningMonth ? theme.primary.withOpacity(0.14) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(999),
+                              boxShadow: isRunningMonth ? [BoxShadow(color: theme.primary.withOpacity(0.24), blurRadius: 14, spreadRadius: 1)] : null,
+                            ),
+                            child: Text(
+                              monthLabels[index],
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: isRunningMonth ? theme.primary : theme.textMuted,
+                                fontSize: isRunningMonth ? 11 : 10,
+                                fontWeight: isRunningMonth ? FontWeight.w900 : FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -361,6 +421,7 @@ class _YearViewState extends State<YearView> {
                   final dayOfYear = index + 1;
                   final date = yearStart.add(Duration(days: index));
                   final isToday = isCurrentYear && dayOfYear == todayDayOfYear;
+                  final highlightedMonthDay = isHighlightedMonthDay(dayOfYear);
                   return Tooltip(
                     message: '${date.day}/${date.month}/${date.year} • Day $dayOfYear',
                     child: AnimatedContainer(
@@ -368,10 +429,16 @@ class _YearViewState extends State<YearView> {
                       width: bubbleSize,
                       height: bubbleSize,
                       alignment: Alignment.center,
+                      transform: Matrix4.identity()..scale(isToday ? 1.12 : 1.0),
                       decoration: BoxDecoration(
                         color: dayColor(dayOfYear),
                         shape: BoxShape.circle,
-                        boxShadow: isToday ? [BoxShadow(color: theme.accent.withOpacity(0.58), blurRadius: 10, spreadRadius: 1.5)] : null,
+                        border: isToday ? Border.all(color: theme.surface, width: 1.5) : highlightedMonthDay ? Border.all(color: theme.accent.withOpacity(0.75), width: 1) : null,
+                        boxShadow: isToday
+                            ? [BoxShadow(color: theme.accent.withOpacity(0.65), blurRadius: 12, spreadRadius: 2)]
+                            : highlightedMonthDay
+                                ? [BoxShadow(color: theme.accent.withOpacity(0.24), blurRadius: 8, spreadRadius: 0.5)]
+                                : null,
                       ),
                       child: Text(
                         '$dayOfYear',
