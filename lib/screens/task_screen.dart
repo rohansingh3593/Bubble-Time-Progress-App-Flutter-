@@ -228,7 +228,7 @@ class _TaskScreenState extends State<TaskScreen> {
                                     Text('Repeats: ${task.repeatFrequency ?? 'Daily'}'),
                                 ],
                               ),
-                              trailing: Column(
+                              trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
