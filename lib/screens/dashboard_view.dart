@@ -310,7 +310,20 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(color: style.surface.withOpacity(0.78), borderRadius: BorderRadius.circular(999), border: Border.all(color: style.primary.withOpacity(0.14))),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 15, color: style.primary), const SizedBox(width: 5), Text(label, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12))]),
+      child: LayoutBuilder(
+        builder: (context, constraints) => FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: style.primary),
+              const SizedBox(width: 5),
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
