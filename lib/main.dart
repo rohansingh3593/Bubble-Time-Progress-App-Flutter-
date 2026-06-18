@@ -239,6 +239,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       WeekView(hiveService: widget.hiveService),
       DayView(hiveService: widget.hiveService),
       StreakView(hiveService: widget.hiveService, onGoToDashboard: _goToDashboardTab),
+      TaskScreen(date: DateTime.now(), hiveService: widget.hiveService),
     ];
     _scheduleMottoReminder();
   }
@@ -365,7 +366,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _SidebarNavItem(icon: Icons.view_week_rounded, label: 'Week', selectedIndex: 3),
       _SidebarNavItem(icon: Icons.today_rounded, label: 'Day', selectedIndex: 4),
       _SidebarNavItem(icon: Icons.local_fire_department_rounded, label: 'Streak', selectedIndex: 5),
-      _SidebarNavItem(icon: Icons.task_alt_rounded, label: 'Tasks', onTap: () => _openLeftNavRoute(TaskScreen(date: DateTime.now(), hiveService: widget.hiveService))),
+      _SidebarNavItem(icon: Icons.task_alt_rounded, label: 'Tasks', selectedIndex: 6),
       _SidebarNavItem(icon: Icons.repeat_rounded, label: 'Routine', selectedIndex: 4),
       _SidebarNavItem(icon: Icons.rule_folder_rounded, label: 'Instructions', onTap: () => _openLeftNavRoute(InstructionDashboardView(hiveService: widget.hiveService))),
       _SidebarNavItem(icon: Icons.flag_circle_rounded, label: 'Goals', onTap: () => _openLeftNavRoute(GoalDashboardView(hiveService: widget.hiveService))),
