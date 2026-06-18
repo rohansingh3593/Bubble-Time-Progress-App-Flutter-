@@ -165,6 +165,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                           _dashboardTabList([
                             _buildHeroCard(rankProfile, summary),
                             _buildQuickStatsRibbon(summary, scopedTaskCounts, rankProfile),
+                            _buildProgressOverviewStrip(timeProgress),
                             _buildMottoHeroCard(),
                             _summaryHeader(summary),
                             _todaysProductivitySection(todayProductivityStats, todayTaskRows),
@@ -172,9 +173,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             _instructionProductivitySection(today),
                           ]),
                           _dashboardTabList([
-                            _buildProgressOverviewStrip(timeProgress),
-                            _yearProgressPanel(yearProgress),
-                            _timeProgressSection(timeProgress),
+                            _buildFeatureLaunchCard(
+                              icon: Icons.insert_chart_outlined_rounded,
+                              title: 'Reports & Analytics',
+                              subtitle: 'Progress now lives in its own sidebar page, keeping this tab focused on task analytics and productivity reports.',
+                              actionLabel: 'Open Progress',
+                              onTap: _openProgressScreen,
+                            ),
                             _productivityAnalyticsCenter(
                               tasks: analyticsTasks,
                               statusCounts: statusCounts,
@@ -346,12 +351,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final items = [
       (Icons.home_rounded, 'Dashboard', widget.onGoToDashboard ?? () {}),
       (Icons.task_alt_rounded, 'Tasks', _openProductivityTimeline),
-      (Icons.repeat_rounded, 'Routines', _openProductivityTimeline),
+      (Icons.repeat_rounded, 'Routine', _openProductivityTimeline),
       (Icons.rule_folder_rounded, 'Instructions', _openInstructionDashboard),
       (Icons.flag_circle_rounded, 'Goals', _openGoalDashboard),
-      (Icons.account_balance_wallet_rounded, 'Rewards', _openRewardMoneyHistory),
-      (Icons.menu_book_rounded, 'Journal', _openJournal),
-      (Icons.analytics_rounded, 'Analytics', _openProductivityTimeline),
+      (Icons.account_balance_wallet_rounded, 'Money', _openRewardMoneyHistory),
+      (Icons.lightbulb_rounded, 'Motivation', _openMotivationMottoDashboard),
+      (Icons.insert_chart_outlined_rounded, 'Progress', _openProgressScreen),
+      (Icons.analytics_rounded, 'Reports', _openProductivityTimeline),
       (Icons.settings_rounded, 'Settings', _openSettingsPanel),
     ];
     return Container(
@@ -559,6 +565,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ProductivityTimelineView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+  void _openProgressScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => _buildProgressScreen(),
       ),
     );
   }
@@ -2755,6 +2769,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   opacity: t,
                   child: Transform.translate(offset: Offset(0, 18 * (1 - t)), child: child),
                 ),
+                child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: _openProgressScreen,
                 child: Container(
                 width: 145,
                 margin: const EdgeInsets.only(right: 10),
@@ -2786,6 +2803,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   Text('$remaining left', style: TextStyle(color: style.textMuted)),
                 ]),
               ),
+              ),
               );
             }).toList(),
           ),
@@ -2794,6 +2812,238 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
+
+
+  Widget _buildProgressScreen() {
+    final style = _dashboardStyle();
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final yearProgress = _buildYearProgress(todayStart);
+    final timeProgress = _buildTimeProgress(now);
+    return Scaffold(
+      backgroundColor: style.background,
+      appBar: AppBar(
+        title: const Text('Progress'),
+        backgroundColor: style.surface,
+        foregroundColor: style.textPrimary,
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: DefaultTabController(
+          length: 4,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: style.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: style.primary.withOpacity(0.14)),
+                  ),
+                  child: TabBar(
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    labelColor: AppThemeColors.readableTextOn(style.primary, style),
+                    unselectedLabelColor: style.textMuted,
+                    indicator: BoxDecoration(color: style.primary, borderRadius: BorderRadius.circular(14)),
+                    dividerColor: Colors.transparent,
+                    tabs: const [
+                      Tab(text: 'Year'),
+                      Tab(text: 'Month'),
+                      Tab(text: 'Week'),
+                      Tab(text: 'Time'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _progressTabList([_yearProgressDetailCard(yearProgress, todayStart)]),
+                      _progressTabList([_monthProgressDetailCard(timeProgress['Month']!, now)]),
+                      _progressTabList([_weekProgressDetailCard(timeProgress['Week']!, now)]),
+                      _progressTabList([_timeProgressSection(timeProgress)]),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _progressTabList(List<Widget> children) {
+    return ListView.separated(
+      itemBuilder: (context, index) => children[index],
+      separatorBuilder: (_, __) => const SizedBox(height: 14),
+      itemCount: children.length,
+    );
+  }
+
+  Widget _yearProgressDetailCard(Map<String, int> progress, DateTime todayStart) {
+    final style = _dashboardStyle();
+    final percent = progress['progressPercent'] ?? 0;
+    final total = progress['totalDays'] ?? 365;
+    final passed = progress['daysPassed'] ?? 0;
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return _progressDetailCard(
+      icon: Icons.calendar_month_rounded,
+      title: 'Year Progress',
+      percent: percent,
+      passedLabel: '$passed days passed',
+      remainingLabel: '${progress['daysRemaining'] ?? 0} days left',
+      color: style.primary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: monthNames.map((month) {
+                final selected = monthNames.indexOf(month) == todayStart.month - 1;
+                return Container(
+                  margin: const EdgeInsets.only(right: 18),
+                  child: Text(month, style: TextStyle(color: selected ? style.primary : style.textPrimary, fontWeight: FontWeight.w900)),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: List.generate(total, (index) {
+              final day = index + 1;
+              final isToday = day == passed;
+              final isPassed = day < passed;
+              return _progressBubble(
+                '$day',
+                isToday ? Colors.orange : isPassed ? style.primary : style.elevatedSurface,
+                isToday || isPassed ? AppThemeColors.readableTextOn(isToday ? Colors.orange : style.primary, style) : style.textMuted,
+                size: 26,
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _monthProgressDetailCard(Map<String, int> progress, DateTime now) {
+    final style = _dashboardStyle();
+    final total = progress['total'] ?? 31;
+    final passed = progress['passed'] ?? now.day;
+    return _progressDetailCard(
+      icon: Icons.calendar_view_month_rounded,
+      title: 'Month Progress',
+      percent: progress['percent'] ?? 0,
+      passedLabel: '$passed days passed',
+      remainingLabel: '${progress['remaining'] ?? 0} days left',
+      color: style.secondary,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: List.generate(total, (index) {
+          final day = index + 1;
+          final isToday = day == now.day;
+          final isPassed = day < now.day;
+          return _progressBubble(
+            '$day',
+            isToday ? Colors.orange : isPassed ? style.secondary : style.elevatedSurface,
+            isToday || isPassed ? AppThemeColors.readableTextOn(isToday ? Colors.orange : style.secondary, style) : style.textMuted,
+            size: 34,
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _weekProgressDetailCard(Map<String, int> progress, DateTime now) {
+    final style = _dashboardStyle();
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return _progressDetailCard(
+      icon: Icons.view_week_rounded,
+      title: 'Week Progress',
+      percent: progress['percent'] ?? 0,
+      passedLabel: '${progress['passed'] ?? 0} days passed',
+      remainingLabel: '${progress['remaining'] ?? 0} days left',
+      color: Colors.green,
+      child: Row(
+        children: List.generate(7, (index) {
+          final day = index + 1;
+          final isToday = day == now.weekday;
+          final isPassed = day < now.weekday;
+          return Expanded(
+            child: Column(
+              children: [
+                _progressBubble(
+                  '$day',
+                  isToday ? Colors.orange : isPassed ? Colors.green : style.elevatedSurface,
+                  isToday || isPassed ? Colors.white : style.textMuted,
+                  size: 42,
+                ),
+                const SizedBox(height: 6),
+                Text(labels[index], style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _progressDetailCard({required IconData icon, required String title, required int percent, required String passedLabel, required String remainingLabel, required Color color, required Widget child}) {
+    final style = _dashboardStyle();
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: style.surface,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: color.withOpacity(0.22)),
+        boxShadow: [BoxShadow(color: color.withOpacity(style.dark ? 0.16 : 0.08), blurRadius: 18, offset: const Offset(0, 8))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(backgroundColor: color.withOpacity(0.15), child: Icon(icon, color: color)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title, style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
+                  Text('$passedLabel  •  $remainingLabel', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
+                ]),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                decoration: BoxDecoration(color: color.withOpacity(0.16), borderRadius: BorderRadius.circular(999), border: Border.all(color: color.withOpacity(0.28))),
+                child: Text('$percent%', style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w900)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          LinearProgressIndicator(value: (percent / 100).clamp(0.0, 1.0).toDouble(), minHeight: 8, backgroundColor: style.elevatedSurface, color: color),
+          const SizedBox(height: 18),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _progressBubble(String label, Color background, Color foreground, {double size = 30}) {
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: background, shape: BoxShape.circle, border: Border.all(color: foreground.withOpacity(0.12))),
+      child: Text(label, style: TextStyle(color: foreground, fontSize: size < 30 ? 10 : 12, fontWeight: FontWeight.w900)),
+    );
+  }
 
   Widget _darkSection(String title, Widget child, {String? action, VoidCallback? onActionTap, bool pulseAction = false}) {
     final style = _dashboardStyle();
