@@ -397,20 +397,17 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               child: Column(
                 crossAxisAlignment: expanded ? CrossAxisAlignment.start : CrossAxisAlignment.center,
                 children: [
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: expanded
-                        ? Column(
-                            key: const ValueKey('expanded_header'),
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Momentum', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 26, fontWeight: FontWeight.w900)),
-                              const SizedBox(height: 4),
-                              Text(profile.currentRank.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 16, fontWeight: FontWeight.w800)),
-                            ],
-                          )
-                        : Icon(Icons.dashboard_rounded, key: const ValueKey('collapsed_header'), color: style.primary, size: 30),
-                  ),
+                  if (expanded)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Momentum', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 26, fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 4),
+                        Text(profile.currentRank.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 16, fontWeight: FontWeight.w800)),
+                      ],
+                    )
+                  else
+                    Icon(Icons.dashboard_rounded, color: style.primary, size: 30),
                   const SizedBox(height: 18),
                   ...items.map((item) => _buildSidebarNavTile(style, item, expanded)),
                 ],
