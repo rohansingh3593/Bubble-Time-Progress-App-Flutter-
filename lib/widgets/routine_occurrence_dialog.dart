@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/instruction.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
+import '../utils/text_formatters.dart';
 
 enum RoutineOccurrenceAction {
   openJournal,
@@ -119,7 +120,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
           return _completionSummaryDialog(context, task, linkedInstructions, hiveService);
         }
         return AlertDialog(
-          title: Text('Update ${task.task} Occurrence'),
+          title: Text('Update ${toTitleCase(task.task)} Occurrence'),
           content: SingleChildScrollView(
             child: SizedBox(
               width: 520,
@@ -183,7 +184,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+                            Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900)),
                             if (instruction.description.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
@@ -342,7 +343,7 @@ AlertDialog _completionSummaryDialog(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Task: ${task.task}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+            Text('Task: ${toTitleCase(task.task)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
             const SizedBox(height: 6),
             Text('Completed at: $completedTime'),
             const Divider(height: 28),
@@ -364,9 +365,11 @@ AlertDialog _completionSummaryDialog(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                          Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w800)),
+                          if (history?.selectionSummary.isNotEmpty == true)
+                            Text('Selected: ${history!.selectionSummary}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                           Text(
-                            '${followed ? 'Followed' : 'Missed'} • +$points bonus points',
+                            'Status: ${followed ? 'Followed ✅' : history?.notApplicable == true ? 'Not Applicable' : 'Missed'} • Bonus: +$points points • +${history?.xpEarned ?? 0} XP',
                             style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w700),
                           ),
                         ],

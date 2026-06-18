@@ -6,6 +6,7 @@ import '../models/journey_entry.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../widgets/profile_avatar.dart';
+import '../utils/text_formatters.dart';
 
 class JourneyTimelineView extends StatelessWidget {
   final HiveService hiveService;
@@ -509,7 +510,7 @@ class _RelatedTaskDropdownItem extends StatelessWidget {
             decoration: BoxDecoration(color: Color(task.colorValue), shape: BoxShape.circle),
           ),
           const SizedBox(width: 8),
-          Flexible(child: Text(task.task, overflow: TextOverflow.ellipsis, maxLines: 1)),
+          Flexible(child: Text(toTitleCase(task.task), overflow: TextOverflow.ellipsis, maxLines: 1)),
         ],
       ),
     );

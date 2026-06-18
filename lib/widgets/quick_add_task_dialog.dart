@@ -3,6 +3,7 @@ import '../models/instruction.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../utils/task_time_utils.dart';
+import '../utils/text_formatters.dart';
 
 const List<String> _priorityOptions = [
   'Low',
@@ -355,7 +356,7 @@ Future<Task?> showTaskFormDialog(
                               DropdownButtonFormField<String>(
                                 value: phase.status,
                                 decoration: InputDecoration(labelText: 'Phase Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                                items: _projectPhaseStatusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
+                                items: _projectPhaseStatusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(toTitleCase(status)))).toList(),
                                 onChanged: (value) {
                                   if (value != null) {
                                     setDialogState(() {
@@ -470,7 +471,7 @@ Future<Task?> showTaskFormDialog(
                   DropdownButtonFormField<String>(
                     value: selectedStatus,
                     decoration: InputDecoration(labelText: 'Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
-                    items: _statusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
+                    items: _statusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(toTitleCase(status)))).toList(),
                     onChanged: (value) {
                       if (value != null) setDialogState(() => selectedStatus = value);
                     },
@@ -480,7 +481,7 @@ Future<Task?> showTaskFormDialog(
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
                   decoration: InputDecoration(labelText: 'Category', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
-                  items: [...categories.map((c) => DropdownMenuItem<String>(value: c, child: Text(c))), const DropdownMenuItem<String>(value: '__add_category__', child: Text('➕ Add Category'))],
+                  items: [...categories.map((c) => DropdownMenuItem<String>(value: c, child: Text(toTitleCase(c)))), const DropdownMenuItem<String>(value: '__add_category__', child: Text('➕ Add Category'))],
                   onChanged: (value) async {
                     if (value == null) return;
                     if (value == '__add_category__') {
@@ -704,7 +705,7 @@ class _TaskInstructionSection extends StatelessWidget {
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(radius: 13, backgroundColor: Color(instruction.colorValue).withOpacity(0.16), child: Icon(Icons.rule_rounded, color: Color(instruction.colorValue), size: 15)),
-                  title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w800)),
                   subtitle: Text(_instructionSummary(instruction)),
                   trailing: PopupMenuButton<String>(
                     onSelected: (action) async {
@@ -865,20 +866,94 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                 ] else if (instructionType == InstructionRule.typeLevelBased) ...[
                   TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
                   const Align(alignment: Alignment.centerLeft, child: Text('Levels', style: TextStyle(fontWeight: FontWeight.w900))),
-                  ...levels.map((level) => ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.emoji_events_outlined),
-                        title: Text(level.displayLabel),
-                        subtitle: Text('+${level.bonusPoints} points • ${level.xpEarned} XP'),
-                      )),
+                  ...levels.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final level = entry.value;
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.emoji_events_outlined),
+                      title: Text(toTitleCase(level.displayLabel)),
+                      subtitle: Text('+${level.bonusPoints} points • ${level.xpEarned} XP'),
+                      trailing: Wrap(
+                        spacing: 4,
+                        children: [
+                          IconButton(
+                            tooltip: 'Edit level',
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                            onPressed: () async {
+                              final edited = await _showInstructionLevelDialog(context, level);
+                              if (edited != null) {
+                                final updatedLevels = [...levels];
+                                updatedLevels[index] = edited;
+                                setDialogState(() => levels = updatedLevels);
+                              }
+                            },
+                          ),
+                          IconButton(
+                            tooltip: 'Delete level',
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            onPressed: levels.length <= 1 ? null : () => setDialogState(() => levels = [...levels]..removeAt(index)),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final added = await _showInstructionLevelDialog(context, null, defaultUnit: unitController.text.trim());
+                        if (added != null) setDialogState(() => levels = [...levels, added]);
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Level'),
+                    ),
+                  ),
                 ] else ...[
                   const Align(alignment: Alignment.centerLeft, child: Text('Options', style: TextStyle(fontWeight: FontWeight.w900))),
-                  ...options.map((option) => ListTile(
-                        dense: true,
-                        leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
-                        title: Text(option.name),
-                        subtitle: Text('+${option.bonusPoints} points • ${option.xpEarned} XP'),
-                      )),
+                  ...options.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final option = entry.value;
+                    return ListTile(
+                      dense: true,
+                      leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
+                      title: Text(toTitleCase(option.name)),
+                      subtitle: Text('+${option.bonusPoints} points • ${option.xpEarned} XP'),
+                      trailing: Wrap(
+                        spacing: 4,
+                        children: [
+                          IconButton(
+                            tooltip: 'Edit option',
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                            onPressed: () async {
+                              final edited = await _showInstructionOptionDialog(context, option);
+                              if (edited != null) {
+                                final updatedOptions = [...options];
+                                updatedOptions[index] = edited;
+                                setDialogState(() => options = updatedOptions);
+                              }
+                            },
+                          ),
+                          IconButton(
+                            tooltip: 'Delete option',
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            onPressed: options.length <= 1 ? null : () => setDialogState(() => options = [...options]..removeAt(index)),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final added = await _showInstructionOptionDialog(context, null);
+                        if (added != null) setDialogState(() => options = [...options, added]);
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Option'),
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 10),
                 Wrap(
@@ -922,7 +997,8 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                 colorValue: colorValue,
                 enabled: enabled,
                 streakTracking: streakTracking,
-                createdAt: DateTime.now(),
+                createdAt: initialInstruction?.createdAt ?? DateTime.now(),
+                history: initialInstruction?.history ?? const [],
               ),
             ),
             child: const Text('Save'),
@@ -938,6 +1014,109 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
   unitController.dispose();
   if (instruction != null && saveImmediately) await hiveService.saveInstruction(instruction);
   return instruction;
+}
+
+
+Future<InstructionLevel?> _showInstructionLevelDialog(BuildContext context, InstructionLevel? initial, {String defaultUnit = 'km'}) async {
+  final nameController = TextEditingController(text: initial?.name ?? 'Level');
+  final targetController = TextEditingController(text: initial == null ? '' : (initial.target % 1 == 0 ? initial.target.toStringAsFixed(0) : initial.target.toString()));
+  final unitController = TextEditingController(text: initial?.unit ?? defaultUnit);
+  final pointsController = TextEditingController(text: '${initial?.bonusPoints ?? 20}');
+  final xpController = TextEditingController(text: '${initial?.xpEarned ?? 5}');
+  try {
+    return await showDialog<InstructionLevel>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(initial == null ? 'Add Level' : 'Edit Level'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Level Name')),
+              TextField(controller: targetController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target')),
+              TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
+              TextField(controller: pointsController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus XP')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(
+              context,
+              InstructionLevel(
+                id: initial?.id ?? 'level_${DateTime.now().microsecondsSinceEpoch}',
+                name: nameController.text.trim().isEmpty ? 'Level' : nameController.text.trim(),
+                target: double.tryParse(targetController.text.trim()) ?? 0,
+                unit: unitController.text.trim(),
+                bonusPoints: int.tryParse(pointsController.text.trim()) ?? 0,
+                xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
+              ),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  } finally {
+    nameController.dispose();
+    targetController.dispose();
+    unitController.dispose();
+    pointsController.dispose();
+    xpController.dispose();
+  }
+}
+
+Future<InstructionOption?> _showInstructionOptionDialog(BuildContext context, InstructionOption? initial) async {
+  final emojiController = TextEditingController(text: initial?.emoji ?? '🥤');
+  final nameController = TextEditingController(text: initial?.name ?? '');
+  final descriptionController = TextEditingController(text: initial?.description ?? '');
+  final pointsController = TextEditingController(text: '${initial?.bonusPoints ?? 10}');
+  final xpController = TextEditingController(text: '${initial?.xpEarned ?? 2}');
+  try {
+    return await showDialog<InstructionOption>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(initial == null ? 'Add Option' : 'Edit Option'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
+              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Option Title')),
+              TextField(controller: descriptionController, decoration: const InputDecoration(labelText: 'Description')),
+              TextField(controller: pointsController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus XP')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(
+              context,
+              InstructionOption(
+                id: initial?.id ?? 'option_${DateTime.now().microsecondsSinceEpoch}',
+                name: nameController.text.trim().isEmpty ? 'Option' : nameController.text.trim(),
+                bonusPoints: int.tryParse(pointsController.text.trim()) ?? 0,
+                xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
+                emoji: emojiController.text.trim().isEmpty ? '•' : emojiController.text.trim(),
+                description: descriptionController.text.trim(),
+              ),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  } finally {
+    emojiController.dispose();
+    nameController.dispose();
+    descriptionController.dispose();
+    pointsController.dispose();
+    xpController.dispose();
+  }
 }
 
 class _ScheduleDraft {

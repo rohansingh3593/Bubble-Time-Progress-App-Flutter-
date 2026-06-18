@@ -8,6 +8,7 @@ import '../constants/dashboard_themes.dart';
 import '../models/task_model.dart';
 import '../models/productivity_snapshot.dart';
 import 'journal_view.dart';
+import '../utils/text_formatters.dart';
 
 class YearView extends StatefulWidget {
   final HiveService hiveService;
@@ -22,6 +23,7 @@ class _YearViewState extends State<YearView> {
   late DateTime _currentYear;
   final ScrollController _yearSelectorController = ScrollController();
   bool _showYearlyTasks = true;
+  int? _highlightedProgressMonth;
 
   @override
   void initState() {
@@ -232,7 +234,7 @@ class _YearViewState extends State<YearView> {
                         return ListTile(
                           dense: true,
                           onTap: () => _editTask(task),
-                          title: Text(task.task),
+                          title: Text(toTitleCase(task.task)),
                           subtitle: Text('${task.priority} • ${task.status}'),
                         );
                       },
@@ -286,37 +288,65 @@ class _YearViewState extends State<YearView> {
   Widget _yearDayProgressMap(DashboardThemeStyle selectedDashboardTheme) {
     final theme = selectedDashboardTheme;
     final yearStart = DateTime(_currentYear.year, 1, 1);
-    final totalDays = DateTime(_currentYear.year, 12, 31).difference(yearStart).inDays + 1;
+    final totalDays = DateTime(_currentYear.year + 1, 1, 1).difference(yearStart).inDays;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final isCurrentYear = _currentYear.year == today.year;
-    final todayIndex = isCurrentYear ? today.difference(yearStart).inDays : -1;
+    final todayDayOfYear = isCurrentYear ? today.difference(yearStart).inDays + 1 : -1;
     final selectedYearIsPast = _currentYear.year < today.year;
     final selectedYearIsFuture = _currentYear.year > today.year;
-    final currentYearPassedDays = todayIndex.clamp(0, totalDays).toInt();
-    final passedDays = selectedYearIsPast ? totalDays : selectedYearIsFuture ? 0 : currentYearPassedDays;
-    final remainingDays = selectedYearIsPast ? 0 : selectedYearIsFuture ? totalDays : (totalDays - passedDays - 1).clamp(0, totalDays).toInt();
+    final currentMonth = isCurrentYear ? today.month : null;
+    final passedDays = selectedYearIsPast ? totalDays : selectedYearIsFuture ? 0 : (todayDayOfYear - 1).clamp(0, totalDays).toInt();
+    final remainingDays = selectedYearIsPast ? 0 : selectedYearIsFuture ? totalDays : (totalDays - todayDayOfYear).clamp(0, totalDays).toInt();
     final progress = totalDays == 0 ? 0.0 : (passedDays / totalDays).clamp(0.0, 1.0);
     final progressLabel = '${(progress * 100).round()}%';
     const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    Color dayColor(DateTime date) {
-      final normalized = DateTime(date.year, date.month, date.day);
-      if (isCurrentYear && normalized.isAtSameMomentAs(today)) return theme.accent;
-      if (selectedYearIsPast || (isCurrentYear && normalized.isBefore(today))) return theme.primary;
-      return theme.textMuted.withOpacity(0.28);
+    int monthStartDay(int month) => DateTime(_currentYear.year, month, 1).difference(yearStart).inDays + 1;
+    int monthEndDay(int month) => DateTime(_currentYear.year, month + 1, 1).difference(yearStart).inDays;
+
+    bool isHighlightedMonthDay(int dayOfYear) {
+      final highlighted = _highlightedProgressMonth;
+      if (highlighted == null) return false;
+      return dayOfYear >= monthStartDay(highlighted) && dayOfYear <= monthEndDay(highlighted);
     }
 
-    bool isTodayDate(DateTime date) => isCurrentYear && DateTime(date.year, date.month, date.day).isAtSameMomentAs(today);
+    void showCurrentMonthSummary() {
+      final month = currentMonth;
+      if (month == null) return;
+      final daysInMonth = DateTime(today.year, month + 1, 0).day;
+      final monthPassed = (today.day - 1).clamp(0, daysInMonth).toInt();
+      final monthRemaining = (daysInMonth - today.day).clamp(0, daysInMonth).toInt();
+      final monthProgress = daysInMonth == 0 ? 0 : ((monthPassed / daysInMonth) * 100).round();
+      setState(() => _highlightedProgressMonth = month);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$monthPassed Days Passed • $monthRemaining Days Remaining • $monthProgress% Complete')),
+      );
+      Future<void>.delayed(const Duration(seconds: 2), () {
+        if (!mounted || _highlightedProgressMonth != month) return;
+        setState(() => _highlightedProgressMonth = null);
+      });
+    }
+
+    Color dayColor(int dayOfYear) {
+      if (isCurrentYear && dayOfYear == todayDayOfYear) return theme.accent;
+      if (selectedYearIsPast || (isCurrentYear && dayOfYear < todayDayOfYear)) return theme.primary;
+      return theme.textMuted.withOpacity(0.25);
+    }
+
+    Color labelColor(int dayOfYear) {
+      if (isCurrentYear && dayOfYear == todayDayOfYear) return theme.surface;
+      if (selectedYearIsPast || (isCurrentYear && dayOfYear < todayDayOfYear)) return theme.surface;
+      return theme.textMuted;
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final monthColumns = constraints.maxWidth < 380 ? 12 : constraints.maxWidth < 600 ? 13 : constraints.maxWidth < 1024 ? 14 : 15;
-        final spacing = constraints.maxWidth < 600 ? 4.0 : 5.0;
-        final horizontalPadding = constraints.maxWidth < 600 ? 28.0 : 36.0;
-        final availableDotWidth = constraints.maxWidth - horizontalPadding - (spacing * (monthColumns - 1));
-        final dotCellWidth = availableDotWidth / monthColumns;
-        final dotSize = dotCellWidth.clamp(20.0, 32.0).toDouble();
+        final columns = constraints.maxWidth < 600 ? 20 : constraints.maxWidth < 1024 ? 24 : 28;
+        final spacing = constraints.maxWidth < 600 ? 3.0 : 4.0;
+        final availableWidth = constraints.maxWidth - 28;
+        final bubbleSize = ((availableWidth - (spacing * (columns - 1))) / columns).clamp(13.0, 20.0).toDouble();
+        final fontSize = bubbleSize <= 14 ? 6.5 : bubbleSize <= 16 ? 7.2 : 8.0;
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -328,91 +358,97 @@ class _YearViewState extends State<YearView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Year Day Progress', style: TextStyle(color: theme.textPrimary, fontSize: 18, fontWeight: FontWeight.w900)),
-                        const SizedBox(height: 3),
-                        Text('$passedDays days passed • $remainingDays days left', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700)),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: (theme.cardTint ?? theme.elevatedSurface).withOpacity(theme.dark ? 0.40 : 0.72),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: theme.primary.withOpacity(0.14)),
-                    ),
-                    child: Text(progressLabel, style: TextStyle(color: theme.primary, fontWeight: FontWeight.w900)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
+              Text('Year Day Progress', style: TextStyle(color: theme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text('$passedDays Days Passed • $remainingDays Days Left', style: TextStyle(color: theme.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Text(progressLabel, style: TextStyle(color: theme.primary, fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
               ClipRRect(
                 borderRadius: BorderRadius.circular(999),
                 child: LinearProgressIndicator(
                   value: progress,
-                  minHeight: 9,
+                  minHeight: 8,
                   color: theme.primary,
-                  backgroundColor: theme.primary.withOpacity(0.12),
+                  backgroundColor: theme.textMuted.withOpacity(0.18),
                 ),
               ),
               const SizedBox(height: 12),
-              ...List.generate(12, (monthIndex) {
-                final month = monthIndex + 1;
-                final daysInMonth = DateTime(_currentYear.year, month + 1, 0).day;
-                return Padding(
-                  padding: EdgeInsets.only(bottom: monthIndex == 11 ? 0 : 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(monthLabels[monthIndex], style: TextStyle(color: theme.textMuted, fontSize: 13, fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 7),
-                      Wrap(
-                        spacing: spacing,
-                        runSpacing: spacing,
-                        children: List.generate(daysInMonth, (dayIndex) {
-                          final date = DateTime(_currentYear.year, month, dayIndex + 1);
-                          final isToday = isTodayDate(date);
-                          return SizedBox(
-                            width: dotCellWidth,
-                            height: dotSize,
-                            child: Tooltip(
-                              message: '${date.day}/${date.month}/${date.year}',
-                              child: Center(
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 220),
-                                  width: dotSize,
-                                  height: dotSize,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: dayColor(date),
-                                    shape: BoxShape.circle,
-                                    boxShadow: isToday ? [BoxShadow(color: theme.accent.withOpacity(0.55), blurRadius: 12, spreadRadius: 2)] : null,
-                                  ),
-                                  child: Text(
-                                    '${dayIndex + 1}',
-                                    style: TextStyle(
-                                      color: selectedYearIsPast || (isCurrentYear && date.isBefore(today)) || isToday ? theme.surface : theme.textMuted,
-                                      fontSize: dotSize < 24 ? 9 : 10,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                ),
+              Row(
+                children: List.generate(monthLabels.length, (index) {
+                  final month = index + 1;
+                  final isRunningMonth = currentMonth == month;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 1),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: isRunningMonth ? showCurrentMonthSummary : null,
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween<double>(begin: 0.96, end: isRunningMonth ? 1.04 : 1.0),
+                          duration: const Duration(milliseconds: 900),
+                          curve: Curves.easeInOut,
+                          builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 260),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isRunningMonth ? theme.primary.withOpacity(0.14) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(999),
+                              boxShadow: isRunningMonth ? [BoxShadow(color: theme.primary.withOpacity(0.24), blurRadius: 14, spreadRadius: 1)] : null,
+                            ),
+                            child: Text(
+                              monthLabels[index],
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: isRunningMonth ? theme.primary : theme.textMuted,
+                                fontSize: isRunningMonth ? 11 : 10,
+                                fontWeight: isRunningMonth ? FontWeight.w900 : FontWeight.w500,
                               ),
                             ),
-                          );
-                        }),
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                );
-              }),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: List.generate(totalDays, (index) {
+                  final dayOfYear = index + 1;
+                  final date = yearStart.add(Duration(days: index));
+                  final isToday = isCurrentYear && dayOfYear == todayDayOfYear;
+                  final highlightedMonthDay = isHighlightedMonthDay(dayOfYear);
+                  return Tooltip(
+                    message: '${date.day}/${date.month}/${date.year} • Day $dayOfYear',
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 220),
+                      width: bubbleSize,
+                      height: bubbleSize,
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()..scale(isToday ? 1.12 : 1.0),
+                      decoration: BoxDecoration(
+                        color: dayColor(dayOfYear),
+                        shape: BoxShape.circle,
+                        border: isToday ? Border.all(color: theme.surface, width: 1.5) : highlightedMonthDay ? Border.all(color: theme.accent.withOpacity(0.75), width: 1) : null,
+                        boxShadow: isToday
+                            ? [BoxShadow(color: theme.accent.withOpacity(0.65), blurRadius: 12, spreadRadius: 2)]
+                            : highlightedMonthDay
+                                ? [BoxShadow(color: theme.accent.withOpacity(0.24), blurRadius: 8, spreadRadius: 0.5)]
+                                : null,
+                      ),
+                      child: Text(
+                        '$dayOfYear',
+                        maxLines: 1,
+                        style: TextStyle(color: labelColor(dayOfYear), fontSize: fontSize, fontWeight: FontWeight.w700, height: 1),
+                      ),
+                    ),
+                  );
+                }),
+              ),
               const SizedBox(height: 10),
               Wrap(
                 spacing: 12,
@@ -420,7 +456,7 @@ class _YearViewState extends State<YearView> {
                 children: [
                   _yearProgressLegendItem(theme: theme, color: theme.primary, label: 'Passed'),
                   _yearProgressLegendItem(theme: theme, color: theme.accent, label: 'Today', glow: true),
-                  _yearProgressLegendItem(theme: theme, color: theme.textMuted.withOpacity(0.28), label: 'Remaining'),
+                  _yearProgressLegendItem(theme: theme, color: theme.textMuted.withOpacity(0.25), label: 'Remaining'),
                 ],
               ),
             ],

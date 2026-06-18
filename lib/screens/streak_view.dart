@@ -14,6 +14,7 @@ import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/rank_profile_card.dart';
 import 'journal_view.dart';
 import 'journey_timeline_view.dart';
+import '../utils/text_formatters.dart';
 
 class StreakView extends StatelessWidget {
   final HiveService hiveService;
@@ -155,7 +156,7 @@ class _InstructionStreakPanel extends StatelessWidget {
                       children: [
                         Icon(Icons.rule_folder_outlined, color: color),
                         const SizedBox(width: 10),
-                        Expanded(child: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary))),
+                        Expanded(child: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary))),
                         Text('${hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: color, fontWeight: FontWeight.w900)),
                       ],
                     ),
@@ -2158,7 +2159,7 @@ class _TaskJourneyCard extends StatelessWidget {
               const SizedBox(width: 8),
               Container(width: 10, height: 10, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
               const SizedBox(width: 6),
-              Expanded(child: Text(task.task, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+              Expanded(child: Text(toTitleCase(task.task), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
               Text('${task.estimatedMinutes}m', style: const TextStyle(fontWeight: FontWeight.w700)),
             ],
           ),
@@ -2255,7 +2256,7 @@ class _TaskPerformanceDetailView extends StatelessWidget {
             .toList();
 
         return Scaffold(
-          appBar: AppBar(title: Text(habit.title)),
+          appBar: AppBar(title: Text(toTitleCase(habit.title))),
           body: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
             children: [
@@ -3146,7 +3147,7 @@ class _TaskTimelineTile extends StatelessWidget {
               Container(width: 16, height: 16, decoration: BoxDecoration(color: blockColor, borderRadius: BorderRadius.circular(5))),
               const SizedBox(width: 10),
               Expanded(child: Text(_relativeDateLabel(row.date), style: const TextStyle(fontWeight: FontWeight.w900))),
-              Text(_statusLabel(row.status), style: TextStyle(color: blockColor, fontWeight: FontWeight.w900)),
+              Text(toTitleCase(_statusLabel(row.status)), style: TextStyle(color: blockColor, fontWeight: FontWeight.w900)),
             ],
           ),
           const SizedBox(height: 6),

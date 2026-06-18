@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../constants/colors.dart';
+import '../utils/text_formatters.dart';
+
 import '../models/reward_money.dart';
 import '../services/hive_service.dart';
 
@@ -116,7 +118,7 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('🎯 ${goal.name}'),
+        title: Text('🎯 ${toTitleCase(goal.name)}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,13 +152,13 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Add Money to ${goal.name}'),
+        title: Text('Add Money To ${toTitleCase(goal.name)}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Available Balance: ${_formatRupees(summary.availableRupees)}', style: const TextStyle(fontWeight: FontWeight.w900)),
-            Text('Still Needed: ${_formatRupees(goal.remainingAmountRupees)}', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+            Text('Still Needed: ${_formatRupees(goal.remainingAmountRupees)}', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12, color: Colors.black54)),
             TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Amount (₹)')),
             TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note')),
           ],
@@ -301,7 +303,7 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       leading: CircleAvatar(child: Text('${milestone.percent}%')),
-                      title: Text(milestone.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                      title: Text(toTitleCase(milestone.title), style: const TextStyle(fontWeight: FontWeight.w800)),
                       subtitle: Text(milestone.reward.isEmpty ? 'Optional reward • ${milestone.bonusXp} XP' : '${milestone.reward} • ${milestone.bonusXp} XP'),
                     )),
                 ],
@@ -360,9 +362,9 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
           controller: controller,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
-            Text(goal.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+            Text(toTitleCase(goal.name), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
             const SizedBox(height: 8),
-            Text(goal.description.isEmpty ? 'No description yet.' : goal.description, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+            Text(goal.description.isEmpty ? 'No description yet.' : goal.description, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12, color: Colors.black54)),
             const SizedBox(height: 14),
             if (goal.galleryImages.isNotEmpty) ...[
               const Text('Image Gallery', style: TextStyle(fontWeight: FontWeight.w900)),
@@ -391,10 +393,10 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
             LinearProgressIndicator(value: goal.progress, minHeight: 12),
             const SizedBox(height: 14),
             const Text('Milestones', style: TextStyle(fontWeight: FontWeight.w900)),
-            ...goal.milestones.map((milestone) => ListTile(leading: CircleAvatar(child: Text('${milestone.percent}%')), title: Text(milestone.title), subtitle: Text('${milestone.description}${milestone.reward.isEmpty ? '' : ' • Reward: ${milestone.reward}'}'))),
+            ...goal.milestones.map((milestone) => ListTile(leading: CircleAvatar(child: Text('${milestone.percent}%')), title: Text(toTitleCase(milestone.title)), subtitle: Text('${milestone.description}${milestone.reward.isEmpty ? '' : ' • Reward: ${milestone.reward}'}'))),
             const SizedBox(height: 8),
             const Text('Journey Timeline', style: TextStyle(fontWeight: FontWeight.w900)),
-            ...goal.history.reversed.map((entry) => ListTile(leading: const Icon(Icons.timeline), title: Text(entry.title), subtitle: Text('${_formatDate(entry.date)}${entry.note.isEmpty ? '' : ' • ${entry.note}'}'), trailing: entry.amountRupees == 0 ? null : Text(_formatRupees(entry.amountRupees)))),
+            ...goal.history.reversed.map((entry) => ListTile(leading: const Icon(Icons.timeline), title: Text(toTitleCase(entry.title)), subtitle: Text('${_formatDate(entry.date)}${entry.note.isEmpty ? '' : ' • ${entry.note}'}'), trailing: entry.amountRupees == 0 ? null : Text(_formatRupees(entry.amountRupees)))),
           ],
         ),
       ),
@@ -594,12 +596,12 @@ class _GoalCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Expanded(child: Text(goal.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.textPrimary))),
+                        Expanded(child: Text(toTitleCase(goal.name), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.textPrimary))),
                         _StatusPill(status: goal.effectiveStatus),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text('${goal.category} • ${goal.priority} priority', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                    Text(toTitleCaseMetadata([goal.category, '${goal.priority} Priority']), style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12, color: Colors.black54)),
                     if (goal.description.isNotEmpty) Text(goal.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black54)),
                   ],
                 ),
@@ -635,7 +637,7 @@ class _GoalCard extends StatelessWidget {
             const SizedBox(height: 10),
             const Text('Goal Journey Timeline', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
             const SizedBox(height: 6),
-            ...goal.history.reversed.take(3).map((entry) => Text('• ${_formatDate(entry.date)} — ${entry.title}${entry.note.isEmpty ? '' : ' (${entry.note})'}', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54))),
+            ...goal.history.reversed.take(3).map((entry) => Text('• ${_formatDate(entry.date)} — ${entry.title}${entry.note.isEmpty ? '' : ' (${entry.note})'}', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12, color: Colors.black54))),
           ],
         ],
       ),

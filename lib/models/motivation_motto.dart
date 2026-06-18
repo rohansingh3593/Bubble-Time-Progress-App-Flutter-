@@ -2,6 +2,7 @@ class MotivationMotto {
   final String id;
   final String quote;
   final String description;
+  final String title;
   final String category;
   final String mood;
   final String author;
@@ -17,6 +18,7 @@ class MotivationMotto {
     required this.id,
     required this.quote,
     this.description = '',
+    this.title = '',
     this.category = 'Focus',
     this.mood = '',
     this.author = '',
@@ -32,6 +34,7 @@ class MotivationMotto {
   factory MotivationMotto.create({
     required String quote,
     String description = '',
+    String title = '',
     String category = 'Focus',
     String mood = '',
     String author = '',
@@ -42,6 +45,7 @@ class MotivationMotto {
       id: 'motto_${now.microsecondsSinceEpoch}',
       quote: quote,
       description: description,
+      title: title,
       category: category,
       mood: mood,
       author: author,
@@ -61,6 +65,7 @@ class MotivationMotto {
       id: (map['id'] ?? '').toString(),
       quote: (map['quote'] ?? '').toString(),
       description: (map['description'] ?? '').toString(),
+      title: (map['title'] ?? map['description'] ?? '').toString(),
       category: (map['category'] ?? 'Focus').toString(),
       mood: (map['mood'] ?? '').toString(),
       author: (map['author'] ?? '').toString(),
@@ -78,6 +83,7 @@ class MotivationMotto {
         'id': id,
         'quote': quote,
         'description': description,
+        'title': title,
         'category': category,
         'mood': mood,
         'author': author,
@@ -93,6 +99,7 @@ class MotivationMotto {
   MotivationMotto copyWith({
     String? quote,
     String? description,
+    String? title,
     String? category,
     String? mood,
     String? author,
@@ -108,6 +115,7 @@ class MotivationMotto {
       id: id,
       quote: quote ?? this.quote,
       description: description ?? this.description,
+      title: title ?? this.title,
       category: category ?? this.category,
       mood: mood ?? this.mood,
       author: author ?? this.author,
