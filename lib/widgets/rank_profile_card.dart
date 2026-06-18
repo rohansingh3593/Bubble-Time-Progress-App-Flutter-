@@ -106,18 +106,38 @@ class RankProfileCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final xpText = Text(
                   '${profile.currentLevelXp}/${profile.xpForNextLevel} XP to Level ${profile.level + 1}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: contentColor, fontWeight: FontWeight.w700),
-                ),
-                Text(
+                );
+                final rankText = Text(
                   profile.nextRank == null ? 'Top Rank' : 'Next: ${profile.nextRank!.name}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: contentColor.withOpacity(0.88), fontWeight: FontWeight.w600),
-                ),
-              ],
+                );
+                if (constraints.maxWidth < 260) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      xpText,
+                      const SizedBox(height: 2),
+                      rankText,
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: xpText),
+                    const SizedBox(width: 8),
+                    Flexible(child: Align(alignment: Alignment.centerRight, child: rankText)),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             ClipRRect(
