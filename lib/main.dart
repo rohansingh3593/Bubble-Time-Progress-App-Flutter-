@@ -424,7 +424,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   else
                     Icon(Icons.dashboard_rounded, color: style.primary, size: 26),
                   const SizedBox(height: 18),
-                  ...items.map((item) => _buildSidebarNavTile(style, item, expanded)),
+                  ...items.map((item) => _buildSidebarNavTile(style, item, expanded, sidebarWidth)),
                 ],
               ),
             ),
@@ -434,7 +434,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildSidebarNavTile(DashboardThemeStyle style, _SidebarNavItem item, bool expanded) {
+  Widget _buildSidebarNavTile(DashboardThemeStyle style, _SidebarNavItem item, bool expanded, double sidebarWidth) {
     final selected = item.selectedIndex != null && item.selectedIndex == _selectedIndex;
     final foreground = selected ? style.primary : style.textPrimary;
     return Padding(
