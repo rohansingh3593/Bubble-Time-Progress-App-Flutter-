@@ -344,30 +344,49 @@ class _WeekViewState extends State<WeekView> {
       children: [
         const Text('Important / Urgent Matrix Summary', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
         const SizedBox(height: 8),
-        GridView.count(
-          crossAxisCount: 2,
+        GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 2.0,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          children: cells
-              .map((cell) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                    decoration: BoxDecoration(color: cell.$4, border: Border.all(color: Colors.black26), borderRadius: BorderRadius.circular(12)),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(child: Text(cell.$1, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15))),
-                        const SizedBox(height: 4),
-                        Text(_formatHours(cell.$2), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                        const SizedBox(height: 2),
-                        Text(cell.$3, style: const TextStyle(fontSize: 11, color: Colors.black54)),
-                      ],
+          itemCount: cells.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            mainAxisExtent: 86,
+          ),
+          itemBuilder: (context, index) {
+            final cell = cells[index];
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              decoration: BoxDecoration(color: cell.$4, border: Border.all(color: Colors.black26), borderRadius: BorderRadius.circular(12)),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(cell.$1, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
                     ),
-                  ))
-              .toList(),
+                  ),
+                  const SizedBox(height: 3),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(_formatHours(cell.$2), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(cell.$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ],
     );
