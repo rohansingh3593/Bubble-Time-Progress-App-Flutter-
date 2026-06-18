@@ -2297,13 +2297,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
     final size = compact ? 5.0 : 12.0;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      spacing: 2,
+      runSpacing: 2,
       children: palette.colors
           .map((color) => Container(
                 width: size,
                 height: size,
-                margin: const EdgeInsets.only(right: 2),
                 decoration: BoxDecoration(
                   color: color,
                   shape: BoxShape.circle,
