@@ -204,6 +204,11 @@ flutter build web      # Web
 - Delete app from phone and reinstall
 - Restart your IDE
 
+### Windows `LNK1168` / `momentum.exe` cannot be opened for writing?
+- This means the previous Windows app process is still running and locking `build\windows\x64\runner\Debug\momentum.exe`.
+- Close the running Momentum/Bubble Time Progress window, or stop it from Task Manager.
+- If needed, run `taskkill /F /IM momentum.exe`, then run `flutter clean` and launch again with `flutter run -d windows`.
+
 ---
 
 ## 📚 Documentation
