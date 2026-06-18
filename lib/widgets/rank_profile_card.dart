@@ -5,6 +5,7 @@ import '../constants/dashboard_themes.dart';
 import '../models/rank_profile.dart';
 import '../models/user_profile.dart';
 import 'profile_avatar.dart';
+import 'app_text.dart';
 
 class RankProfileCard extends StatelessWidget {
   final RankProfile profile;
@@ -78,7 +79,7 @@ class RankProfileCard extends StatelessWidget {
                               profile.username,
                               style: TextStyle(
                                 color: contentColor,
-                                fontSize: 20,
+                                fontSize: responsiveFont(context, 20),
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
@@ -237,8 +238,8 @@ class _RankMetric extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: TextStyle(color: contentColor, fontWeight: FontWeight.w900, fontSize: 16)),
-          Text(label, style: TextStyle(color: contentColor.withOpacity(0.82), fontSize: 11)),
+          Text(value, style: TextStyle(color: contentColor, fontWeight: FontWeight.w900, fontSize: responsiveFont(context, 16))),
+          Text(label, style: TextStyle(color: contentColor.withOpacity(0.82), fontSize: responsiveFont(context, 11))),
         ],
       ),
     );

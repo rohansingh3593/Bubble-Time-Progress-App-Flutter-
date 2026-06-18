@@ -4,6 +4,7 @@ import '../services/hive_service.dart';
 import '../models/task_model.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
+import '../widgets/app_text.dart';
 import '../utils/task_time_utils.dart';
 import 'journal_view.dart';
 
@@ -261,7 +262,7 @@ class _TaskScreenState extends State<TaskScreen> {
               // Master task list header and filters
               Text(
                 'Master Tasks • ${taskEntries.length}/${allTaskEntries.length}',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: responsiveFont(context, 20), fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
               SingleChildScrollView(
@@ -528,7 +529,7 @@ class _TaskColorChip extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w800),
+              style: TextStyle(color: color, fontSize: responsiveFont(context, 11), fontWeight: FontWeight.w800),
             ),
           ],
         ),

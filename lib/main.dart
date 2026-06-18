@@ -21,6 +21,7 @@ import 'screens/productivity_timeline_view.dart';
 import 'models/rank_profile.dart';
 import 'constants/dashboard_themes.dart';
 import 'utils/text_formatters.dart';
+import 'widgets/app_text.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -321,13 +322,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(toTitleCase(current.quote), style: TextStyle(color: dashboardStyle.textPrimary, fontSize: 18, fontWeight: FontWeight.w700, height: 1.2)),
+              Text(toTitleCase(current.quote), style: TextStyle(color: dashboardStyle.textPrimary, fontSize: responsiveFont(context, 18), fontWeight: FontWeight.w700, height: 1.2)),
               if (current.author.trim().isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text('— ${toTitleCase(current.author.trim())}', style: TextStyle(color: dashboardStyle.textMuted, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700)),
               ],
               const SizedBox(height: 12),
-              Text(toTitleCaseMetadata([current.category, current.enabled ? 'Active' : 'Disabled']), style: TextStyle(color: dashboardStyle.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
+              Text(toTitleCaseMetadata([current.category, current.enabled ? 'Active' : 'Disabled']), style: TextStyle(color: dashboardStyle.textMuted, fontSize: responsiveFont(context, 12), fontWeight: FontWeight.w500)),
             ],
           ),
           actions: [
@@ -404,9 +405,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Momentum', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
+                        Text('Momentum', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: responsiveFont(context, 22), fontWeight: FontWeight.w900)),
                         const SizedBox(height: 4),
-                        Text(profile.currentRank.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 14, fontWeight: FontWeight.w800)),
+                        Text(profile.currentRank.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: responsiveFont(context, 14), fontWeight: FontWeight.w800)),
                       ],
                     )
                   else
@@ -455,7 +456,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 children: [
                   icon,
                   const SizedBox(width: 12),
-                  Expanded(child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground, fontWeight: selected ? FontWeight.w900 : FontWeight.w800, fontSize: 15))),
+                  Expanded(child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground, fontWeight: selected ? FontWeight.w900 : FontWeight.w800, fontSize: responsiveFont(context, 15)))),
                 ],
               );
             },
