@@ -2656,42 +2656,64 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                ProfileAvatar(
-                                  profile: widget.hiveService.getUserProfile(),
-                                  radius: 26,
-                                  accentColor: const Color(0xFFFFD86D),
-                                  badge: profile.currentRank.emoji,
-                                  onTap: _openProductivityTimeline,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${profile.currentRank.name} ${profile.currentRank.emoji}',
-                                        style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700),
-                                      ),
-                                      Text(
-                                        'Level ${profile.level} • ${summary["TODAY'S TASKS"] ?? 0} tasks today',
-                                        style: const TextStyle(color: Color(0xFFD9D9FF)),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final identity = Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${profile.currentRank.name} ${profile.currentRank.emoji}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700),
+                                    ),
+                                    Text(
+                                      'Level ${profile.level} • ${summary["TODAY'S TASKS"] ?? 0} tasks today',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Color(0xFFD9D9FF)),
+                                    ),
+                                  ],
+                                );
+                                final streak = Column(
+                                  crossAxisAlignment: constraints.maxWidth < 360 ? CrossAxisAlignment.start : CrossAxisAlignment.end,
                                   children: [
                                     Text(
                                       '${profile.activeStreak} days',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                                     ),
-                                    const Text('Current streak', style: TextStyle(color: Color(0xFFD9D9FF))),
+                                    const Text('Current streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Color(0xFFD9D9FF))),
                                   ],
-                                ),
-                              ],
+                                );
+                                final avatar = ProfileAvatar(
+                                  profile: widget.hiveService.getUserProfile(),
+                                  radius: constraints.maxWidth < 180 ? 18 : 26,
+                                  accentColor: const Color(0xFFFFD86D),
+                                  badge: profile.currentRank.emoji,
+                                  onTap: _openProductivityTimeline,
+                                );
+                                if (constraints.maxWidth < 360) {
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(children: [avatar, const SizedBox(width: 10), Expanded(child: identity)]),
+                                      const SizedBox(height: 8),
+                                      streak,
+                                    ],
+                                  );
+                                }
+                                return Row(
+                                  children: [
+                                    avatar,
+                                    const SizedBox(width: 12),
+                                    Expanded(child: identity),
+                                    const SizedBox(width: 12),
+                                    Flexible(flex: 0, child: streak),
+                                  ],
+                                );
+                              },
                             ),
                             const SizedBox(height: 16),
                             TweenAnimationBuilder<double>(
@@ -2709,42 +2731,47 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             const SizedBox(height: 8),
                             Text('$completed / $total completed', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 8,
-                              children: [
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    side: const BorderSide(color: Colors.white70),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      side: const BorderSide(color: Colors.white70),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                    ),
+                                    onPressed: _openJourneyTimeline,
+                                    icon: const Icon(Icons.menu_book_rounded, size: 16),
+                                    label: const Text('Open Journey Timeline'),
                                   ),
-                                  onPressed: _openJourneyTimeline,
-                                  icon: const Icon(Icons.menu_book_rounded, size: 16),
-                                  label: const Text('Open Journey Timeline'),
-                                ),
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    side: const BorderSide(color: Colors.white70),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                  const SizedBox(width: 10),
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      side: const BorderSide(color: Colors.white70),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                    ),
+                                    onPressed: _openProductivityTimeline,
+                                    icon: const Icon(Icons.show_chart_rounded, size: 16),
+                                    label: const Text('Open Productivity Timeline'),
                                   ),
-                                  onPressed: _openProductivityTimeline,
-                                  icon: const Icon(Icons.show_chart_rounded, size: 16),
-                                  label: const Text('Open Productivity Timeline'),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 10),
                             GestureDetector(
                               onTap: () => setState(() => _showDetails = !_showDetails),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.stars_rounded, color: Color(0xFFFFD86D), size: 16),
-                                  const SizedBox(width: 6),
-                                  Text(_showDetails ? 'Hide details' : 'Show details', style: const TextStyle(color: Colors.white)),
-                                ],
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.stars_rounded, color: Color(0xFFFFD86D), size: 16),
+                                    const SizedBox(width: 6),
+                                    Text(_showDetails ? 'Hide details' : 'Show details', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)),
+                                  ],
+                                ),
                               ),
                             ),
                             AnimatedSwitcher(
