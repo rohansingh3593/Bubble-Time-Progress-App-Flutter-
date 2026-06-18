@@ -9,6 +9,7 @@ import '../models/instruction.dart';
 import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
+import '../utils/text_formatters.dart';
 import '../utils/task_time_utils.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/quick_add_task_dialog.dart';
@@ -227,7 +228,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Today’s Motto:', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                Text('“${motto.quote}”', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)),
+                Text(toTitleCase(motto.quote), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)),
               ]),
             ),
           ],
@@ -469,7 +470,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             children: [
               Text('Have you done this task today?', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
               const SizedBox(height: 6),
-              Text(task.task, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+              Text(toTitleCase(task.task), style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
               const SizedBox(height: 12),
               ListTile(
                 leading: const Icon(Icons.check_circle_outline, color: Colors.green),
@@ -654,8 +655,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             final task = tasks[index];
                             return ListTile(
                               leading: CircleAvatar(backgroundColor: Color(task.colorValue).withOpacity(0.14), child: Icon(_isCompletedTask(task) ? Icons.check : Icons.task_alt, color: Color(task.colorValue))),
-                              title: Text(task.task, style: const TextStyle(fontWeight: FontWeight.w800)),
-                              subtitle: Text('${task.priority} • ${task.status} • ${_formatDueLabel(task)}'),
+                              title: Text(toTitleCase(task.task), style: const TextStyle(fontWeight: FontWeight.w800)),
+                              subtitle: Text(toTitleCaseMetadata([task.priority, task.status, _formatDueLabel(task)])),
                               trailing: Icon(_isCompletedTask(task) ? Icons.check_circle_outline : Icons.chevron_right, color: _isCompletedTask(task) ? Colors.green : style.primary),
                               onTap: () {
                                 Navigator.pop(context);
@@ -718,8 +719,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                                 backgroundColor: Color(task.colorValue).withOpacity(0.14),
                                 child: Icon(_isCompletedTask(task) ? Icons.check : Icons.task_alt, color: Color(task.colorValue)),
                               ),
-                              title: Text(task.task, style: const TextStyle(fontWeight: FontWeight.w800)),
-                              subtitle: Text('${task.priority} • ${row.displayStatus} • ${_formatDueLabel(task)}'),
+                              title: Text(toTitleCase(task.task), style: const TextStyle(fontWeight: FontWeight.w800)),
+                              subtitle: Text(toTitleCaseMetadata([task.priority, row.displayStatus, _formatDueLabel(task)])),
                               trailing: Icon(isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task) ? Icons.event_repeat_rounded : Icons.touch_app_rounded, color: style.primary),
                               onTap: () async {
                                 Navigator.pop(context);
@@ -759,7 +760,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ListTile(
-                  title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900)),
                   subtitle: Text(entry == null ? 'Have you followed this instruction today?' : 'This instruction is already updated today.'),
                 ),
                 if (entry == null && instruction.enabled) ...[
@@ -875,8 +876,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                           backgroundColor: Color(instruction.colorValue).withOpacity(0.14),
                           child: Icon(Icons.rule_folder_outlined, color: Color(instruction.colorValue)),
                         ),
-                        title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
-                        subtitle: Text('${instruction.repeatType} • ${entry?.status ?? 'Pending'}'),
+                        title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900)),
+                        subtitle: Text(toTitleCaseMetadata([instruction.repeatType, entry?.status ?? 'Pending'])),
                         trailing: Text('+${instruction.bonusPoints}', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.green)),
                         onTap: () {
                           Navigator.pop(context);
@@ -2649,7 +2650,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(task.task, style: TextStyle(color: onCard, fontWeight: FontWeight.w900)),
+                      Text(toTitleCase(task.task), style: TextStyle(color: onCard, fontWeight: FontWeight.w900)),
                       const SizedBox(height: 3),
                       Text('${task.repeatFrequency ?? 'Daily'} • $instructionSummary', style: TextStyle(color: theme.textSecondary, fontSize: 12)),
                       Text('Mood: ${mood.emoji} ${mood.label}', style: TextStyle(color: moodColor, fontSize: 12, fontWeight: FontWeight.w800)),
@@ -2716,7 +2717,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(task.task, style: TextStyle(color: onCard, fontWeight: FontWeight.w800)),
+                          Text(toTitleCase(task.task), style: TextStyle(color: onCard, fontWeight: FontWeight.w800)),
                           const SizedBox(height: 4),
                           Text(
                             '${task.repeatFrequency ?? 'Daily'} • ${task.category}',
@@ -2776,7 +2777,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 children: [
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(project.task, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
+                    title: Text(toTitleCase(project.task), style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)),
                     subtitle: Text(subtitle, style: TextStyle(color: style.primary, fontWeight: FontWeight.w700)),
                     trailing: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -3619,8 +3620,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   backgroundColor: Color(instruction.colorValue).withOpacity(0.14),
                   child: Icon(Icons.rule_folder_outlined, color: Color(instruction.colorValue)),
                 ),
-                title: Text(instruction.name, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
-                subtitle: Text((entry?.hasLevel == true || entry?.hasOption == true) ? 'Today: ${entry!.selectionSummary} • Bonus: +${entry.bonusPoints} • ${widget.hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.repeatType} • ${instruction.isLevelBased ? '${instruction.levels.length} levels' : instruction.isOptionBased ? '${instruction.options.length} options' : '+${instruction.bonusPoints} points'} • ${widget.hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(color: style.textMuted)),
+                title: Text(toTitleCase(instruction.name), style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900)),
+                subtitle: Text((entry?.hasLevel == true || entry?.hasOption == true) ? toTitleCaseMetadata(['Today: ${entry!.selectionSummary}', 'Bonus: +${entry.bonusPoints}', '${widget.hiveService.instructionCurrentStreak(instruction, today)} Streak']) : toTitleCaseMetadata([instruction.repeatType, instruction.isLevelBased ? '${instruction.levels.length} Levels' : instruction.isOptionBased ? '${instruction.options.length} Options' : '+${instruction.bonusPoints} Points', '${widget.hiveService.instructionCurrentStreak(instruction, today)} Streak']), style: TextStyle(color: style.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
                 trailing: Text(entry?.status ?? 'Pending', style: TextStyle(color: statusColor, fontWeight: FontWeight.w900)),
                 onTap: () => _showStandaloneInstructionActions(instruction, today),
               );
@@ -3716,8 +3717,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         ListTile(
           dense: true,
           onTap: () => _openTodayTaskQuickOccurrence(row),
-          title: Text(task.task, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w700)),
-          subtitle: Text('${task.priority} • ${row.displayStatus} • ${_formatDueLabel(task)}', style: TextStyle(color: style.textMuted)),
+          title: Text(toTitleCase(task.task), style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w700)),
+          subtitle: Text(toTitleCaseMetadata([task.priority, row.displayStatus, _formatDueLabel(task)]), style: TextStyle(color: style.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
           trailing: Icon(
             row.group.icon,
             color: row.group.color,

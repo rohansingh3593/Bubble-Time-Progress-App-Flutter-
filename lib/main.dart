@@ -13,6 +13,7 @@ import 'screens/week_view.dart';
 import 'screens/day_view.dart';
 import 'screens/streak_view.dart';
 import 'constants/dashboard_themes.dart';
+import 'utils/text_formatters.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -304,15 +305,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('❝', style: TextStyle(color: dashboardStyle.primary.withOpacity(0.25), fontSize: 42, fontWeight: FontWeight.w900, height: 0.85)),
-              Text(current.quote, style: TextStyle(color: dashboardStyle.textPrimary, fontSize: 24, fontWeight: FontWeight.w700, height: 1.2)),
-              Align(alignment: Alignment.centerRight, child: Text('❞', style: TextStyle(color: dashboardStyle.primary.withOpacity(0.25), fontSize: 42, fontWeight: FontWeight.w900, height: 0.85))),
+              Text(toTitleCase(current.quote), style: TextStyle(color: dashboardStyle.textPrimary, fontSize: 18, fontWeight: FontWeight.w700, height: 1.2)),
               if (current.author.trim().isNotEmpty) ...[
                 const SizedBox(height: 6),
-                Text('— ${current.author.trim()}', style: TextStyle(color: dashboardStyle.textMuted, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700)),
+                Text('— ${toTitleCase(current.author.trim())}', style: TextStyle(color: dashboardStyle.textMuted, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700)),
               ],
               const SizedBox(height: 12),
-              Text('Category: ${current.category}', style: TextStyle(color: dashboardStyle.textMuted, fontWeight: FontWeight.w700)),
+              Text(toTitleCaseMetadata([current.category, current.enabled ? 'Active' : 'Disabled']), style: TextStyle(color: dashboardStyle.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
             ],
           ),
           actions: [

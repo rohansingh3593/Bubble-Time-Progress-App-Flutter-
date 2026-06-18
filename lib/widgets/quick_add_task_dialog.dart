@@ -3,6 +3,7 @@ import '../models/instruction.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../utils/task_time_utils.dart';
+import '../utils/text_formatters.dart';
 
 const List<String> _priorityOptions = [
   'Low',
@@ -355,7 +356,7 @@ Future<Task?> showTaskFormDialog(
                               DropdownButtonFormField<String>(
                                 value: phase.status,
                                 decoration: InputDecoration(labelText: 'Phase Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                                items: _projectPhaseStatusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
+                                items: _projectPhaseStatusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(toTitleCase(status)))).toList(),
                                 onChanged: (value) {
                                   if (value != null) {
                                     setDialogState(() {
@@ -470,7 +471,7 @@ Future<Task?> showTaskFormDialog(
                   DropdownButtonFormField<String>(
                     value: selectedStatus,
                     decoration: InputDecoration(labelText: 'Status', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
-                    items: _statusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(status))).toList(),
+                    items: _statusOptions.map((status) => DropdownMenuItem<String>(value: status, child: Text(toTitleCase(status)))).toList(),
                     onChanged: (value) {
                       if (value != null) setDialogState(() => selectedStatus = value);
                     },
@@ -480,7 +481,7 @@ Future<Task?> showTaskFormDialog(
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
                   decoration: InputDecoration(labelText: 'Category', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
-                  items: [...categories.map((c) => DropdownMenuItem<String>(value: c, child: Text(c))), const DropdownMenuItem<String>(value: '__add_category__', child: Text('➕ Add Category'))],
+                  items: [...categories.map((c) => DropdownMenuItem<String>(value: c, child: Text(toTitleCase(c)))), const DropdownMenuItem<String>(value: '__add_category__', child: Text('➕ Add Category'))],
                   onChanged: (value) async {
                     if (value == null) return;
                     if (value == '__add_category__') {
@@ -704,7 +705,7 @@ class _TaskInstructionSection extends StatelessWidget {
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(radius: 13, backgroundColor: Color(instruction.colorValue).withOpacity(0.16), child: Icon(Icons.rule_rounded, color: Color(instruction.colorValue), size: 15)),
-                  title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w800)),
                   subtitle: Text(_instructionSummary(instruction)),
                   trailing: PopupMenuButton<String>(
                     onSelected: (action) async {
@@ -871,7 +872,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                     return ListTile(
                       dense: true,
                       leading: const Icon(Icons.emoji_events_outlined),
-                      title: Text(level.displayLabel),
+                      title: Text(toTitleCase(level.displayLabel)),
                       subtitle: Text('+${level.bonusPoints} points • ${level.xpEarned} XP'),
                       trailing: Wrap(
                         spacing: 4,
@@ -916,7 +917,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                     return ListTile(
                       dense: true,
                       leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
-                      title: Text(option.name),
+                      title: Text(toTitleCase(option.name)),
                       subtitle: Text('+${option.bonusPoints} points • ${option.xpEarned} XP'),
                       trailing: Wrap(
                         spacing: 4,

@@ -9,6 +9,7 @@ import '../constants/colors.dart';
 import '../constants/dashboard_themes.dart';
 import '../utils/task_time_utils.dart';
 import 'journal_view.dart';
+import '../utils/text_formatters.dart';
 
 class DayView extends StatefulWidget {
   final HiveService hiveService;
@@ -611,7 +612,7 @@ class _DayViewState extends State<DayView> {
                         return ListTile(
                           dense: true,
                           onTap: () => _editTask(task),
-                          title: Text(task.task, style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w800)),
+                          title: Text(toTitleCase(task.task), style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w800)),
                           subtitle: Text(_taskSubtitle(task), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w600)),
                         );
                       },

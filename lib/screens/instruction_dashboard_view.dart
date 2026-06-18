@@ -5,6 +5,7 @@ import '../models/instruction.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../utils/task_time_utils.dart';
+import '../utils/text_formatters.dart';
 
 class InstructionDashboardView extends StatefulWidget {
   final HiveService hiveService;
@@ -121,7 +122,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ListTile(
-                  title: Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900)),
                   subtitle: Text(entry == null ? 'Pending for current period' : 'Already updated: ${entry.status}'),
                 ),
                 if (instruction.isTaskLinked)
@@ -750,7 +751,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(instruction.name),
+        title: Text(toTitleCase(instruction.name)),
         content: SingleChildScrollView(
           child: SizedBox(
             width: 420,
@@ -875,7 +876,7 @@ class _InstructionCard extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(instruction.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
                 Text((entry?.hasLevel == true || entry?.hasOption == true) ? 'Today: ${entry!.selectionSummary} • +${entry.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • ${instruction.isLevelBased ? '${instruction.levels.length} levels' : instruction.isOptionBased ? '${instruction.options.length} options' : '+${instruction.bonusPoints} points'} • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
                 if (instruction.linkedTasks.isNotEmpty) Text('Linked: ${_linkedTaskSummary(instruction)}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: const TextStyle(fontSize: 12, color: Colors.black45)),
@@ -884,7 +885,7 @@ class _InstructionCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(999)),
-              child: Text(status, style: TextStyle(color: statusColor, fontWeight: FontWeight.w900, fontSize: 12)),
+              child: Text(toTitleCase(status), style: TextStyle(color: statusColor, fontWeight: FontWeight.w900, fontSize: 12)),
             ),
           ],
         ),

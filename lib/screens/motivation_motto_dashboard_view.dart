@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/dashboard_themes.dart';
 import '../models/motivation_motto.dart';
+import '../utils/text_formatters.dart';
 import '../services/hive_service.dart';
 
 class MotivationMottoDashboardView extends StatefulWidget {
@@ -68,9 +69,9 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
             : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Today’s Motto:', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 10),
-                _premiumQuoteBlock(motto, quoteFontSize: 24),
+                _premiumQuoteBlock(motto),
                 const SizedBox(height: 8),
-                Text('${motto.category} • ${motto.enabled ? 'Active' : 'Disabled'}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+                Text(toTitleCaseMetadata([motto.category, motto.enabled ? 'Active' : 'Disabled']), style: TextStyle(color: style.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
               ]),
       );
 
@@ -108,17 +109,17 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
     );
   }
 
-  Widget _emptyCard() => Card(child: Padding(padding: const EdgeInsets.all(18), child: Text('No mottos yet. Tap + Add Motivation Motto to save personal quotes offline.', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700))));
+  Widget _emptyCard() => Card(child: Padding(padding: const EdgeInsets.all(18), child: Text('No mottos yet. Tap + Add Motivation Motto to save personal quotes offline.', style: TextStyle(color: style.textMuted, fontSize: 12, fontWeight: FontWeight.w500))));
 
   Widget _mottoCard(MotivationMotto motto) => Card(
         margin: const EdgeInsets.only(bottom: 10),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _premiumQuoteBlock(motto, quoteFontSize: 24),
+            _premiumQuoteBlock(motto),
             const SizedBox(height: 10),
-            Text('${motto.category} • ${motto.enabled ? 'Active' : 'Disabled'}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
-            if (motto.title.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(motto.title, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700))),
+            Text(toTitleCaseMetadata([motto.category, motto.enabled ? 'Active' : 'Disabled']), style: TextStyle(color: style.textMuted, fontSize: 12, fontWeight: FontWeight.w500)),
+            if (motto.title.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(toTitleCase(motto.title), style: TextStyle(color: style.textMuted, fontSize: 12, fontWeight: FontWeight.w500))),
             Wrap(spacing: 8, children: [
               FilterChip(label: const Text('Favorite'), selected: motto.favorite, onSelected: (_) => widget.hiveService.setMotivationMottoFlag(motto.id, favorite: !motto.favorite)),
               FilterChip(label: const Text('Pinned'), selected: motto.pinned, onSelected: (_) => widget.hiveService.setMotivationMottoFlag(motto.id, pinned: !motto.pinned)),
@@ -133,14 +134,12 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
         ),
       );
 
-  Widget _premiumQuoteBlock(MotivationMotto motto, {double quoteFontSize = 24}) => Column(
+  Widget _premiumQuoteBlock(MotivationMotto motto, {double quoteFontSize = 18}) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('❝', style: TextStyle(color: style.primary.withOpacity(0.25), fontSize: 42, fontWeight: FontWeight.w900, height: 0.85)),
-          Text(motto.quote, style: TextStyle(color: style.textPrimary, fontSize: quoteFontSize, fontWeight: FontWeight.w700, height: 1.18)),
-          Align(alignment: Alignment.centerRight, child: Text('❞', style: TextStyle(color: style.primary.withOpacity(0.25), fontSize: 42, fontWeight: FontWeight.w900, height: 0.85))),
+          Text(toTitleCase(motto.quote), style: TextStyle(color: style.textPrimary, fontSize: quoteFontSize, fontWeight: FontWeight.w700, height: 1.18)),
           if (motto.author.trim().isNotEmpty)
-            Text('— ${motto.author.trim()}', style: TextStyle(color: style.textMuted, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700)),
+            Text('— ${toTitleCase(motto.author.trim())}', style: TextStyle(color: style.textMuted, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700)),
         ],
       );
 
@@ -164,7 +163,7 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), ElevatedButton(onPressed: () async {
         if (quote.text.trim().isEmpty) return;
         final titleText = title.text.trim();
-        final saved = (motto ?? MotivationMotto.create(quote: quote.text.trim())).copyWith(quote: quote.text.trim(), title: titleText, description: titleText, category: category, mood: mood.text.trim(), author: author.text.trim(), enabled: enabled);
+        final saved = (motto ?? MotivationMotto.create(quote: toTitleCase(quote.text.trim()))).copyWith(quote: toTitleCase(quote.text.trim()), title: toTitleCase(titleText), description: toTitleCase(titleText), category: toTitleCase(category), mood: toTitleCase(mood.text.trim()), author: toTitleCase(author.text.trim()), enabled: enabled);
         await widget.hiveService.saveMotivationMotto(saved);
         if (mounted) Navigator.pop(context);
       }, child: const Text('Save'))],

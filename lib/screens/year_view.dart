@@ -8,6 +8,7 @@ import '../constants/dashboard_themes.dart';
 import '../models/task_model.dart';
 import '../models/productivity_snapshot.dart';
 import 'journal_view.dart';
+import '../utils/text_formatters.dart';
 
 class YearView extends StatefulWidget {
   final HiveService hiveService;
@@ -232,7 +233,7 @@ class _YearViewState extends State<YearView> {
                         return ListTile(
                           dense: true,
                           onTap: () => _editTask(task),
-                          title: Text(task.task),
+                          title: Text(toTitleCase(task.task)),
                           subtitle: Text('${task.priority} • ${task.status}'),
                         );
                       },

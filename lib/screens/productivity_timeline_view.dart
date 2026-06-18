@@ -12,6 +12,7 @@ import '../models/rank_profile.dart';
 import '../models/user_profile.dart';
 import '../services/hive_service.dart';
 import '../widgets/profile_avatar.dart';
+import '../utils/text_formatters.dart';
 
 class ProductivityTimelineView extends StatefulWidget {
   final HiveService hiveService;
@@ -814,7 +815,7 @@ class _RewardGoalTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(goal.name, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                Text(toTitleCase(goal.name), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
                 Text('${_formatRupees(goal.savedAmountRupees)} / ${_formatRupees(goal.targetAmountRupees)} • Remaining ${_formatRupees(goal.remainingAmountRupees)}', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
                 const SizedBox(height: 8),
