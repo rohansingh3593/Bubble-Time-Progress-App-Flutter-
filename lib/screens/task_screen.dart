@@ -435,13 +435,22 @@ class _TaskColorChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withOpacity(0.28)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w800)),
-        ],
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
       ),
     );
   }
