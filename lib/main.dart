@@ -351,52 +351,75 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       valueListenable: widget.hiveService.getBoxListenable(),
       builder: (context, box, _) {
         final dashboardStyle = DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
-        return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens.asMap().entries.map((entry) {
-          return HeroMode(
-            enabled: entry.key == _selectedIndex,
-            child: entry.value,
-          );
-        }).toList(),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: dashboardStyle.surface,
-        selectedItemColor: dashboardStyle.primary,
-        unselectedItemColor: dashboardStyle.textMuted,
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
+        final destinations = const <NavigationRailDestination>[
+          NavigationRailDestination(
             icon: Icon(Icons.dashboard),
-            label: 'Home',
-            tooltip: 'Dashboard',
+            selectedIcon: Icon(Icons.dashboard_rounded),
+            label: Text('Home'),
           ),
-          BottomNavigationBarItem(
+          NavigationRailDestination(
             icon: Icon(Icons.calendar_today),
-            label: 'Year',
+            selectedIcon: Icon(Icons.calendar_today_rounded),
+            label: Text('Year'),
           ),
-          BottomNavigationBarItem(
+          NavigationRailDestination(
             icon: Icon(Icons.calendar_view_month),
-            label: 'Month',
+            selectedIcon: Icon(Icons.calendar_view_month_rounded),
+            label: Text('Month'),
           ),
-          BottomNavigationBarItem(
+          NavigationRailDestination(
             icon: Icon(Icons.view_week),
-            label: 'Week',
+            selectedIcon: Icon(Icons.view_week_rounded),
+            label: Text('Week'),
           ),
-          BottomNavigationBarItem(
+          NavigationRailDestination(
             icon: Icon(Icons.today),
-            label: 'Day',
+            selectedIcon: Icon(Icons.today_rounded),
+            label: Text('Day'),
           ),
-          BottomNavigationBarItem(
+          NavigationRailDestination(
             icon: Icon(Icons.local_fire_department),
-            label: 'Streak',
+            selectedIcon: Icon(Icons.local_fire_department_rounded),
+            label: Text('Streak'),
           ),
-        ],
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        type: BottomNavigationBarType.fixed,
-      ),
-    );
+        ];
+        return Scaffold(
+          body: Row(
+            children: [
+              SafeArea(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: dashboardStyle.surface,
+                    border: Border(right: BorderSide(color: dashboardStyle.primary.withOpacity(0.12))),
+                  ),
+                  child: NavigationRail(
+                    backgroundColor: dashboardStyle.surface,
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: _onItemTapped,
+                    labelType: NavigationRailLabelType.all,
+                    minWidth: 86,
+                    selectedIconTheme: IconThemeData(color: dashboardStyle.primary),
+                    unselectedIconTheme: IconThemeData(color: dashboardStyle.textMuted),
+                    selectedLabelTextStyle: TextStyle(color: dashboardStyle.primary, fontWeight: FontWeight.w900, fontSize: 12),
+                    unselectedLabelTextStyle: TextStyle(color: dashboardStyle.textMuted, fontWeight: FontWeight.w700, fontSize: 12),
+                    destinations: destinations,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: IndexedStack(
+                  index: _selectedIndex,
+                  children: _screens.asMap().entries.map((entry) {
+                    return HeroMode(
+                      enabled: entry.key == _selectedIndex,
+                      child: entry.value,
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        );
       },
     );
   }
