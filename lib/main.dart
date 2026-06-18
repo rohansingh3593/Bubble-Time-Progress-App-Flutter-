@@ -380,17 +380,28 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _SidebarNavItem(icon: Icons.insert_chart_outlined_rounded, label: 'Progress', selectedIndex: 12),
       _SidebarNavItem(icon: Icons.analytics_rounded, label: 'Reports', selectedIndex: 13),
     ];
-    final expanded = _sidebarExpanded;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final isTablet = screenWidth >= 600 && screenWidth < 1000;
+    final collapsedWidth = isMobile ? 64.0 : 72.0;
+    final expandedWidth = isMobile ? screenWidth * 0.68 : isTablet ? 220.0 : 260.0;
+    final canExpand = !isMobile;
+    final expanded = canExpand && _sidebarExpanded;
+    final sidebarWidth = (expanded ? expandedWidth.clamp(64.0, 260.0) : collapsedWidth).toDouble();
     return MouseRegion(
-      onEnter: (_) => setState(() => _sidebarExpanded = true),
-      onExit: (_) => setState(() => _sidebarExpanded = false),
+      onEnter: (_) {
+        if (canExpand) setState(() => _sidebarExpanded = true);
+      },
+      onExit: (_) {
+        if (canExpand) setState(() => _sidebarExpanded = false);
+      },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => _sidebarExpanded = !_sidebarExpanded),
+        onTap: canExpand ? () => setState(() => _sidebarExpanded = !_sidebarExpanded) : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
-          width: expanded ? 220 : 64,
+          width: sidebarWidth,
           decoration: BoxDecoration(
             color: style.surface,
             border: Border(right: BorderSide(color: style.primary.withOpacity(0.12))),
@@ -438,7 +449,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           }
         },
         child: Container(
-          width: expanded ? 192 : 48,
+          width: expanded ? (sidebarWidth - 28).clamp(120.0, 232.0).toDouble() : (sidebarWidth - 16).clamp(44.0, 56.0).toDouble(),
           padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0, vertical: 12),
           decoration: BoxDecoration(
             color: selected ? style.primary.withOpacity(0.14) : Colors.transparent,
@@ -479,6 +490,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           journalEntries: widget.hiveService.getAllJournalEntries(),
           lifetimeStats: widget.hiveService.getLifetimeProductivityStats(),
         );
+        final screenWidth = MediaQuery.of(context).size.width;
+        final collapsedSidebarWidth = screenWidth < 600 ? 64.0 : 72.0;
         final content = IndexedStack(
           index: _selectedIndex,
           children: _screens.asMap().entries.map((entry) {
@@ -492,7 +505,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           body: Stack(
             children: [
               Padding(
-                padding: const EdgeInsets.only(left: 64),
+                padding: EdgeInsets.only(left: collapsedSidebarWidth),
                 child: content,
               ),
               Positioned(
