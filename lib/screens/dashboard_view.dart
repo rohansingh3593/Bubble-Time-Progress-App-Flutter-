@@ -2700,6 +2700,18 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                                   badge: profile.currentRank.emoji,
                                   onTap: _openProductivityTimeline,
                                 );
+                                if (constraints.maxWidth < 140) {
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      avatar,
+                                      const SizedBox(height: 8),
+                                      identity,
+                                      const SizedBox(height: 8),
+                                      streak,
+                                    ],
+                                  );
+                                }
                                 if (constraints.maxWidth < 360) {
                                   return Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
