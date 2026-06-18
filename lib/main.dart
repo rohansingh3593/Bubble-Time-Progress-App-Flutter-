@@ -446,16 +446,22 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               color: selected ? style.primary.withOpacity(0.14) : Colors.transparent,
               borderRadius: BorderRadius.circular(999),
             ),
-            child: Row(
-              mainAxisAlignment: expanded ? MainAxisAlignment.start : MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(item.icon, color: foreground, size: 22),
-                if (expanded) ...[
-                  const SizedBox(width: 14),
-                  Expanded(child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground, fontWeight: selected ? FontWeight.w900 : FontWeight.w800, fontSize: 16))),
-                ],
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final showLabel = expanded && constraints.maxWidth >= 96;
+                final icon = Icon(item.icon, color: foreground, size: 22);
+                if (!showLabel) {
+                  return Center(child: FittedBox(fit: BoxFit.scaleDown, child: icon));
+                }
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    icon,
+                    const SizedBox(width: 14),
+                    Expanded(child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground, fontWeight: selected ? FontWeight.w900 : FontWeight.w800, fontSize: 16))),
+                  ],
+                );
+              },
             ),
           ),
         ),
