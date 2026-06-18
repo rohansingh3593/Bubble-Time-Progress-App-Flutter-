@@ -127,7 +127,8 @@ class _TaskScreenState extends State<TaskScreen> {
     return ValueListenableBuilder(
       valueListenable: widget.hiveService.getBoxListenable(),
       builder: (context, box, _) {
-        final tasks = widget.hiveService.getTasksForDate(widget.date);
+        final allTasks = widget.hiveService.getTasksForDate(widget.date);
+        final taskEntries = allTasks.asMap().entries.where((entry) => !isDailyJournalSystemTask(entry.value)).toList();
 
         return Container(
           padding: const EdgeInsets.all(16.0),
@@ -154,18 +155,20 @@ class _TaskScreenState extends State<TaskScreen> {
 
               // Task list
               Flexible(
-                child: tasks.isEmpty
+                child: taskEntries.isEmpty
                     ? const Center(
                         child: Text(
-                          'No tasks for this date',
+                          'No non-journal tasks for this date',
                           style: TextStyle(color: Colors.grey),
                         ),
                       )
                     : ListView.builder(
                         shrinkWrap: true,
-                        itemCount: tasks.length,
+                        itemCount: taskEntries.length,
                         itemBuilder: (context, index) {
-                          final task = tasks[index];
+                          final taskEntry = taskEntries[index];
+                          final originalIndex = taskEntry.key;
+                          final task = taskEntry.value;
                           final taskColor = Color(task.colorValue);
                           final isCompleted = task.done || task.status == 'Completed';
 
@@ -233,13 +236,13 @@ class _TaskScreenState extends State<TaskScreen> {
                                 children: [
                                   IconButton(
                                     icon: Icon(Icons.edit, color: taskColor),
-                                    onPressed: () => _editTask(index),
+                                    onPressed: () => _editTask(originalIndex),
                                     tooltip: 'Update task',
                                   ),
                                   if (!task.repeatTask)
                                     IconButton(
                                       icon: const Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () => _deleteTask(index),
+                                      onPressed: () => _deleteTask(originalIndex),
                                       tooltip: 'Delete task',
                                     )
                                   else if (isDailyJournalSystemTask(task))
