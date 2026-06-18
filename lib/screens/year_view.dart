@@ -467,21 +467,25 @@ class _YearViewState extends State<YearView> {
   }
 
   Widget _yearProgressLegendItem({required DashboardThemeStyle theme, required Color color, required String label, bool glow = false}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            boxShadow: glow ? [BoxShadow(color: theme.accent.withOpacity(0.45), blurRadius: 10, spreadRadius: 1)] : null,
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: glow ? [BoxShadow(color: theme.accent.withOpacity(0.45), blurRadius: 10, spreadRadius: 1)] : null,
+            ),
           ),
-        ),
-        const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800)),
-      ],
+          const SizedBox(width: 6),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800)),
+        ],
+      ),
     );
   }
 
