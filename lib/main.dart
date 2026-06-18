@@ -435,9 +435,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             item.onTap?.call();
           }
         },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOutCubic,
+        child: Container(
           width: expanded ? 224 : 56,
           padding: EdgeInsets.symmetric(horizontal: expanded ? 14 : 0, vertical: 12),
           decoration: BoxDecoration(
