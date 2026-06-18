@@ -487,10 +487,18 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           }).toList(),
         );
         return Scaffold(
-          body: Row(
+          body: Stack(
             children: [
-              _buildAnimatedSidebar(dashboardStyle, profile),
-              Expanded(child: content),
+              Padding(
+                padding: const EdgeInsets.only(left: 80),
+                child: content,
+              ),
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                child: _buildAnimatedSidebar(dashboardStyle, profile),
+              ),
             ],
           ),
         );
