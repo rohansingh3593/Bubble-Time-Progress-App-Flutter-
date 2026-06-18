@@ -438,7 +438,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 260),
           curve: Curves.easeOutCubic,
-          width: expanded ? double.infinity : 56,
+          width: expanded ? 224 : 56,
           padding: EdgeInsets.symmetric(horizontal: expanded ? 14 : 0, vertical: 12),
           decoration: BoxDecoration(
             color: selected ? style.primary.withOpacity(0.14) : Colors.transparent,
