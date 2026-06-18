@@ -304,7 +304,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             borderRadius: BorderRadius.circular(26),
             border: Border.all(color: style.primary.withOpacity(0.18)),
           ),
-          child: constraints.maxWidth < 720
+          child: constraints.maxWidth < 900
               ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [profileIntro, const SizedBox(height: 12), actions])
               : Row(children: [Expanded(child: profileIntro), const SizedBox(width: 12), actions]),
         );
@@ -365,32 +365,49 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       margin: const EdgeInsets.fromLTRB(16, 10, 0, 18),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: style.surface, borderRadius: BorderRadius.circular(28), border: Border.all(color: style.primary.withOpacity(0.14))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Momentum', style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
-        Text(profile.currentRank.name, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 18),
-        ...items.map((item) => Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: item.$3,
-            child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11), child: Row(children: [Icon(item.$1, color: style.primary, size: 20), const SizedBox(width: 10), Text(item.$2, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800))])),
-          ),
-        )),
-      ]),
+      child: SingleChildScrollView(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Momentum', style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
+          Text(profile.currentRank.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 18),
+          ...items.map((item) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: item.$3,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                child: Row(children: [
+                  Icon(item.$1, color: style.primary, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(item.$2, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800))),
+                ]),
+              ),
+            ),
+          )),
+        ]),
+      ),
     );
   }
 
   Widget _buildQuickStatsRibbon(Map<String, int> summary, Map<String, int> scopedCounts, RankProfile profile) {
-    return Row(children: [
-      Expanded(child: _quickStatCard('Tasks', scopedCounts['Today'] ?? 0, Icons.task_alt_rounded, () => _showTaskListSheet('Today tasks', _dedupeTasksForDashboard(widget.hiveService.getAllTasksByDate().values.expand((list) => list).toList())))),
-      const SizedBox(width: 10),
-      Expanded(child: _quickStatCard('Goals', summary['Completed'] ?? 0, Icons.flag_rounded, _openGoalDashboard)),
-      const SizedBox(width: 10),
-      Expanded(child: _quickStatCard('Coins', widget.hiveService.getRewardMoneySummary().availableRupees, Icons.paid_rounded, _openRewardMoneyHistory)),
-      const SizedBox(width: 10),
-      Expanded(child: _quickStatCard('XP', profile.xp, Icons.bolt_rounded, _openProductivityTimeline)),
-    ]);
+    final cards = [
+      _quickStatCard('Tasks', scopedCounts['Today'] ?? 0, Icons.task_alt_rounded, () => _showTaskListSheet('Today tasks', _dedupeTasksForDashboard(widget.hiveService.getAllTasksByDate().values.expand((list) => list).toList()))),
+      _quickStatCard('Goals', summary['Completed'] ?? 0, Icons.flag_rounded, _openGoalDashboard),
+      _quickStatCard('Coins', widget.hiveService.getRewardMoneySummary().availableRupees, Icons.paid_rounded, _openRewardMoneyHistory),
+      _quickStatCard('XP', profile.xp, Icons.bolt_rounded, _openProductivityTimeline),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: cards
+            .map((card) => Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: SizedBox(width: 145, child: card),
+                ))
+            .toList(),
+      ),
+    );
   }
 
   Widget _quickStatCard(String label, int value, IconData icon, VoidCallback onTap) {
@@ -408,15 +425,33 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _buildFeatureLaunchCard({required IconData icon, required String title, required String subtitle, required String actionLabel, required VoidCallback onTap}) {
     final style = _dashboardStyle();
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(color: style.surface, borderRadius: BorderRadius.circular(24), border: Border.all(color: style.primary.withOpacity(0.14))),
-      child: Row(children: [
-        CircleAvatar(radius: 26, backgroundColor: style.primary.withOpacity(0.14), child: Icon(icon, color: style.primary)),
-        const SizedBox(width: 14),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 18)), const SizedBox(height: 4), Text(subtitle, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700))])),
-        ElevatedButton(onPressed: onTap, child: Text(actionLabel)),
-      ]),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final leading = CircleAvatar(radius: 26, backgroundColor: style.primary.withOpacity(0.14), child: Icon(icon, color: style.primary));
+        final copy = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 18)),
+          const SizedBox(height: 4),
+          Text(subtitle, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+        ]);
+        final action = ElevatedButton(onPressed: onTap, child: Text(actionLabel, maxLines: 1, overflow: TextOverflow.ellipsis));
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(color: style.surface, borderRadius: BorderRadius.circular(24), border: Border.all(color: style.primary.withOpacity(0.14))),
+          child: constraints.maxWidth < 520
+              ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [leading, const SizedBox(width: 14), Expanded(child: copy)]),
+                  const SizedBox(height: 12),
+                  Align(alignment: Alignment.centerLeft, child: action),
+                ])
+              : Row(children: [
+                  leading,
+                  const SizedBox(width: 14),
+                  Expanded(child: copy),
+                  const SizedBox(width: 12),
+                  Flexible(flex: 0, child: action),
+                ]),
+        );
+      },
     );
   }
 
@@ -2972,26 +3007,30 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       passedLabel: '${progress['passed'] ?? 0} days passed',
       remainingLabel: '${progress['remaining'] ?? 0} days left',
       color: Colors.green,
-      child: Row(
-        children: List.generate(7, (index) {
-          final day = index + 1;
-          final isToday = day == now.weekday;
-          final isPassed = day < now.weekday;
-          return Expanded(
-            child: Column(
-              children: [
-                _progressBubble(
-                  '$day',
-                  isToday ? Colors.orange : isPassed ? Colors.green : style.elevatedSurface,
-                  isToday || isPassed ? Colors.white : style.textMuted,
-                  size: 42,
-                ),
-                const SizedBox(height: 6),
-                Text(labels[index], style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
-              ],
-            ),
-          );
-        }),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: List.generate(7, (index) {
+            final day = index + 1;
+            final isToday = day == now.weekday;
+            final isPassed = day < now.weekday;
+            return SizedBox(
+              width: 64,
+              child: Column(
+                children: [
+                  _progressBubble(
+                    '$day',
+                    isToday ? Colors.orange : isPassed ? Colors.green : style.elevatedSurface,
+                    isToday || isPassed ? Colors.white : style.textMuted,
+                    size: 42,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(labels[index], style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+                ],
+              ),
+            );
+          }),
+        ),
       ),
     );
   }
@@ -3009,22 +3048,32 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              CircleAvatar(backgroundColor: color.withOpacity(0.15), child: Icon(icon, color: color)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
-                  Text('$passedLabel  •  $remainingLabel', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
-                ]),
-              ),
-              Container(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final titleBlock = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
+                Text('$passedLabel  •  $remainingLabel', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
+              ]);
+              final percentBadge = Container(
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 decoration: BoxDecoration(color: color.withOpacity(0.16), borderRadius: BorderRadius.circular(999), border: Border.all(color: color.withOpacity(0.28))),
                 child: Text('$percent%', style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w900)),
-              ),
-            ],
+              );
+              if (constraints.maxWidth < 430) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [CircleAvatar(backgroundColor: color.withOpacity(0.15), child: Icon(icon, color: color)), const SizedBox(width: 12), Expanded(child: titleBlock)]),
+                  const SizedBox(height: 10),
+                  percentBadge,
+                ]);
+              }
+              return Row(children: [
+                CircleAvatar(backgroundColor: color.withOpacity(0.15), child: Icon(icon, color: color)),
+                const SizedBox(width: 12),
+                Expanded(child: titleBlock),
+                const SizedBox(width: 12),
+                percentBadge,
+              ]);
+            },
           ),
           const SizedBox(height: 14),
           LinearProgressIndicator(value: (percent / 100).clamp(0.0, 1.0).toDouble(), minHeight: 8, backgroundColor: style.elevatedSurface, color: color),
