@@ -15,6 +15,7 @@ import '../widgets/rank_profile_card.dart';
 import 'journal_view.dart';
 import 'journey_timeline_view.dart';
 import '../utils/text_formatters.dart';
+import '../widgets/app_text.dart';
 
 class StreakView extends StatelessWidget {
   final HiveService hiveService;
@@ -574,8 +575,8 @@ class _HeroStreakCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Your consistency journey',
-                  style: TextStyle(color: contentColor, fontSize: 18, fontWeight: FontWeight.w700),
+                  'Consistency journey',
+                  style: TextStyle(color: contentColor, fontSize: responsiveFont(context, 16), fontWeight: FontWeight.w700),
                 ),
               ),
             ],
@@ -585,15 +586,15 @@ class _HeroStreakCard extends StatelessWidget {
             '${stats.currentDailyStreak}',
             style: TextStyle(color: contentColor, fontSize: 58, fontWeight: FontWeight.w900, height: 0.95),
           ),
-          Text('day active streak', style: TextStyle(color: contentColor, fontSize: 16)),
+          Text('day streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: contentColor, fontSize: responsiveFont(context, 14))),
           const SizedBox(height: 18),
           Row(
             children: [
-              Expanded(child: _HeroMetric(label: 'Weekly streak', value: '${stats.currentWeeklyStreak} wk', contentColor: contentColor)),
+              Expanded(child: _HeroMetric(label: 'Week', value: '${stats.currentWeeklyStreak} wk', contentColor: contentColor)),
               const SizedBox(width: 10),
-              Expanded(child: _HeroMetric(label: 'Longest', value: '${stats.longestStreak} days', contentColor: contentColor)),
+              Expanded(child: _HeroMetric(label: 'Best', value: '${stats.longestStreak} d', contentColor: contentColor)),
               const SizedBox(width: 10),
-              Expanded(child: _HeroMetric(label: 'Productivity', value: '${(stats.productivityRatio * 100).round()}%', contentColor: contentColor)),
+              Expanded(child: _HeroMetric(label: 'Score', value: '${(stats.productivityRatio * 100).round()}%', contentColor: contentColor)),
             ],
           ),
         ],
@@ -621,9 +622,9 @@ class _HeroMetric extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: TextStyle(color: contentColor, fontWeight: FontWeight.w800, fontSize: 18)),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: contentColor, fontWeight: FontWeight.w800, fontSize: responsiveFont(context, 16))),
           const SizedBox(height: 2),
-          Text(label, style: TextStyle(color: contentColor.withOpacity(0.82), fontSize: 11)),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: contentColor.withOpacity(0.82), fontSize: responsiveFont(context, 10))),
         ],
       ),
     );
@@ -1521,14 +1522,16 @@ class _HabitTrackerSection extends StatelessWidget {
               Icon(Icons.track_changes, color: habits.isEmpty ? _themeAccent(hiveService) : _themeDerivedTaskColor(hiveService, habits.first.template.colorValue)),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('Habit & Routine Tracker', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: style.textPrimary)),
+                child: Text('Habit Tracker', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: responsiveFont(context, 17), fontWeight: FontWeight.w800, color: style.textPrimary)),
               ),
-              Text('${habits.length} habits', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+              Text('${habits.length} habits', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            'Consistency is built one completed day at a time.',
+            'One completed day at a time.',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 14),
@@ -1610,12 +1613,14 @@ class _HabitCard extends StatelessWidget {
                       children: [
                         Container(width: 10, height: 10, decoration: BoxDecoration(color: taskColor, shape: BoxShape.circle)),
                         const SizedBox(width: 6),
-                        Expanded(child: Text(habit.title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: style.textPrimary))),
+                        Expanded(child: Text(habit.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: responsiveFont(context, 15), fontWeight: FontWeight.w900, color: style.textPrimary))),
                       ],
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      "Streak: ${habit.currentStreak} ${habit.repeatFrequency == 'Weekly' ? 'Weeks' : 'Days'} • ${habit.repeatFrequency} • ${habit.category}",
+                      "${habit.currentStreak} ${habit.repeatFrequency == 'Weekly' ? 'wk' : 'd'} • ${habit.repeatFrequency} • ${habit.category}",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700),
                     ),
                   ],
