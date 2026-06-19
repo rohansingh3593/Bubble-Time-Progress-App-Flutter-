@@ -68,7 +68,7 @@ class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
               const SizedBox(height: 16),
               _RewardMoneyCard(hiveService: widget.hiveService),
               const SizedBox(height: 16),
-              _PhotoGalleryCard(userProfile: userProfile, hiveService: widget.hiveService),
+              _PhotoGalleryCard(userProfile: userProfile),
               const SizedBox(height: 16),
               _PointsTotalsCard(snapshots: snapshots, stats: stats),
               const SizedBox(height: 16),
@@ -480,6 +480,120 @@ class _LifetimePerformanceCard extends StatelessWidget {
     if (saved != null) await hiveService.saveUserProfile(saved);
   }
 
+}
+
+class _PhotoGalleryCard extends StatelessWidget {
+  final UserProfile userProfile;
+  const _PhotoGalleryCard({required this.userProfile});
+
+  @override
+  Widget build(BuildContext context) {
+    final photos = <String>[
+      if (userProfile.profilePhotoPath.trim().isNotEmpty) userProfile.profilePhotoPath,
+      ...userProfile.photoHistory,
+    ].where((path) => path.trim().isNotEmpty).toList();
+    return _TimelineSection(
+      title: 'Profile Photo Gallery',
+      child: photos.isEmpty
+          ? const Text('Add a profile photo to start your progress gallery.', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54))
+          : SizedBox(
+              height: 86,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: photos.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemBuilder: (context, index) => ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: Image.file(
+                    File(photos[index]),
+                    width: 86,
+                    height: 86,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(width: 86, height: 86, color: AppColors.surface, child: const Icon(Icons.person, color: AppColors.primary)),
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+class _PointsTotalsCard extends StatelessWidget {
+  final List<ProductivitySnapshot> snapshots;
+  final LifetimeProductivityStats stats;
+
+  const _PointsTotalsCard({required this.snapshots, required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final basePoints = snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.basePoints);
+    final streakBonus = snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.streakBonusPoints);
+    final timingBonus = snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.timingBonusPoints);
+    return _TimelineSection(
+      title: 'Points Totals',
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          _StatTile(label: 'Total Points', value: _formatInt(stats.totalPoints)),
+          _StatTile(label: 'Base Points', value: _formatInt(basePoints)),
+          _StatTile(label: 'Streak Bonus', value: '+${_formatInt(streakBonus)}'),
+          _StatTile(label: 'Timing Bonus', value: '+${_formatInt(timingBonus)}'),
+        ].map((tile) => SizedBox(width: 156, child: tile)).toList(),
+      ),
+    );
+  }
+}
+
+class _PointsAnalyticsCard extends StatelessWidget {
+  final List<ProductivitySnapshot> snapshots;
+
+  const _PointsAnalyticsCard({required this.snapshots});
+
+  @override
+  Widget build(BuildContext context) {
+    final totalPoints = snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.totalPoints);
+    final averagePoints = snapshots.isEmpty ? 0 : (totalPoints / snapshots.length).round();
+    final best = snapshots.isEmpty ? null : snapshots.reduce((a, b) => a.totalPoints >= b.totalPoints ? a : b);
+    return _TimelineSection(
+      title: 'Points Analytics',
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          _StatTile(label: 'Tracked Days', value: _formatInt(snapshots.length)),
+          _StatTile(label: 'Avg / Day', value: _formatInt(averagePoints)),
+          _StatTile(label: 'Best Day', value: best == null ? '0' : '${_formatInt(best.totalPoints)} pts'),
+          _StatTile(label: 'Last 7 Days', value: _formatInt(_pointsSince(snapshots, DateTime.now().subtract(const Duration(days: 6))))),
+        ].map((tile) => SizedBox(width: 156, child: tile)).toList(),
+      ),
+    );
+  }
+}
+
+class _OverviewCards extends StatelessWidget {
+  final LifetimeProductivityStats stats;
+
+  const _OverviewCards({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    return _TimelineSection(
+      title: 'Productivity Overview',
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          _StatTile(label: 'Active Days', value: _formatInt(stats.activeDays)),
+          _StatTile(label: 'Completed Tasks', value: _formatInt(stats.totalCompletedTasks)),
+          _StatTile(label: 'Routine Completions', value: _formatInt(stats.routineCompletions)),
+          _StatTile(label: 'Project Phases Done', value: _formatInt(stats.projectPhasesCompleted)),
+          _StatTile(label: 'XP / Level', value: '${_formatInt(stats.xp)} XP • Lv ${stats.level}'),
+          _StatTile(label: 'Median Score', value: '${stats.medianProductivity.toStringAsFixed(1)}%'),
+        ].map((tile) => SizedBox(width: 156, child: tile)).toList(),
+      ),
+    );
+  }
 }
 
 class _RewardMoneyCard extends StatelessWidget {
@@ -1260,6 +1374,8 @@ String _formatInt(int value) {
   }
   return buffer.toString();
 }
+
+String _formatRupees(int value) => '₹${_formatInt(value)}';
 
 Color _heatColor(double score) {
   if (score < 0) return Colors.grey.shade200;
