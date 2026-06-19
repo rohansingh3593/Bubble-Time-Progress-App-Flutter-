@@ -241,7 +241,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       DayView(hiveService: widget.hiveService),
       StreakView(hiveService: widget.hiveService, onGoToDashboard: _goToDashboardTab),
       TaskScreen(date: DateTime.now(), hiveService: widget.hiveService),
-      TaskScreen(date: DateTime.now(), hiveService: widget.hiveService),
       InstructionDashboardView(hiveService: widget.hiveService),
       GoalDashboardView(hiveService: widget.hiveService),
       RewardMoneyHistoryView(hiveService: widget.hiveService),
@@ -372,13 +371,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _SidebarNavItem(icon: Icons.today_rounded, label: 'Day', selectedIndex: 4),
       _SidebarNavItem(icon: Icons.local_fire_department_rounded, label: 'Streak', selectedIndex: 5),
       _SidebarNavItem(icon: Icons.task_alt_rounded, label: 'Tasks', selectedIndex: 6),
-      _SidebarNavItem(icon: Icons.repeat_rounded, label: 'Routine', selectedIndex: 7),
-      _SidebarNavItem(icon: Icons.rule_folder_rounded, label: 'Instructions', selectedIndex: 8),
-      _SidebarNavItem(icon: Icons.flag_circle_rounded, label: 'Goals', selectedIndex: 9),
-      _SidebarNavItem(icon: Icons.account_balance_wallet_rounded, label: 'Money', selectedIndex: 10),
-      _SidebarNavItem(icon: Icons.lightbulb_rounded, label: 'Motivation', selectedIndex: 11),
-      _SidebarNavItem(icon: Icons.insert_chart_outlined_rounded, label: 'Progress', selectedIndex: 12),
-      _SidebarNavItem(icon: Icons.analytics_rounded, label: 'Reports', selectedIndex: 13),
+      _SidebarNavItem(icon: Icons.rule_folder_rounded, label: 'Instructions', selectedIndex: 7),
+      _SidebarNavItem(icon: Icons.flag_circle_rounded, label: 'Goals', selectedIndex: 8),
+      _SidebarNavItem(icon: Icons.account_balance_wallet_rounded, label: 'Money', selectedIndex: 9),
+      _SidebarNavItem(icon: Icons.lightbulb_rounded, label: 'Motivation', selectedIndex: 10),
+      _SidebarNavItem(icon: Icons.insert_chart_outlined_rounded, label: 'Progress', selectedIndex: 11),
+      _SidebarNavItem(icon: Icons.analytics_rounded, label: 'Reports', selectedIndex: 12),
     ];
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
@@ -460,7 +458,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               final showLabel = expanded && constraints.maxWidth >= 96;
               final icon = Icon(item.icon, color: foreground, size: 21);
               if (!showLabel) {
-                return Semantics(label: item.label, button: true, child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: icon)));
+                return Tooltip(
+                  message: item.label,
+                  waitDuration: const Duration(milliseconds: 350),
+                  child: Semantics(label: item.label, button: true, child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: icon))),
+                );
               }
               return Row(
                 mainAxisAlignment: MainAxisAlignment.start,
