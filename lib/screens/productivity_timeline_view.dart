@@ -13,6 +13,7 @@ import '../models/user_profile.dart';
 import '../services/hive_service.dart';
 import '../widgets/profile_avatar.dart';
 import '../utils/text_formatters.dart';
+import '../widgets/app_text.dart';
 
 class ProductivityTimelineView extends StatefulWidget {
   final HiveService hiveService;
@@ -81,14 +82,14 @@ class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
                 onRangeChanged: (value) => setState(() => _range = value),
               ),
               const SizedBox(height: 16),
+              _HistoryList(snapshots: snapshots.reversed.toList(), onTapSnapshot: _showSnapshotDetails),
+              const SizedBox(height: 16),
               _HeatMapCard(
                 snapshots: snapshots,
                 onTapSnapshot: _showSnapshotDetails,
               ),
               const SizedBox(height: 16),
               _ReportsCard(snapshots: snapshots),
-              const SizedBox(height: 16),
-              _HistoryList(snapshots: snapshots.reversed.toList(), onTapSnapshot: _showSnapshotDetails),
             ],
           );
         },
@@ -509,21 +510,24 @@ class _RewardMoneyCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
             children: [
-              Expanded(
+              SizedBox(
+                width: 160,
                 child: ElevatedButton.icon(
                   onPressed: () => _showWithdrawDialog(context, summary),
                   icon: const Icon(Icons.payments_outlined),
-                  label: const Text('Withdraw / Use'),
+                  label: const Text('Withdraw / Use', maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
+              SizedBox(
+                width: 140,
                 child: OutlinedButton.icon(
                   onPressed: () => _showGoalDialog(context),
                   icon: const Icon(Icons.flag_outlined),
-                  label: const Text('Add Goal'),
+                  label: const Text('Add Goal', maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
               ),
             ],
@@ -780,9 +784,9 @@ class _RewardStat extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w800)),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: responsiveFont(context, 12), color: Colors.black54, fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
-          Text(value, style: TextStyle(color: color ?? AppColors.textPrimary, fontWeight: FontWeight.w900, fontSize: 18)),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: color ?? AppColors.textPrimary, fontWeight: FontWeight.w900, fontSize: responsiveFont(context, 18))),
         ],
       ),
     );
@@ -799,210 +803,70 @@ class _RewardGoalTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final image = ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: goal.imagePath.isEmpty
+          ? Container(width: 58, height: 58, color: AppColors.surface, child: const Icon(Icons.flag_outlined, color: AppColors.primary))
+          : Image.file(File(goal.imagePath), width: 58, height: 58, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 58, height: 58, color: AppColors.surface, child: const Icon(Icons.flag_outlined))),
+    );
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(toTitleCase(goal.name), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+        const SizedBox(height: 4),
+        Text(
+          '${_formatRupees(goal.savedAmountRupees)} / ${_formatRupees(goal.targetAmountRupees)} • Remaining ${_formatRupees(goal.remainingAmountRupees)}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54),
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(value: goal.progress, minHeight: 8, backgroundColor: Colors.black12, color: goal.isCompleted ? Colors.green : AppColors.primary),
+        ),
+        const SizedBox(height: 6),
+        Text('${(goal.progress * 100).round()}% completed • ${goal.priority} priority', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.black45)),
+      ],
+    );
+    final actions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        TextButton(onPressed: onEdit, child: const Text('Edit', maxLines: 1, overflow: TextOverflow.ellipsis)),
+        ElevatedButton(onPressed: availableBalance > 0 && !goal.isCompleted ? onFund : null, child: const Text('Add ₹', maxLines: 1, overflow: TextOverflow.ellipsis)),
+      ],
+    );
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.primary.withOpacity(0.14))),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: goal.imagePath.isEmpty
-                ? Container(width: 58, height: 58, color: AppColors.surface, child: const Icon(Icons.flag_outlined, color: AppColors.primary))
-                : Image.file(File(goal.imagePath), width: 58, height: 58, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 58, height: 58, color: AppColors.surface, child: const Icon(Icons.flag_outlined))),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 360) {
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(toTitleCase(goal.name), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
-                const SizedBox(height: 4),
-                Text('${_formatRupees(goal.savedAmountRupees)} / ${_formatRupees(goal.targetAmountRupees)} • Remaining ${_formatRupees(goal.remainingAmountRupees)}', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(value: goal.progress, minHeight: 8, backgroundColor: Colors.black12, color: goal.isCompleted ? Colors.green : AppColors.primary),
-                ),
-                const SizedBox(height: 6),
-                Text('${(goal.progress * 100).round()}% completed • ${goal.priority} priority', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.black45)),
+                image,
+                const SizedBox(height: 10),
+                details,
+                const SizedBox(height: 10),
+                actions,
               ],
-            ),
-          ),
-          Column(
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextButton(onPressed: onEdit, child: const Text('Edit')),
-              ElevatedButton(onPressed: availableBalance > 0 && !goal.isCompleted ? onFund : null, child: const Text('Add ₹')),
+              image,
+              const SizedBox(width: 12),
+              Expanded(child: details),
+              const SizedBox(width: 8),
+              actions,
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-String _formatRupees(int value) => '₹${_formatInt(value)}';
-
-class _PhotoGalleryCard extends StatelessWidget {
-  final UserProfile userProfile;
-  final HiveService hiveService;
-
-  const _PhotoGalleryCard({required this.userProfile, required this.hiveService});
-
-  @override
-  Widget build(BuildContext context) {
-    final photos = <String>[
-      if (userProfile.profilePhotoPath.trim().isNotEmpty) userProfile.profilePhotoPath.trim(),
-      ...userProfile.photoHistory,
-    ];
-    return _TimelineSection(
-      title: '📷 Photo Gallery',
-      child: photos.isEmpty
-          ? const Text('Profile photo history will appear here after you add or change your photo.')
-          : Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: photos.map((path) {
-                final isCurrent = path == userProfile.profilePhotoPath;
-                return InkWell(
-                  borderRadius: BorderRadius.circular(18),
-                  onTap: isCurrent ? null : () => hiveService.saveUserProfile(userProfile.copyWith(profilePhotoPath: path)),
-                  child: Container(
-                    width: 150,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: isCurrent ? AppColors.primary.withOpacity(0.12) : Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: isCurrent ? AppColors.primary : AppColors.primary.withOpacity(0.16)),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ProfileAvatar(profile: userProfile.copyWith(profilePhotoPath: path), radius: 42, accentColor: AppColors.primary),
-                        const SizedBox(height: 8),
-                        Text(isCurrent ? 'Current photo' : 'Tap to restore', style: const TextStyle(fontWeight: FontWeight.w800), textAlign: TextAlign.center),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-    );
-  }
-}
-
-class _PointsTotalsCard extends StatelessWidget {
-  final List<ProductivitySnapshot> snapshots;
-  final LifetimeProductivityStats stats;
-
-  const _PointsTotalsCard({required this.snapshots, required this.stats});
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final weekStart = today.subtract(Duration(days: today.weekday - 1));
-    final monthStart = DateTime(today.year, today.month, 1);
-    final yearStart = DateTime(today.year, 1, 1);
-    return _TimelineSection(
-      title: '📉 Cumulative Points',
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          _StatTile(label: 'This Week', value: '${_formatInt(_pointsSince(snapshots, weekStart))} pts'),
-          _StatTile(label: 'This Month', value: '${_formatInt(_pointsSince(snapshots, monthStart))} pts'),
-          _StatTile(label: 'This Year', value: '${_formatInt(_pointsSince(snapshots, yearStart))} pts'),
-          _StatTile(label: 'Streak Bonus', value: '+${_formatInt(stats.totalBonusEarned)} pts'),
-          _StatTile(label: 'Lifetime', value: '${_formatInt(stats.totalPoints)} pts'),
-        ].map((tile) => SizedBox(width: 168, child: tile)).toList(),
-      ),
-    );
-  }
-}
-
-class _PointsAnalyticsCard extends StatelessWidget {
-  final List<ProductivitySnapshot> snapshots;
-
-  const _PointsAnalyticsCard({required this.snapshots});
-
-  @override
-  Widget build(BuildContext context) {
-    final recent = snapshots.length <= 14 ? snapshots : snapshots.sublist(snapshots.length - 14);
-    final maxPoints = recent.fold<int>(1, (max, snapshot) => math.max(max, snapshot.totalPoints));
-    var cumulative = 0;
-    return _TimelineSection(
-      title: '📈 Points Analytics',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (recent.isEmpty)
-            const Text('Complete tasks to build daily points charts.')
-          else
-            ...recent.map((snapshot) {
-              cumulative += snapshot.totalPoints;
-              final value = snapshot.totalPoints / maxPoints;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    SizedBox(width: 54, child: Text('${snapshot.date.month}/${snapshot.date.day}', style: const TextStyle(fontWeight: FontWeight.w800))),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
-                        child: LinearProgressIndicator(value: value, minHeight: 10, color: _heatColor(snapshot.productivityScore), backgroundColor: Colors.black12),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(width: 92, child: Text('${_formatInt(snapshot.totalPoints)} pts', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w800))),
-                  ],
-                ),
-              );
-            }),
-          if (recent.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text('Lifetime growth in this view: ${_formatInt(cumulative)} points', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w800)),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _OverviewCards extends StatelessWidget {
-  final LifetimeProductivityStats stats;
-
-  const _OverviewCards({required this.stats});
-
-  @override
-  Widget build(BuildContext context) {
-    final cards = [
-      ('Lifetime Productivity', '${stats.lifetimeProductivity.toStringAsFixed(1)}%'),
-      ('Total Points Earned', '${stats.totalPoints}'),
-      ('Total Focus Hours', _formatHours(stats.totalFocusHours)),
-      ('Total Completed Tasks', '${stats.totalCompletedTasks}'),
-      ('Current Streak', '${stats.currentStreak} days'),
-      ('Best Streak', '${stats.bestStreak} days'),
-      ('Active Days', '${stats.activeDays}'),
-      ('Average Daily Score', '${stats.averageDailyScore.toStringAsFixed(1)}%'),
-      ('Highest Score', stats.highestDay == null ? '0%' : '${stats.highestDay!.productivityScore.toStringAsFixed(1)}%'),
-      ('Lowest Score', stats.lowestDay == null ? '0%' : '${stats.lowestDay!.productivityScore.toStringAsFixed(1)}%'),
-      ('Routine Completions', '${stats.routineCompletions}'),
-      ('Project Phases Done', '${stats.projectPhasesCompleted}'),
-      ('XP / Level', '${stats.xp} XP • Lv ${stats.level}'),
-      ('Median Score', '${stats.medianProductivity.toStringAsFixed(1)}%'),
-    ];
-
-    return _TimelineSection(
-      title: 'Lifetime Overview',
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: cards
-            .map((card) => SizedBox(
-                  width: 168,
-                  child: _StatTile(label: card.$1, value: card.$2),
-                ))
-            .toList(),
+          );
+        },
       ),
     );
   }
@@ -1186,11 +1050,29 @@ class _TimelineSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.textPrimary))),
-              if (trailing != null) trailing!,
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final titleWidget = Text(
+                title,
+                maxLines: constraints.maxWidth < 320 ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: responsiveFont(context, 18), fontWeight: FontWeight.w900, color: AppColors.textPrimary),
+              );
+              if (trailing == null) return titleWidget;
+              if (constraints.maxWidth < 340) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [titleWidget, const SizedBox(height: 8), trailing!],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: titleWidget),
+                  const SizedBox(width: 8),
+                  Flexible(child: Align(alignment: Alignment.centerRight, child: trailing!)),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 12),
           child,

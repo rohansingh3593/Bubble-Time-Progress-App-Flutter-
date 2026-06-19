@@ -9,6 +9,7 @@ import '../models/task_model.dart';
 import '../models/productivity_snapshot.dart';
 import 'journal_view.dart';
 import '../utils/text_formatters.dart';
+import '../widgets/app_text.dart';
 
 class WeekView extends StatefulWidget {
   final HiveService hiveService;
@@ -176,16 +177,29 @@ class _WeekViewState extends State<WeekView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  '📆 Weekly Productivity',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary),
-                ),
-              ),
-              _ScoreBadge(score: score, rating: rating),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final title = Text(
+                '📆 Weekly Productivity',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: responsiveFont(context, 20), fontWeight: FontWeight.w900, color: AppColors.textPrimary),
+              );
+              final badge = _ScoreBadge(score: score, rating: rating);
+              if (constraints.maxWidth < 300) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [title, const SizedBox(height: 8), badge],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: title),
+                  const SizedBox(width: 8),
+                  badge,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -209,13 +223,26 @@ class _WeekViewState extends State<WeekView> {
           const SizedBox(height: 8),
           _categoryBreakdown(stats),
           const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _weeklyBarChart(stats)),
-              const SizedBox(width: 12),
-              SizedBox(width: 120, child: _completedPendingDonut(stats)),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 360) {
+                return Column(
+                  children: [
+                    _weeklyBarChart(stats),
+                    const SizedBox(height: 12),
+                    SizedBox(width: double.infinity, child: _completedPendingDonut(stats)),
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: _weeklyBarChart(stats)),
+                  const SizedBox(width: 12),
+                  SizedBox(width: 120, child: _completedPendingDonut(stats)),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
           _dailyScoreLineChart(stats),
@@ -679,9 +706,9 @@ class _WeekMetricCard extends StatelessWidget {
         children: [
           Icon(icon, color: AppColors.primary, size: 18),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.w700)),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: responsiveFont(context, 11), color: Colors.black54, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text(value, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          Text(value, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: responsiveFont(context, 15), fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
         ],
       ),
     );
@@ -703,7 +730,7 @@ class _ScoreBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: AppColors.taskCompleted.withOpacity(0.36)),
       ),
-      child: Text('${score.round()}% • $rating', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+      child: Text('${score.round()}% • $rating', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: responsiveFont(context, 13), fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
     );
   }
 }
