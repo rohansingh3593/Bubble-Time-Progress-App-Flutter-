@@ -523,9 +523,10 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     final bonusController = TextEditingController(text: existing == null ? '10' : '${existing.bonusPoints}');
     final xpController = TextEditingController(text: existing == null ? '2' : '${existing.xpEarned}');
     final emojiController = TextEditingController(text: existing?.emoji ?? '🥤');
-    final linkController = TextEditingController(text: existing?.linkUrl ?? '');
+    final linkController = TextEditingController();
     final descriptionController = TextEditingController(text: existing?.description ?? '');
     var imagePaths = [...(existing?.imagePaths ?? const <String>[])];
+    var linkUrls = [...(existing?.effectiveLinks ?? const <String>[])];
     var coverImagePath = existing?.coverImagePath ?? '';
     return showDialog<InstructionOption>(
       context: context,
@@ -586,9 +587,43 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                             ],
                           ),
                         )),
-                  TextField(controller: linkController, decoration: const InputDecoration(labelText: 'Website / Video Link Optional', hintText: 'https://youtube.com/...'), onChanged: (_) => setDialogState(() {})),
-                  if (linkController.text.trim().isNotEmpty)
-                    Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => _openOptionLink(linkController.text), icon: const Icon(Icons.open_in_new), label: const Text('Open Link'))),
+                  const SizedBox(height: 10),
+                  const Text('Website / Video Links Optional', style: TextStyle(fontWeight: FontWeight.w900)),
+                  Row(
+                    children: [
+                      Expanded(child: TextField(controller: linkController, decoration: const InputDecoration(hintText: 'https://youtube.com/...'))),
+                      IconButton(
+                        tooltip: 'Add Link',
+                        icon: const Icon(Icons.add_link),
+                        onPressed: () => setDialogState(() {
+                          final link = linkController.text.trim();
+                          if (link.isEmpty || linkUrls.contains(link)) return;
+                          linkUrls = [...linkUrls, link];
+                          linkController.clear();
+                        }),
+                      ),
+                    ],
+                  ),
+                  if (linkUrls.isEmpty)
+                    const Text('No links added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                  else
+                    ...linkUrls.map((link) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.link),
+                          title: Text(link, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: Wrap(
+                            spacing: 2,
+                            children: [
+                              TextButton.icon(onPressed: () => _openOptionLink(link), icon: const Icon(Icons.open_in_new, size: 18), label: const Text('Open Link')),
+                              IconButton(
+                                tooltip: 'Remove Link',
+                                icon: const Icon(Icons.delete_outline, size: 18),
+                                onPressed: () => setDialogState(() => linkUrls = linkUrls.where((item) => item != link).toList()),
+                              ),
+                            ],
+                          ),
+                        )),
                   TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
                 ],
               ),
@@ -608,7 +643,8 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   description: descriptionController.text.trim(),
                   imagePaths: imagePaths,
                   coverImagePath: coverImagePath,
-                  linkUrl: linkController.text.trim(),
+                  linkUrl: linkUrls.isEmpty ? '' : linkUrls.first,
+                  linkUrls: linkUrls,
                 ),
               ),
               child: const Text('Save'),

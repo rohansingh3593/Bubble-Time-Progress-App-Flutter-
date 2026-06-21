@@ -151,6 +151,7 @@ class InstructionOption {
   final List<String> imagePaths;
   final String coverImagePath;
   final String linkUrl;
+  final List<String> linkUrls;
 
   const InstructionOption({
     required this.id,
@@ -162,13 +163,23 @@ class InstructionOption {
     this.imagePaths = const [],
     this.coverImagePath = '',
     this.linkUrl = '',
+    this.linkUrls = const [],
   });
 
   String get displayLabel => '$emoji $name'.trim();
   String get activeCoverImage => coverImagePath.isNotEmpty ? coverImagePath : (imagePaths.isNotEmpty ? imagePaths.first : '');
-  bool get hasLink => linkUrl.trim().isNotEmpty;
+  List<String> get effectiveLinks {
+    final links = <String>[];
+    for (final link in [linkUrl, ...linkUrls]) {
+      final trimmed = link.trim();
+      if (trimmed.isNotEmpty && !links.contains(trimmed)) links.add(trimmed);
+    }
+    return links;
+  }
 
-  List<dynamic> toStorageList() => [id, name, bonusPoints, xpEarned, emoji, description, imagePaths, coverImagePath, linkUrl];
+  bool get hasLink => effectiveLinks.isNotEmpty;
+
+  List<dynamic> toStorageList() => [id, name, bonusPoints, xpEarned, emoji, description, imagePaths, coverImagePath, linkUrl, linkUrls];
 
   factory InstructionOption.fromStorageList(List<dynamic> raw) {
     return InstructionOption(
@@ -181,6 +192,7 @@ class InstructionOption {
       imagePaths: _readStringList(raw, 6),
       coverImagePath: raw.length > 7 ? '${raw[7]}' : '',
       linkUrl: raw.length > 8 ? '${raw[8]}' : '',
+      linkUrls: _readStringList(raw, 9),
     );
   }
 }

@@ -1071,8 +1071,9 @@ Future<InstructionOption?> _showInstructionOptionDialog(BuildContext context, In
   final descriptionController = TextEditingController(text: initial?.description ?? '');
   final pointsController = TextEditingController(text: '${initial?.bonusPoints ?? 10}');
   final xpController = TextEditingController(text: '${initial?.xpEarned ?? 2}');
-  final linkController = TextEditingController(text: initial?.linkUrl ?? '');
+  final linkController = TextEditingController();
   var imagePaths = [...(initial?.imagePaths ?? const <String>[])];
+    var linkUrls = [...(initial?.effectiveLinks ?? const <String>[])];
   var coverImagePath = initial?.coverImagePath ?? '';
   try {
     return await showDialog<InstructionOption>(
@@ -1134,9 +1135,43 @@ Future<InstructionOption?> _showInstructionOptionDialog(BuildContext context, In
                             ],
                           ),
                         )),
-                  TextField(controller: linkController, decoration: const InputDecoration(labelText: 'Website / Video Link Optional', hintText: 'https://youtube.com/...'), onChanged: (_) => setDialogState(() {})),
-                  if (linkController.text.trim().isNotEmpty)
-                    Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => _copyOptionLink(context, linkController.text), icon: const Icon(Icons.open_in_new), label: const Text('Open Link'))),
+                  const SizedBox(height: 10),
+                  const Text('Website / Video Links Optional', style: TextStyle(fontWeight: FontWeight.w900)),
+                  Row(
+                    children: [
+                      Expanded(child: TextField(controller: linkController, decoration: const InputDecoration(hintText: 'https://youtube.com/...'))),
+                      IconButton(
+                        tooltip: 'Add Link',
+                        icon: const Icon(Icons.add_link),
+                        onPressed: () => setDialogState(() {
+                          final link = linkController.text.trim();
+                          if (link.isEmpty || linkUrls.contains(link)) return;
+                          linkUrls = [...linkUrls, link];
+                          linkController.clear();
+                        }),
+                      ),
+                    ],
+                  ),
+                  if (linkUrls.isEmpty)
+                    const Text('No links added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                  else
+                    ...linkUrls.map((link) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.link),
+                          title: Text(link, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: Wrap(
+                            spacing: 2,
+                            children: [
+                              TextButton.icon(onPressed: () => _copyOptionLink(context, link), icon: const Icon(Icons.open_in_new, size: 18), label: const Text('Open Link')),
+                              IconButton(
+                                tooltip: 'Remove Link',
+                                icon: const Icon(Icons.delete_outline, size: 18),
+                                onPressed: () => setDialogState(() => linkUrls = linkUrls.where((item) => item != link).toList()),
+                              ),
+                            ],
+                          ),
+                        )),
                   TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
                 ],
               ),
@@ -1156,7 +1191,8 @@ Future<InstructionOption?> _showInstructionOptionDialog(BuildContext context, In
                   description: descriptionController.text.trim(),
                   imagePaths: imagePaths,
                   coverImagePath: coverImagePath,
-                  linkUrl: linkController.text.trim(),
+                  linkUrl: linkUrls.isEmpty ? '' : linkUrls.first,
+                  linkUrls: linkUrls,
                 ),
               ),
               child: const Text('Save'),
