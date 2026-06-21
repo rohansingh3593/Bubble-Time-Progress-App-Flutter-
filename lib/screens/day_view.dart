@@ -29,6 +29,10 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   Timer? _scheduleClockTimer;
   DateTime _scheduleNow = DateTime.now();
 
+  static const int _scheduleSnapMinutes = 15;
+  static const int _defaultScheduledDurationMinutes = 30;
+  static const List<int> _scheduleDurationSteps = [15, 30, 45, 60, 90, 120];
+
   @override
   void initState() {
     super.initState();
@@ -303,6 +307,13 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     return _scheduleRangeFromDescription(task.description);
   }
 
+  bool _isSchedulablePendingTask(Task task) {
+    final status = task.status.trim().toLowerCase();
+    return !task.done && status != 'completed' && status != 'missed' && status != 'cancelled' && (!task.repeatTask || task.routineEnabled);
+  }
+
+  bool _hasScheduleRange(Task task) => _scheduleRangeForTask(task) != null;
+
   _DayScheduleRange? _scheduleRangeFromDescription(String description) {
     int? start;
     int? end;
@@ -317,6 +328,63 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     if (start == null || end == null) return null;
     if (end <= start) end = (start + 15).clamp(0, 24 * 60).toInt();
     return _DayScheduleRange(start: start, end: end);
+  }
+
+  String _mergeScheduleIntoDescription(String description, int startMinutes, int endMinutes) {
+    final cleaned = description
+        .split('\n')
+        .where((line) {
+          final trimmed = line.trim();
+          return !trimmed.startsWith('⏰ Schedule Start:') &&
+              !trimmed.startsWith('⏰ Schedule End:') &&
+              !trimmed.startsWith('⏰ Schedule Bonus:') &&
+              !trimmed.startsWith('⏰ Scheduled:');
+        })
+        .join('\n')
+        .trim();
+    final lines = <String>[
+      if (cleaned.isNotEmpty) cleaned,
+      '⏰ Schedule Start: ${_formatStorageTime(startMinutes)}',
+      '⏰ Schedule End: ${_formatStorageTime(endMinutes)}',
+      '⏰ Schedule Bonus: 20',
+    ];
+    return lines.join('\n');
+  }
+
+  String _formatStorageTime(int minutes) {
+    final normalized = minutes.clamp(0, 24 * 60 - 1).toInt();
+    return '${(normalized ~/ 60).toString().padLeft(2, '0')}:${(normalized % 60).toString().padLeft(2, '0')}';
+  }
+
+  int _snapMinutes(int minutes) {
+    return (minutes / _scheduleSnapMinutes).round() * _scheduleSnapMinutes;
+  }
+
+  Future<void> _saveScheduledTask(Task task, int startMinutes, int endMinutes) async {
+    final snappedStart = _snapMinutes(startMinutes).clamp(0, 24 * 60 - _scheduleSnapMinutes).toInt();
+    final snappedEnd = _snapMinutes(endMinutes).clamp(snappedStart + _scheduleSnapMinutes, 24 * 60).toInt();
+    final selectedDay = _dateOnly(_currentDay);
+    final updated = task.copyWith(
+      dueDate: DateTime(selectedDay.year, selectedDay.month, selectedDay.day, snappedStart ~/ 60, snappedStart % 60),
+      estimatedMinutes: snappedEnd - snappedStart,
+      description: _mergeScheduleIntoDescription(task.description, snappedStart, snappedEnd),
+    );
+    if (task.repeatTask) {
+      await widget.hiveService.updateRecurringTaskSeriesByReference(task, updated.copyWith(repeatTask: true));
+    } else {
+      await widget.hiveService.updateTaskByReference(task, updated);
+    }
+  }
+
+  Future<void> _scheduleTaskAt(Task task, int startMinutes) {
+    final duration = task.estimatedMinutes > 0 ? task.estimatedMinutes : _defaultScheduledDurationMinutes;
+    return _saveScheduledTask(task, startMinutes, (startMinutes + duration).clamp(startMinutes + _scheduleSnapMinutes, 24 * 60).toInt());
+  }
+
+  Future<void> _resizeScheduledTask(Task task, int newDuration) {
+    final range = _scheduleRangeForTask(task);
+    if (range == null) return Future.value();
+    return _saveScheduledTask(task, range.start, (range.start + newDuration).clamp(range.start + _scheduleSnapMinutes, 24 * 60).toInt());
   }
 
   int? _parseScheduleMinutes(String raw) {
@@ -551,6 +619,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   Widget _todaySchedulePanel(List<Task> tasks, DashboardThemeStyle theme) {
     final entries = _buildDayScheduleEntries(tasks);
     final positionedEntries = _positionOverlappingEntries(entries.where((entry) => entry.task != null).toList());
+    final unscheduledTasks = tasks.where((task) => _isSchedulablePendingTask(task) && !_hasScheduleRange(task)).toList();
     final visibleTasks = tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
     final completed = visibleTasks.where((task) => task.done || task.status.trim().toLowerCase() == 'completed').length;
     final completionRate = visibleTasks.isEmpty ? 0 : ((completed / visibleTasks.length) * 100).round();
@@ -579,56 +648,138 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
           const SizedBox(height: 6),
           Text('$completionRate% Complete', style: TextStyle(color: theme.primary, fontWeight: FontWeight.w900)),
           const SizedBox(height: 12),
+          _unscheduledTaskPlanner(theme, unscheduledTasks),
+          const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
               final laneAreaWidth = constraints.maxWidth - labelWidth;
-              return SizedBox(
-                height: timelineHeight,
-                child: Stack(
-                  children: [
-                    for (var hour = 0; hour < 24; hour++)
-                      Positioned(
-                        top: hour * hourHeight,
-                        left: 0,
-                        right: 0,
-                        height: hourHeight,
-                        child: InkWell(
-                          onTap: () => showTaskFormDialog(context, date: _currentDay, initialHourSlot: hour),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(width: labelWidth, child: Text(_formatScheduleTime(hour * 60), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800))),
-                              Expanded(
-                                child: Container(
-                                  decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.textMuted.withOpacity(0.35)))),
+              return DragTarget<Task>(
+                onAcceptWithDetails: (details) {
+                  final box = context.findRenderObject() as RenderBox?;
+                  if (box == null) return;
+                  final local = box.globalToLocal(details.offset);
+                  final minutes = ((local.dy / hourHeight) * 60).clamp(0, 24 * 60 - _scheduleSnapMinutes).toInt();
+                  _scheduleTaskAt(details.data, minutes);
+                },
+                builder: (context, candidateData, rejectedData) {
+                  final preview = candidateData.isNotEmpty;
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: preview ? theme.primary.withOpacity(0.06) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(18),
+                      border: preview ? Border.all(color: theme.primary.withOpacity(0.28)) : null,
+                    ),
+                    child: SizedBox(
+                      height: timelineHeight,
+                      child: Stack(
+                        children: [
+                          for (var hour = 0; hour < 24; hour++)
+                            Positioned(
+                              top: hour * hourHeight,
+                              left: 0,
+                              right: 0,
+                              height: hourHeight,
+                              child: InkWell(
+                                onTap: () => showTaskFormDialog(context, date: _currentDay, initialHourSlot: hour),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(width: labelWidth, child: Text(_formatScheduleTime(hour * 60), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800))),
+                                    Expanded(
+                                      child: Container(
+                                        decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.textMuted.withOpacity(0.35)))),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          if (_sameDate(_currentDay, _scheduleNow))
+                            Positioned(
+                              top: ((_scheduleNow.hour * 60 + _scheduleNow.minute) / 60) * hourHeight,
+                              left: labelWidth,
+                              right: 0,
+                              child: Row(children: [Expanded(child: Container(height: 2, color: AppThemeColors.fromDashboardStyle(theme).accent)), const SizedBox(width: 6), Text('NOW (${_formatScheduleTime(_scheduleNow.hour * 60 + _scheduleNow.minute)})', style: TextStyle(color: AppThemeColors.fromDashboardStyle(theme).accent, fontSize: 11, fontWeight: FontWeight.w900))]),
+                            ),
+                          for (final positioned in positionedEntries)
+                            Positioned(
+                              top: (positioned.entry.startMinutes / 60) * hourHeight,
+                              left: labelWidth + positioned.column * ((laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount + 6),
+                              width: (laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount,
+                              height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(36.0, timelineHeight),
+                              child: _taskScheduleTile(theme, positioned.entry, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 45),
+                            ),
+                        ],
                       ),
-                    if (_sameDate(_currentDay, _scheduleNow))
-                      Positioned(
-                        top: ((_scheduleNow.hour * 60 + _scheduleNow.minute) / 60) * hourHeight,
-                        left: labelWidth,
-                        right: 0,
-                        child: Container(height: 2, color: AppThemeColors.fromDashboardStyle(theme).accent),
-                      ),
-                    for (final positioned in positionedEntries)
-                      Positioned(
-                        top: (positioned.entry.startMinutes / 60) * hourHeight,
-                        left: labelWidth + positioned.column * ((laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount + 6),
-                        width: (laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount,
-                        height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(36.0, timelineHeight),
-                        child: _taskScheduleTile(theme, positioned.entry, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 30),
-                      ),
-                  ],
-                ),
+                    ),
+                  );
+                },
               );
             },
           ),
         ],
       ),
+    );
+  }
+
+  Widget _unscheduledTaskPlanner(DashboardThemeStyle theme, List<Task> tasks) {
+    if (tasks.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: (theme.cardTint ?? theme.elevatedSurface).withOpacity(0.45),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.primary.withOpacity(0.16)),
+        ),
+        child: Text('All pending tasks with schedule times are placed below.', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Pending Tasks (Not Scheduled)', style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: tasks.map((task) => _draggablePendingTaskCard(theme, task)).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _draggablePendingTaskCard(DashboardThemeStyle theme, Task task) {
+    final instructionCount = widget.hiveService.getInstructions().where((instruction) => instruction.enabled && instruction.isLinkedToTask(task.task.trim())).length;
+    final duration = task.estimatedMinutes > 0 ? task.estimatedMinutes : _defaultScheduledDurationMinutes;
+    final card = Container(
+      width: 170,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: (theme.cardTint ?? theme.elevatedSurface).withOpacity(0.82),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.primary.withOpacity(0.34), style: BorderStyle.solid),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(toTitleCase(task.task), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          Text('${task.category} • ${task.priority}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700, fontSize: 12)),
+          Text('Instructions: $instructionCount', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700, fontSize: 12)),
+          Text('$duration min', style: TextStyle(color: theme.primary, fontWeight: FontWeight.w900, fontSize: 12)),
+        ],
+      ),
+    );
+    return LongPressDraggable<Task>(
+      data: task,
+      feedback: Material(
+        color: Colors.transparent,
+        child: Opacity(opacity: 0.88, child: card),
+      ),
+      childWhenDragging: Opacity(opacity: 0.35, child: card),
+      child: card,
     );
   }
 
@@ -638,7 +789,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     final color = _scheduleStatusColor(status, theme);
     final active = status == _DayScheduleStatus.active;
 
-    return AnimatedBuilder(
+    final tile = AnimatedBuilder(
       animation: _schedulePulseController,
       builder: (context, child) {
         final pulse = active ? 0.35 + (_schedulePulseController.value * 0.35) : 0.20;
@@ -692,11 +843,44 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                   const SizedBox(height: 3),
                 ],
                 Text(_scheduleStatusLabel(status), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+                if ((entry.endMinutes - entry.startMinutes) >= 60) ...[
+                  const SizedBox(height: 4),
+                  _durationResizeControls(theme, task, entry),
+                ],
               ],
             ),
           ),
         ],
       ),
+    );
+    return LongPressDraggable<Task>(
+      data: task,
+      feedback: Material(color: Colors.transparent, child: Opacity(opacity: 0.88, child: SizedBox(width: 180, child: tile))),
+      childWhenDragging: Opacity(opacity: 0.35, child: tile),
+      child: tile,
+    );
+  }
+
+  Widget _durationResizeControls(DashboardThemeStyle theme, Task task, _DayScheduleEntry entry) {
+    final duration = entry.endMinutes - entry.startMinutes;
+    final currentIndex = _scheduleDurationSteps.indexWhere((value) => value >= duration);
+    final resolvedIndex = currentIndex == -1 ? _scheduleDurationSteps.length - 1 : currentIndex;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: resolvedIndex <= 0 ? null : () => _resizeScheduledTask(task, _scheduleDurationSteps[resolvedIndex - 1]),
+          child: Icon(Icons.remove_circle_outline, size: 18, color: resolvedIndex <= 0 ? theme.textMuted.withOpacity(0.45) : theme.primary),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Text('$duration min', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800, fontSize: 11)),
+        ),
+        InkWell(
+          onTap: resolvedIndex >= _scheduleDurationSteps.length - 1 ? null : () => _resizeScheduledTask(task, _scheduleDurationSteps[resolvedIndex + 1]),
+          child: Icon(Icons.add_circle_outline, size: 18, color: resolvedIndex >= _scheduleDurationSteps.length - 1 ? theme.textMuted.withOpacity(0.45) : theme.primary),
+        ),
+      ],
     );
   }
 
