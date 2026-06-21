@@ -1143,18 +1143,31 @@ class _InstructionSummaryPanel extends StatelessWidget {
         children: [
           const Text('📘 Instruction Productivity', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _InstructionStat(label: 'Standalone Instructions', value: '${standalone.length}', onTap: () => onOpenList('Standalone Instructions', standalone)),
-              _InstructionStat(label: 'Followed Today', value: '${followedInstructions.length}', color: Colors.green, onTap: () => onOpenList('Followed Today', followedInstructions)),
-              _InstructionStat(label: 'Missed Today', value: '${missedInstructions.length}', color: Colors.red, onTap: () => onOpenList('Missed Today', missedInstructions)),
-              _InstructionStat(label: 'Pending Today', value: '${pendingInstructions.length}', onTap: () => onOpenList('Pending Today', pendingInstructions)),
-              _InstructionStat(label: 'Active Instructions', value: '${activeInstructions.length}', onTap: () => onOpenList('Active Instructions', activeInstructions)),
-              _InstructionStat(label: 'Instruction Streak', value: '$bestStreak', onTap: () => onOpenList('Instruction Streak', streakInstructions)),
-              _InstructionStat(label: 'Bonus Points Earned', value: '+$bonus', onTap: () => onOpenList('Bonus Points Earned', bonusInstructions)),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final chart = _InstructionProductivityPie(
+                followed: followedInstructions.length,
+                missed: missedInstructions.length,
+                pending: pendingInstructions.length,
+              );
+              final cards = Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _InstructionStat(label: 'Standalone Instructions', value: '${standalone.length}', onTap: () => onOpenList('Standalone Instructions', standalone)),
+                  _InstructionStat(label: 'Followed Today', value: '${followedInstructions.length}', color: Colors.green, onTap: () => onOpenList('Followed Today', followedInstructions)),
+                  _InstructionStat(label: 'Missed Today', value: '${missedInstructions.length}', color: Colors.red, onTap: () => onOpenList('Missed Today', missedInstructions)),
+                  _InstructionStat(label: 'Pending Today', value: '${pendingInstructions.length}', onTap: () => onOpenList('Pending Today', pendingInstructions)),
+                  _InstructionStat(label: 'Active Instructions', value: '${activeInstructions.length}', onTap: () => onOpenList('Active Instructions', activeInstructions)),
+                  _InstructionStat(label: 'Instruction Streak', value: '$bestStreak', onTap: () => onOpenList('Instruction Streak', streakInstructions)),
+                  _InstructionStat(label: 'Bonus Points Earned', value: '+$bonus', onTap: () => onOpenList('Bonus Points Earned', bonusInstructions)),
+                ],
+              );
+              if (constraints.maxWidth < 620) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Center(child: chart), const SizedBox(height: 12), cards]);
+              }
+              return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [chart, const SizedBox(width: 16), Expanded(child: cards)]);
+            },
           ),
         ],
       ),
@@ -1203,6 +1216,117 @@ class _InstructionCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+
+class _InstructionProductivityPie extends StatelessWidget {
+  final int followed;
+  final int missed;
+  final int pending;
+
+  const _InstructionProductivityPie({required this.followed, required this.missed, required this.pending});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = followed + missed + pending;
+    final percent = total == 0 ? 0 : ((followed / total) * 100).round();
+    return SizedBox(
+      width: 164,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 132,
+            height: 132,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  size: const Size.square(132),
+                  painter: _InstructionProductivityPiePainter(followed: followed, missed: missed, pending: pending),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('$percent%', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: AppColors.textPrimary)),
+                    const Text('Followed', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: Colors.black54)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
+            children: const [
+              _PieLegendDot(color: Colors.green, label: 'Followed'),
+              _PieLegendDot(color: Colors.red, label: 'Missed'),
+              _PieLegendDot(color: Colors.grey, label: 'Pending'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InstructionProductivityPiePainter extends CustomPainter {
+  final int followed;
+  final int missed;
+  final int pending;
+
+  const _InstructionProductivityPiePainter({required this.followed, required this.missed, required this.pending});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = followed + missed + pending;
+    final rect = Offset.zero & size;
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 18
+      ..strokeCap = StrokeCap.round;
+    if (total == 0) {
+      canvas.drawArc(rect.deflate(12), -1.5708, 6.2832, false, strokePaint..color = Colors.grey.withOpacity(0.24));
+      return;
+    }
+    var start = -1.5708;
+    for (final segment in [
+      (count: followed, color: Colors.green),
+      (count: missed, color: Colors.red),
+      (count: pending, color: Colors.grey),
+    ]) {
+      if (segment.count <= 0) continue;
+      final sweep = (segment.count / total) * 6.2832;
+      canvas.drawArc(rect.deflate(12), start, sweep, false, strokePaint..color = segment.color);
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _InstructionProductivityPiePainter oldDelegate) {
+    return oldDelegate.followed != followed || oldDelegate.missed != missed || oldDelegate.pending != pending;
+  }
+}
+
+class _PieLegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _PieLegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black54)),
+      ],
     );
   }
 }
