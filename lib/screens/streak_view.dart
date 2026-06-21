@@ -11,8 +11,6 @@ import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
-import '../widgets/rank_profile_card.dart';
-import 'journal_view.dart';
 import 'journey_timeline_view.dart';
 import '../utils/text_formatters.dart';
 import '../widgets/app_text.dart';
@@ -66,16 +64,10 @@ class StreakView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _HeroStreakCard(stats: stats, style: style),
-                const SizedBox(height: 14),
-                RankProfileCard(
+                _HeroStreakCard(
+                  stats: stats,
+                  style: style,
                   profile: rankProfile,
-                  onUsernameChanged: hiveService.setUsername,
-                  onTap: () => Navigator.of(context).push(
-                    JournalView.route(hiveService: hiveService, onGoToDashboard: onGoToDashboard),
-                  ),
-                  userProfile: hiveService.getUserProfile(),
-                  dashboardStyle: style,
                   onJourneyTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => JourneyTimelineView(hiveService: hiveService),
@@ -536,8 +528,10 @@ class _StreakInfo {
 class _HeroStreakCard extends StatelessWidget {
   final _JourneyStats stats;
   final DashboardThemeStyle style;
+  final RankProfile profile;
+  final VoidCallback onJourneyTap;
 
-  const _HeroStreakCard({required this.stats, required this.style});
+  const _HeroStreakCard({required this.stats, required this.style, required this.profile, required this.onJourneyTap});
 
   @override
   Widget build(BuildContext context) {
@@ -574,9 +568,21 @@ class _HeroStreakCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  'Consistency journey',
-                  style: TextStyle(color: contentColor, fontSize: responsiveFont(context, 16), fontWeight: FontWeight.w700),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Consistency journey',
+                      style: TextStyle(color: contentColor, fontSize: responsiveFont(context, 16), fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${profile.username} • ${profile.currentRank.name} • Level ${profile.level}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: contentColor.withOpacity(0.86), fontWeight: FontWeight.w700),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -587,14 +593,27 @@ class _HeroStreakCard extends StatelessWidget {
             style: TextStyle(color: contentColor, fontSize: 58, fontWeight: FontWeight.w900, height: 0.95),
           ),
           Text('day streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: contentColor, fontSize: responsiveFont(context, 14))),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: contentColor,
+              side: BorderSide(color: contentColor.withOpacity(0.65)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+            ),
+            onPressed: onJourneyTap,
+            icon: const Icon(Icons.menu_book_rounded, size: 16),
+            label: const Text('Open Journey Timeline'),
+          ),
           const SizedBox(height: 18),
-          Row(
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
             children: [
-              Expanded(child: _HeroMetric(label: 'Week', value: '${stats.currentWeeklyStreak} wk', contentColor: contentColor)),
-              const SizedBox(width: 10),
-              Expanded(child: _HeroMetric(label: 'Best', value: '${stats.longestStreak} d', contentColor: contentColor)),
-              const SizedBox(width: 10),
-              Expanded(child: _HeroMetric(label: 'Score', value: '${(stats.productivityRatio * 100).round()}%', contentColor: contentColor)),
+              SizedBox(width: 126, child: _HeroMetric(label: 'Week', value: '${stats.currentWeeklyStreak} wk', contentColor: contentColor)),
+              SizedBox(width: 126, child: _HeroMetric(label: 'Best', value: '${stats.longestStreak} d', contentColor: contentColor)),
+              SizedBox(width: 126, child: _HeroMetric(label: 'Score', value: '${(stats.productivityRatio * 100).round()}%', contentColor: contentColor)),
+              SizedBox(width: 126, child: _HeroMetric(label: 'Completed', value: '${profile.totalTasksCompleted}', contentColor: contentColor)),
+              SizedBox(width: 126, child: _HeroMetric(label: 'Points to Level', value: '${profile.currentLevelPoints}/${profile.pointsForNextLevel}', contentColor: contentColor)),
             ],
           ),
         ],
