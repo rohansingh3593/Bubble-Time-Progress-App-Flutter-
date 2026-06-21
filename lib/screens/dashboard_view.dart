@@ -4166,7 +4166,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                     margin: const EdgeInsets.only(bottom: 6),
                     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                     decoration: BoxDecoration(color: theme.accent, borderRadius: BorderRadius.circular(999)),
-                    child: Text('Active Now', style: TextStyle(color: DashboardThemeStyle.readableTextOn(theme.accent, style), fontWeight: FontWeight.w900, fontSize: 12)),
+                    child: Text('Active Now', style: TextStyle(color: AppThemeColors.readableTextOn(theme.accent, style), fontWeight: FontWeight.w900, fontSize: 12)),
                   ),
                 Text(toTitleCase(row.task.task), style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)),
                 const SizedBox(height: 4),
@@ -4206,7 +4206,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   void _openQuickAddForNow() {
     showTaskFormDialog(context, date: DateTime.now(), title: 'Add Task', actionLabel: 'Add Task').then((task) {
-      if (task != null) widget.hiveService.addTask(task);
+      if (task != null) widget.hiveService.addTask(_dateOnly(task.dueDate), task);
     });
   }
 
