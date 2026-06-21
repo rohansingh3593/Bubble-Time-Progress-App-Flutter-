@@ -228,6 +228,8 @@ class InstructionRule {
   final bool streakTracking;
   final DateTime createdAt;
   final List<InstructionHistoryEntry> history;
+  final List<String> imagePaths;
+  final String coverImagePath;
 
   const InstructionRule({
     required this.id,
@@ -248,6 +250,8 @@ class InstructionRule {
     this.streakTracking = true,
     required this.createdAt,
     this.history = const [],
+    this.imagePaths = const [],
+    this.coverImagePath = '',
   });
 
   List<String> get linkedTasks => splitLinks(linkedTask);
@@ -261,6 +265,7 @@ class InstructionRule {
   bool get isOptionBased => true;
   bool get isSimple => false;
   int get totalOptionCount => options.length;
+  String get activeCoverImage => coverImagePath.isNotEmpty ? coverImagePath : (imagePaths.isNotEmpty ? imagePaths.first : '');
 
   static String normalizeInstructionType(String value) => typeMultipleOption;
 
@@ -315,6 +320,8 @@ class InstructionRule {
     bool? enabled,
     bool? streakTracking,
     List<InstructionHistoryEntry>? history,
+    List<String>? imagePaths,
+    String? coverImagePath,
   }) {
     return InstructionRule(
       id: id,
@@ -335,6 +342,8 @@ class InstructionRule {
       streakTracking: streakTracking ?? this.streakTracking,
       createdAt: createdAt,
       history: history ?? this.history,
+      imagePaths: imagePaths ?? this.imagePaths,
+      coverImagePath: coverImagePath ?? this.coverImagePath,
     );
   }
 
@@ -357,6 +366,8 @@ class InstructionRule {
         levels.map((level) => level.toStorageList()).toList(),
         options.map((option) => option.toStorageList()).toList(),
         archived,
+        imagePaths,
+        coverImagePath,
       ];
 
   factory InstructionRule.fromStorageList(List<dynamic> raw) {
@@ -397,6 +408,8 @@ class InstructionRule {
       streakTracking: raw.length > 10 ? raw[10] == true || '${raw[10]}'.toLowerCase() == 'true' : true,
       createdAt: raw.length > 11 ? DateTime.tryParse('${raw[11]}') ?? DateTime.now() : DateTime.now(),
       history: parsedHistory,
+      imagePaths: _readStringList(raw, 18),
+      coverImagePath: raw.length > 19 ? '${raw[19]}' : '',
     );
   }
 }

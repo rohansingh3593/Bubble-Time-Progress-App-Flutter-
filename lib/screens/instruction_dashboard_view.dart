@@ -241,6 +241,8 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
         InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, xpEarned: 12),
       ];
     }
+    var instructionImagePaths = [...(instruction?.imagePaths ?? const <String>[])];
+    var instructionCoverImagePath = instruction?.coverImagePath ?? '';
     var linkedTasks = [...(instruction?.linkedTasks ?? const <String>[])];
     final initialPhases = instruction?.linkedPhases ?? const <String>[];
     var linkedPhase = initialPhases.isEmpty ? '' : initialPhases.first;
@@ -270,6 +272,49 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   children: [
                     TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
                     TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(child: Text('Instruction Images (${instructionImagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900))),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final picked = await ImagePicker().pickMultiImage();
+                            if (picked.isEmpty) return;
+                            setDialogState(() {
+                              instructionImagePaths = [...instructionImagePaths, ...picked.map((image) => image.path)];
+                              if (instructionCoverImagePath.isEmpty && instructionImagePaths.isNotEmpty) instructionCoverImagePath = instructionImagePaths.first;
+                            });
+                          },
+                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                          label: Text(instructionImagePaths.isEmpty ? 'Add Images' : 'Add More Images'),
+                        ),
+                      ],
+                    ),
+                    if (instructionImagePaths.isEmpty)
+                      const Text('No instruction images added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                    else
+                      ...instructionImagePaths.map((path) => ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(path == instructionCoverImagePath ? Icons.star_rounded : Icons.image_outlined, color: path == instructionCoverImagePath ? Colors.amber : null),
+                            title: Text(path.split('/').last, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(path == instructionCoverImagePath ? 'Cover image' : 'Instruction image'),
+                            trailing: Wrap(
+                              spacing: 2,
+                              children: [
+                                IconButton(tooltip: 'View', icon: const Icon(Icons.visibility_outlined, size: 18), onPressed: () => _showImagePathDialog(path)),
+                                IconButton(tooltip: 'Change Cover', icon: const Icon(Icons.star_border_rounded, size: 18), onPressed: () => setDialogState(() => instructionCoverImagePath = path)),
+                                IconButton(
+                                  tooltip: 'Remove',
+                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  onPressed: () => setDialogState(() {
+                                    instructionImagePaths = instructionImagePaths.where((item) => item != path).toList();
+                                    if (instructionCoverImagePath == path) instructionCoverImagePath = instructionImagePaths.isEmpty ? '' : instructionImagePaths.first;
+                                  }),
+                                ),
+                              ],
+                            ),
+                          )),
                     const SizedBox(height: 12),
                     const ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -500,6 +545,8 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     streakTracking: streakTracking,
                     createdAt: instruction?.createdAt ?? DateTime.now(),
                     history: instruction?.history ?? const [],
+                    imagePaths: instructionImagePaths,
+                    coverImagePath: instructionCoverImagePath,
                   ),
                 ),
                 child: const Text('Save'),

@@ -821,6 +821,8 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
   var streakTracking = initialInstruction?.streakTracking ?? true;
   var colorValue = initialInstruction?.colorValue ?? 0xFF43A047;
   var linkedPhase = initialInstruction?.linkedPhase ?? '';
+  var instructionImagePaths = [...(initialInstruction?.imagePaths ?? const <String>[])];
+  var instructionCoverImagePath = initialInstruction?.coverImagePath ?? '';
   final instruction = await showDialog<InstructionRule>(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -834,6 +836,49 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
               children: [
                 TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
                 TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: Text('Instruction Images (${instructionImagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900))),
+                    TextButton.icon(
+                      onPressed: () async {
+                        final picked = await ImagePicker().pickMultiImage();
+                        if (picked.isEmpty) return;
+                        setDialogState(() {
+                          instructionImagePaths = [...instructionImagePaths, ...picked.map((image) => image.path)];
+                          if (instructionCoverImagePath.isEmpty && instructionImagePaths.isNotEmpty) instructionCoverImagePath = instructionImagePaths.first;
+                        });
+                      },
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: Text(instructionImagePaths.isEmpty ? 'Add Images' : 'Add More Images'),
+                    ),
+                  ],
+                ),
+                if (instructionImagePaths.isEmpty)
+                  const Align(alignment: Alignment.centerLeft, child: Text('No instruction images added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)))
+                else
+                  ...instructionImagePaths.map((path) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(path == instructionCoverImagePath ? Icons.star_rounded : Icons.image_outlined, color: path == instructionCoverImagePath ? Colors.amber : null),
+                        title: Text(path.split('/').last, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(path == instructionCoverImagePath ? 'Cover image' : 'Instruction image'),
+                        trailing: Wrap(
+                          spacing: 2,
+                          children: [
+                            IconButton(tooltip: 'View', icon: const Icon(Icons.visibility_outlined, size: 18), onPressed: () => _showOptionImagePathDialog(context, path)),
+                            IconButton(tooltip: 'Change Cover', icon: const Icon(Icons.star_border_rounded, size: 18), onPressed: () => setDialogState(() => instructionCoverImagePath = path)),
+                            IconButton(
+                              tooltip: 'Remove',
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              onPressed: () => setDialogState(() {
+                                instructionImagePaths = instructionImagePaths.where((item) => item != path).toList();
+                                if (instructionCoverImagePath == path) instructionCoverImagePath = instructionImagePaths.isEmpty ? '' : instructionImagePaths.first;
+                              }),
+                            ),
+                          ],
+                        ),
+                      )),
                 if (phaseNames.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
@@ -996,6 +1041,8 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                 streakTracking: streakTracking,
                 createdAt: initialInstruction?.createdAt ?? DateTime.now(),
                 history: initialInstruction?.history ?? const [],
+                imagePaths: instructionImagePaths,
+                coverImagePath: instructionCoverImagePath,
               ),
             ),
             child: const Text('Save'),
