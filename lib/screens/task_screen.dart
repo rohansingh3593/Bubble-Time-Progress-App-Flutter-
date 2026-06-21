@@ -230,6 +230,20 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
+
+
+  String _formatTaskDate(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  String _durationLabel(int minutes) {
+    if (minutes < 60) return '${minutes}m';
+    final hours = minutes ~/ 60;
+    final remainder = minutes % 60;
+    return remainder == 0 ? '${hours}h' : '${hours}h ${remainder}m';
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
@@ -265,21 +279,25 @@ class _TaskScreenState extends State<TaskScreen> {
                 style: TextStyle(fontSize: responsiveFont(context, 20), fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _taskFilters.map((filter) {
-                    final selected = filter == _selectedTaskFilter;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final narrow = constraints.maxWidth < 400;
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _taskFilters.map((filter) {
+                      final selected = filter == _selectedTaskFilter;
+                      return ChoiceChip(
                         selected: selected,
-                        label: Text(filter),
+                        label: Text(filter, style: TextStyle(fontSize: narrow ? 10 : null)),
+                        labelPadding: narrow ? const EdgeInsets.symmetric(horizontal: 6, vertical: 3) : null,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: narrow ? VisualDensity.compact : null,
                         onSelected: (_) => setState(() => _selectedTaskFilter = filter),
-                      ),
-                    );
-                  }).toList(),
-                ),
+                      );
+                    }).toList(),
+                  );
+                },
               ),
               const SizedBox(height: 16),
 
@@ -305,192 +323,123 @@ class _TaskScreenState extends State<TaskScreen> {
                           final hasGoalLink = task.category.toLowerCase().contains('goal') || task.description.toLowerCase().contains('goal');
                           final hasProjectPhases = _hasProjectPhases(task);
 
+                          final screenWidth = MediaQuery.sizeOf(context).width;
+                          final narrow = screenWidth < 400;
+                          final chipFontSize = narrow ? 10.0 : 11.0;
+                          final chipPadding = narrow ? const EdgeInsets.symmetric(horizontal: 6, vertical: 3) : const EdgeInsets.symmetric(horizontal: 8, vertical: 5);
+
                           return Card(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            elevation: 3,
-                            color: taskColor.withOpacity(0.08),
-                            shadowColor: taskColor.withOpacity(0.28),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            elevation: 1.5,
+                            color: taskColor.withOpacity(0.07),
+                            shadowColor: taskColor.withOpacity(0.18),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                              side: BorderSide(color: taskColor.withOpacity(isCompleted ? 0.65 : 0.32), width: 1.4),
+                              borderRadius: BorderRadius.circular(14),
+                              side: BorderSide(color: taskColor.withOpacity(isCompleted ? 0.55 : 0.24), width: 1),
                             ),
                             child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final compact = constraints.maxWidth < 430;
-                                  final statusIcon = Container(
-                                    width: compact ? 40 : 44,
-                                    height: compact ? 40 : 44,
-                                    decoration: BoxDecoration(
-                                      color: taskColor.withOpacity(isCompleted ? 0.22 : 0.16),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: taskColor.withOpacity(0.45)),
-                                    ),
-                                    child: Icon(
-                                      isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                                      color: taskColor,
-                                    ),
-                                  );
-                                  final titleBlock = Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
+                              padding: EdgeInsets.symmetric(horizontal: narrow ? 10 : 12, vertical: narrow ? 8 : 10),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
                                     children: [
-                                      Text(
-                                        task.task,
-                                        maxLines: compact ? 2 : 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          decoration: isCompleted ? TextDecoration.lineThrough : null,
-                                          color: isCompleted ? taskColor.withOpacity(0.72) : AppColors.textPrimary,
+                                      Icon(isCompleted ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, color: taskColor, size: narrow ? 18 : 20),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          task.task,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: narrow ? 14 : 15,
+                                            fontWeight: FontWeight.w900,
+                                            decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                            color: isCompleted ? taskColor.withOpacity(0.72) : AppColors.textPrimary,
+                                          ),
                                         ),
                                       ),
-                                      if (task.description.isNotEmpty) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          task.description,
-                                          maxLines: compact ? 2 : 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(color: Colors.black54),
-                                        ),
-                                      ],
-                                    ],
-                                  );
-                                  final actionButtons = Wrap(
-                                    spacing: 4,
-                                    runSpacing: 4,
-                                    alignment: compact ? WrapAlignment.end : WrapAlignment.start,
-                                    children: [
                                       IconButton(
-                                        icon: Icon(Icons.edit, color: taskColor),
+                                        icon: Icon(Icons.edit_outlined, color: taskColor, size: narrow ? 18 : 20),
                                         onPressed: () => _editTaskByReference(task),
                                         tooltip: 'Update task',
-                                        constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                        constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                                         padding: EdgeInsets.zero,
                                       ),
                                       if (!task.repeatTask)
                                         IconButton(
-                                          icon: const Icon(Icons.delete, color: Colors.red),
+                                          icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
                                           onPressed: () => _deleteTaskByReference(task),
                                           tooltip: 'Delete task',
-                                          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                                           padding: EdgeInsets.zero,
                                         )
                                       else if (isDailyJournalSystemTask(task))
                                         IconButton(
-                                          icon: Icon(Icons.menu_book_rounded, color: taskColor),
+                                          icon: Icon(Icons.menu_book_rounded, color: taskColor, size: 20),
                                           onPressed: () => _openJournalForTask(task),
                                           tooltip: 'Open journal',
-                                          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                                           padding: EdgeInsets.zero,
                                         )
                                       else
                                         IconButton(
-                                          icon: Icon(
-                                            task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline,
-                                            color: task.routineEnabled ? Colors.orange : Colors.green,
-                                          ),
+                                          icon: Icon(task.routineEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline, color: task.routineEnabled ? Colors.orange : Colors.green, size: 20),
                                           onPressed: () => widget.hiveService.setRecurringTaskEnabledByReference(task, !task.routineEnabled),
                                           tooltip: task.routineEnabled ? 'Disable routine' : 'Enable routine',
-                                          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                                           padding: EdgeInsets.zero,
                                         ),
                                     ],
-                                  );
-                                  final details = Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
                                     children: [
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 6,
-                                        children: [
-                                          _TaskColorChip(label: 'Repeat: $repeatType', icon: Icons.repeat_rounded, color: taskColor),
-                                          _TaskColorChip(label: 'Status: ${task.status}', icon: Icons.timeline, color: taskColor),
-                                          _TaskColorChip(label: 'Category: ${task.category}', icon: Icons.category, color: taskColor),
-                                          _TaskColorChip(label: 'Priority: ${task.priority}', icon: Icons.flag, color: taskColor),
-                                          _TaskColorChip(label: 'Instructions: $instructionCount', icon: Icons.rule_rounded, color: taskColor),
-                                          _TaskColorChip(label: 'Goal Linked: ${hasGoalLink ? 'Yes' : 'No'}', icon: Icons.flag_circle_rounded, color: taskColor),
-                                          if (hasProjectPhases) _TaskColorChip(label: 'Project Phases', icon: Icons.account_tree_rounded, color: taskColor),
-                                          if (task.repeatTask && !task.routineEnabled) _TaskColorChip(label: 'Disabled Routine', icon: Icons.pause_circle_rounded, color: Colors.orange),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Due: ${task.dueDate.month}/${task.dueDate.day}/${task.dueDate.year}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
-                                      ),
-                                      Text(
-                                        'Urgent: ${task.urgent ? 'Yes' : 'No'} • Important: ${task.important ? 'Yes' : 'No'} • ${task.estimatedMinutes} min',
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      if (task.delegatedTo != null && task.delegatedTo!.isNotEmpty)
-                                        Text('Delegate: ${task.delegatedTo}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      Text('Repeat Type: $repeatType', maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      _TaskColorChip(label: repeatType, icon: Icons.calendar_today_rounded, color: taskColor, fontSize: chipFontSize, padding: chipPadding),
+                                      _TaskColorChip(label: task.category.isEmpty ? 'No Category' : task.category, icon: Icons.local_fire_department_rounded, color: taskColor, fontSize: chipFontSize, padding: chipPadding),
+                                      _TaskColorChip(label: task.priority.isEmpty ? 'Priority' : task.priority, icon: Icons.star_rounded, color: taskColor, fontSize: chipFontSize, padding: chipPadding),
+                                      if (task.repeatTask && !task.routineEnabled) _TaskColorChip(label: 'Paused', icon: Icons.pause_circle_rounded, color: Colors.orange, fontSize: chipFontSize, padding: chipPadding),
+                                      if (hasProjectPhases) _TaskColorChip(label: 'Project Phases', icon: Icons.account_tree_rounded, color: taskColor, fontSize: chipFontSize, padding: chipPadding),
                                     ],
-                                  );
-
-                                  if (compact) {
-                                    return Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Row(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            statusIcon,
-                                            const SizedBox(width: 10),
-                                            Expanded(child: titleBlock),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 10),
-                                        details,
-                                        const SizedBox(height: 8),
-                                        Align(alignment: Alignment.centerRight, child: actionButtons),
-                                      ],
-                                    );
-                                  }
-
-                                  return Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text('Due: ${_formatTaskDate(task.dueDate)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700, fontSize: narrow ? 11 : 12)),
+                                  const SizedBox(height: 3),
+                                  Text('Urgent: ${task.urgent ? 'Yes' : 'No'} • Important: ${task.important ? 'Yes' : 'No'} • ${_durationLabel(task.estimatedMinutes)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: narrow ? 11 : 12)),
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 4,
                                     children: [
-                                      statusIcon,
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            titleBlock,
-                                            const SizedBox(height: 8),
-                                            details,
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      actionButtons,
+                                      Text('📋 $instructionCount Instructions', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.black54, fontSize: narrow ? 11 : 12)),
+                                      Text('🎯 ${hasGoalLink ? 'Goal Linked' : 'No Goal'}', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.black54, fontSize: narrow ? 11 : 12)),
                                     ],
-                                  );
-                                },
+                                  ),
+                                ],
                               ),
                             ),
                           );
                         },
                       ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
 
-              // Add task button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _addTaskWithDialog,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Task'),
+              // Sticky add task button anchored at the bottom of the task panel.
+              SafeArea(
+                top: false,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.only(top: 10),
+                  decoration: BoxDecoration(border: Border(top: BorderSide(color: Colors.black.withOpacity(0.08)))),
+                  child: ElevatedButton.icon(
+                    onPressed: _addTaskWithDialog,
+                    icon: const Icon(Icons.add),
+                    label: const Text('+ Add Task'),
+                  ),
                 ),
               ),
             ],
@@ -505,13 +454,15 @@ class _TaskColorChip extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
+  final double? fontSize;
+  final EdgeInsetsGeometry? padding;
 
-  const _TaskColorChip({required this.label, required this.icon, required this.color});
+  const _TaskColorChip({required this.label, required this.icon, required this.color, this.fontSize, this.padding});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: padding ?? const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: color.withOpacity(0.14),
         borderRadius: BorderRadius.circular(999),
@@ -529,7 +480,7 @@ class _TaskColorChip extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: color, fontSize: responsiveFont(context, 11), fontWeight: FontWeight.w800),
+              style: TextStyle(color: color, fontSize: fontSize ?? responsiveFont(context, 11), fontWeight: FontWeight.w800),
             ),
           ],
         ),
