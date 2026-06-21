@@ -532,7 +532,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
           const SizedBox(height: 14),
           Container(
             width: double.infinity,
-            padding: EdgeInsets.all(compact ? 8 : 12),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: const Color(0xFFF3F7FF),
               borderRadius: BorderRadius.circular(18),
@@ -646,7 +646,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
           borderRadius: BorderRadius.circular(16),
           onTap: () => _editTask(task),
           child: Container(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(compact ? 8 : 12),
             decoration: BoxDecoration(
               color: color.withOpacity(active ? 0.28 : status == _DayScheduleStatus.missed ? 0.10 : 0.15),
               borderRadius: BorderRadius.circular(16),
