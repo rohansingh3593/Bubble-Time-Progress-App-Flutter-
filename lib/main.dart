@@ -427,7 +427,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               child: Column(
                 crossAxisAlignment: expanded ? CrossAxisAlignment.start : CrossAxisAlignment.center,
                 children: [
-                  if (expanded)
+                  if (expanded) ...[
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -435,10 +435,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                         const SizedBox(height: 4),
                         Text(profile.currentRank.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: responsiveFont(context, 14), fontWeight: FontWeight.w800)),
                       ],
-                    )
-                  else
-                    Icon(Icons.dashboard_rounded, color: style.primary, size: 26),
-                  const SizedBox(height: 18),
+                    ),
+                    const SizedBox(height: 18),
+                  ] else
+                    const SizedBox(height: 4),
                   ...items.map((item) => _buildSidebarNavTile(style, item, expanded, sidebarWidth)),
                 ],
               ),
