@@ -1131,19 +1131,9 @@ class _InstructionSummaryPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final standalone = instructions.where((i) => i.isStandalone && i.repeatType == period).toList();
-    final followedInstructions = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.followed ?? false).toList();
-    final missedInstructions = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.missed ?? false).toList();
-    final unfollowedInstructions = standalone.where((i) { final entry = hiveService.instructionEntryForDate(i, today); return entry == null || entry.missed; }).toList();
-    final activeInstructions = standalone.where((i) => i.enabled).toList();
-    final pendingInstructions = standalone.where((i) => i.enabled && hiveService.instructionEntryForDate(i, today) == null).toList();
-    final streakInstructions = standalone.where((i) => hiveService.instructionCurrentStreak(i, today) > 0).toList();
-    final bonusInstructions = standalone.where((i) => (hiveService.instructionEntryForDate(i, today)?.bonusPoints ?? 0) > 0).toList();
-    final bonus = bonusInstructions.fold<int>(0, (sum, instruction) => sum + (hiveService.instructionEntryForDate(instruction, today)?.bonusPoints ?? 0));
-    final bestStreak = streakInstructions.fold<int>(0, (best, i) {
-      final streak = hiveService.instructionCurrentStreak(i, today);
-      return streak > best ? streak : best;
-    });
+    final standalone = instructions.where((i) => i.isStandalone).toList();
+    final metrics = _metricsForPeriod(standalone);
+    final periodLabel = _periodLabel(period);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(24), border: Border.all(color: AppColors.primary.withOpacity(0.14))),
@@ -1170,22 +1160,21 @@ class _InstructionSummaryPanel extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final chart = _InstructionProductivityPie(
-                followed: followedInstructions.length,
-                missed: missedInstructions.length,
-                pending: pendingInstructions.length,
+                followed: metrics.followed,
+                missed: metrics.missed,
+                pending: metrics.pending,
               );
               final cards = Wrap(
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  _InstructionStat(label: '$period Instructions', value: '${standalone.length}', onTap: () => onOpenList('$period Standalone Instructions', standalone)),
-                  _InstructionStat(label: 'Followed $period', value: '${followedInstructions.length}', color: Colors.green, onTap: () => onOpenList('Followed $period Instructions', followedInstructions)),
-                  _InstructionStat(label: 'Unfollowed $period', value: '${unfollowedInstructions.length}', color: Colors.orange, onTap: () => onOpenList('Unfollowed $period Instructions', unfollowedInstructions)),
-                  _InstructionStat(label: 'Missed $period', value: '${missedInstructions.length}', color: Colors.red, onTap: () => onOpenList('Missed $period Instructions', missedInstructions)),
-                  _InstructionStat(label: 'Pending $period', value: '${pendingInstructions.length}', onTap: () => onOpenList('Pending $period Instructions', pendingInstructions)),
-                  _InstructionStat(label: 'Active Instructions', value: '${activeInstructions.length}', onTap: () => onOpenList('Active $period Instructions', activeInstructions)),
-                  _InstructionStat(label: 'Instruction Streak', value: '$bestStreak', onTap: () => onOpenList('$period Instruction Streak', streakInstructions)),
-                  _InstructionStat(label: 'Bonus Points Earned', value: '+$bonus', onTap: () => onOpenList('$period Bonus Points Earned', bonusInstructions)),
+                  _InstructionStat(label: '$period Instructions', value: '${metrics.total}', onTap: () => onOpenList('$period Standalone Instructions', standalone)),
+                  _InstructionStat(label: 'Followed $periodLabel', value: '${metrics.followed}', color: Colors.green, onTap: () => onOpenList('Followed $periodLabel Instructions', metrics.followedInstructions)),
+                  _InstructionStat(label: 'Missed $periodLabel', value: '${metrics.missed}', color: Colors.red, onTap: () => onOpenList('Missed $periodLabel Instructions', metrics.missedInstructions)),
+                  _InstructionStat(label: 'Pending $periodLabel', value: '${metrics.pending}', onTap: () => onOpenList('Pending $periodLabel Instructions', metrics.pendingInstructions)),
+                  _InstructionStat(label: 'Bonus Points $periodLabel', value: '+${metrics.bonusPoints}', color: AppColors.primary, onTap: () => onOpenList('Bonus Points $periodLabel', metrics.bonusInstructions)),
+                  if (period != InstructionRule.repeatDaily)
+                    _InstructionStat(label: '$period Completion', value: '${metrics.completionRate}%', color: Colors.green, onTap: () => onOpenList('$period Standalone Instructions', standalone)),
                 ],
               );
               if (constraints.maxWidth < 620) {
@@ -1198,6 +1187,123 @@ class _InstructionSummaryPanel extends StatelessWidget {
       ),
     );
   }
+
+  _InstructionPeriodMetrics _metricsForPeriod(List<InstructionRule> standalone) {
+    final range = _periodRange(today, period);
+    var total = 0;
+    var followed = 0;
+    var missed = 0;
+    var pending = 0;
+    var bonusPoints = 0;
+    final followedSet = <InstructionRule>{};
+    final missedSet = <InstructionRule>{};
+    final pendingSet = <InstructionRule>{};
+    final bonusSet = <InstructionRule>{};
+
+    for (final instruction in standalone.where((instruction) => instruction.enabled)) {
+      final dates = _occurrenceDatesForInstruction(instruction, range.$1, range.$2);
+      for (final date in dates) {
+        total++;
+        final entry = hiveService.instructionEntryForDate(instruction, date);
+        if (entry?.followed == true) {
+          followed++;
+          bonusPoints += entry!.bonusPoints;
+          followedSet.add(instruction);
+          if (entry.bonusPoints > 0) bonusSet.add(instruction);
+        } else if (entry?.missed == true) {
+          missed++;
+          missedSet.add(instruction);
+        } else {
+          pending++;
+          pendingSet.add(instruction);
+        }
+      }
+    }
+
+    return _InstructionPeriodMetrics(
+      total: total,
+      followed: followed,
+      missed: missed,
+      pending: pending,
+      bonusPoints: bonusPoints,
+      completionRate: total == 0 ? 0 : ((followed / total) * 100).round(),
+      followedInstructions: followedSet.toList(),
+      missedInstructions: missedSet.toList(),
+      pendingInstructions: pendingSet.toList(),
+      bonusInstructions: bonusSet.toList(),
+    );
+  }
+
+  (DateTime, DateTime) _periodRange(DateTime date, String period) {
+    final day = DateTime(date.year, date.month, date.day);
+    return switch (period) {
+      InstructionRule.repeatWeekly => (day.subtract(Duration(days: day.weekday - 1)), day.subtract(Duration(days: day.weekday - 1)).add(const Duration(days: 6))),
+      InstructionRule.repeatMonthly => (DateTime(day.year, day.month), DateTime(day.year, day.month + 1, 0)),
+      InstructionRule.repeatYearly => (DateTime(day.year), DateTime(day.year, 12, 31)),
+      _ => (day, day),
+    };
+  }
+
+  List<DateTime> _occurrenceDatesForInstruction(InstructionRule instruction, DateTime start, DateTime end) {
+    final dates = <DateTime>[];
+    var cursor = DateTime(start.year, start.month, start.day);
+    while (!cursor.isAfter(end)) {
+      if (_instructionOccursOn(instruction, cursor)) dates.add(cursor);
+      cursor = cursor.add(const Duration(days: 1));
+    }
+    return dates;
+  }
+
+  bool _instructionOccursOn(InstructionRule instruction, DateTime date) {
+    return switch (instruction.repeatType) {
+      InstructionRule.repeatDaily => true,
+      InstructionRule.repeatWeekly => date.weekday == DateTime.monday,
+      InstructionRule.repeatMonthly => date.day == 1,
+      InstructionRule.repeatYearly => date.month == 1 && date.day == 1,
+      InstructionRule.repeatOneTime => _isSameDate(instruction.createdAt, date),
+      _ => true,
+    };
+  }
+
+  String _periodLabel(String period) {
+    return switch (period) {
+      InstructionRule.repeatDaily => 'Today',
+      InstructionRule.repeatWeekly => 'This Week',
+      InstructionRule.repeatMonthly => 'This Month',
+      InstructionRule.repeatYearly => 'This Year',
+      _ => period,
+    };
+  }
+
+  bool _isSameDate(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+}
+
+
+class _InstructionPeriodMetrics {
+  final int total;
+  final int followed;
+  final int missed;
+  final int pending;
+  final int bonusPoints;
+  final int completionRate;
+  final List<InstructionRule> followedInstructions;
+  final List<InstructionRule> missedInstructions;
+  final List<InstructionRule> pendingInstructions;
+  final List<InstructionRule> bonusInstructions;
+
+  const _InstructionPeriodMetrics({
+    required this.total,
+    required this.followed,
+    required this.missed,
+    required this.pending,
+    required this.bonusPoints,
+    required this.completionRate,
+    required this.followedInstructions,
+    required this.missedInstructions,
+    required this.pendingInstructions,
+    required this.bonusInstructions,
+  });
 }
 
 class _InstructionCard extends StatelessWidget {
