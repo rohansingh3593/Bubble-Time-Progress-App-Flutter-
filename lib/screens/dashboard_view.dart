@@ -164,7 +164,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                         children: [
                           _dashboardTabList([
                             _buildHeroCard(rankProfile, summary),
-                            _buildQuickStatsRibbon(summary, scopedTaskCounts, rankProfile),
                             _buildProgressOverviewStrip(timeProgress),
                             _buildMottoHeroCard(),
                             _summaryHeader(summary),
@@ -265,7 +264,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _buildModernTopBar(RankProfile profile) {
     final style = _dashboardStyle();
-    final rewardSummary = widget.hiveService.getRewardMoneySummary();
     return LayoutBuilder(
       builder: (context, constraints) {
         final actions = Wrap(spacing: 8, runSpacing: 8, children: [
@@ -281,12 +279,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Good Morning, ${profile.username}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
               const SizedBox(height: 6),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                _topBarPill('Level ${profile.level}', Icons.military_tech_rounded),
-                _topBarPill('${_formatCompactNumber(profile.xp)} Points', Icons.bolt_rounded),
-                _topBarPill('₹${_formatCompactNumber(rewardSummary.availableRupees)} Earned', Icons.account_balance_wallet_rounded),
-                _topBarPill('${profile.activeStreak} Day Streak 🔥', Icons.local_fire_department_rounded),
-              ]),
+              Text(
+                'Your key totals are combined in the main card below.',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700, fontSize: 12),
+              ),
             ]),
           ),
         ]);
@@ -2624,6 +2622,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final completed = summary['COMPLETED'] ?? 0;
     final total = (summary['TOTAL TASKS'] ?? 1).clamp(1, 999999);
     final progress = completed / total;
+    final rewardSummary = widget.hiveService.getRewardMoneySummary();
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -2674,7 +2673,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                                       style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700),
                                     ),
                                     Text(
-                                      'Level ${profile.level} • ${summary["TODAY'S TASKS"] ?? 0} tasks today',
+                                      'Combined dashboard summary',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(color: Color(0xFFD9D9FF)),
@@ -2685,12 +2684,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                                   crossAxisAlignment: constraints.maxWidth < 360 ? CrossAxisAlignment.start : CrossAxisAlignment.end,
                                   children: [
                                     Text(
-                                      '${profile.activeStreak} days',
+                                      'All totals',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                                     ),
-                                    const Text('Current streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Color(0xFFD9D9FF))),
+                                    const Text('No duplicate cards', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Color(0xFFD9D9FF))),
                                   ],
                                 );
                                 final avatar = ProfileAvatar(
@@ -2749,6 +2748,18 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             const SizedBox(height: 8),
                             Text('$completed / $total completed', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                _heroMetric('Level', '${profile.level}'),
+                                _heroMetric('Points', _formatCompactNumber(profile.points)),
+                                _heroMetric('Money', '₹${_formatCompactNumber(rewardSummary.availableRupees)}'),
+                                _heroMetric('Streak', '${profile.activeStreak} days'),
+                                _heroMetric('Today Tasks', '${summary["TODAY'S TASKS"] ?? 0}'),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
                             SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: Row(
