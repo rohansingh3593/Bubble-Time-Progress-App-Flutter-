@@ -30,8 +30,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   DateTime _scheduleNow = DateTime.now();
 
   static const int _scheduleSnapMinutes = 15;
-  static const int _defaultScheduledDurationMinutes = 30;
-  static const List<int> _scheduleDurationSteps = [15, 30, 45, 60, 90, 120];
+  static const int _defaultScheduledDurationMinutes = 15;
+  static const List<int> _scheduleDurationSteps = [15, 30, 45, 60, 75, 90, 105, 120];
 
   @override
   void initState() {
@@ -387,6 +387,30 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     return _saveScheduledTask(task, range.start, (range.start + newDuration).clamp(range.start + _scheduleSnapMinutes, 24 * 60).toInt());
   }
 
+  Future<void> _returnTaskToPending(Task task) async {
+    final cleaned = task.description
+        .split('\n')
+        .where((line) {
+          final trimmed = line.trim();
+          return !trimmed.startsWith('⏰ Schedule Start:') &&
+              !trimmed.startsWith('⏰ Schedule End:') &&
+              !trimmed.startsWith('⏰ Schedule Bonus:') &&
+              !trimmed.startsWith('⏰ Scheduled:');
+        })
+        .join('\n')
+        .trim();
+    final selectedDay = _dateOnly(_currentDay);
+    final updated = task.copyWith(
+      description: cleaned,
+      dueDate: DateTime(selectedDay.year, selectedDay.month, selectedDay.day),
+    );
+    if (task.repeatTask) {
+      await widget.hiveService.updateRecurringTaskSeriesByReference(task, updated.copyWith(repeatTask: true));
+    } else {
+      await widget.hiveService.updateTaskByReference(task, updated);
+    }
+  }
+
   int? _parseScheduleMinutes(String raw) {
     final parts = raw.split(':');
     if (parts.length != 2) return null;
@@ -723,29 +747,50 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   }
 
   Widget _unscheduledTaskPlanner(DashboardThemeStyle theme, List<Task> tasks) {
-    if (tasks.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: (theme.cardTint ?? theme.elevatedSurface).withOpacity(0.45),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: theme.primary.withOpacity(0.16)),
-        ),
-        child: Text('All pending tasks with schedule times are placed below.', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800)),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Pending Tasks (Not Scheduled)', style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: tasks.map((task) => _draggablePendingTaskCard(theme, task)).toList(),
-        ),
-      ],
+    return DragTarget<Task>(
+      onAcceptWithDetails: (details) {
+        if (_hasScheduleRange(details.data)) _returnTaskToPending(details.data);
+      },
+      builder: (context, candidateData, rejectedData) {
+        final returning = candidateData.whereType<Task>().any(_hasScheduleRange);
+        return Container(
+          width: double.infinity,
+          padding: returning ? const EdgeInsets.all(10) : EdgeInsets.zero,
+          decoration: returning
+              ? BoxDecoration(
+                  color: theme.primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: theme.primary.withOpacity(0.30)),
+                )
+              : null,
+          child: tasks.isEmpty
+              ? Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: (theme.cardTint ?? theme.elevatedSurface).withOpacity(0.45),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: theme.primary.withOpacity(0.16)),
+                  ),
+                  child: Text(
+                    returning ? 'Drop here to return this task to Pending Tasks.' : 'All pending tasks with schedule times are placed below.',
+                    style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800),
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Pending Tasks (Not Scheduled)', style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: tasks.map((task) => _draggablePendingTaskCard(theme, task)).toList(),
+                    ),
+                  ],
+                ),
+        );
+      },
     );
   }
 
@@ -772,7 +817,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
         ],
       ),
     );
-    return LongPressDraggable<Task>(
+    return Draggable<Task>(
       data: task,
       feedback: Material(
         color: Colors.transparent,
@@ -853,7 +898,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
         ],
       ),
     );
-    return LongPressDraggable<Task>(
+    return Draggable<Task>(
       data: task,
       feedback: Material(color: Colors.transparent, child: Opacity(opacity: 0.88, child: SizedBox(width: 180, child: tile))),
       childWhenDragging: Opacity(opacity: 0.35, child: tile),
