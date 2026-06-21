@@ -5,6 +5,7 @@ import '../constants/dashboard_themes.dart';
 import '../models/rank_profile.dart';
 import '../models/user_profile.dart';
 import 'profile_avatar.dart';
+import 'app_text.dart';
 
 class RankProfileCard extends StatelessWidget {
   final RankProfile profile;
@@ -78,7 +79,7 @@ class RankProfileCard extends StatelessWidget {
                               profile.username,
                               style: TextStyle(
                                 color: contentColor,
-                                fontSize: 20,
+                                fontSize: responsiveFont(context, 20),
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
@@ -106,18 +107,38 @@ class RankProfileCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final xpText = Text(
                   '${profile.currentLevelXp}/${profile.xpForNextLevel} XP to Level ${profile.level + 1}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: contentColor, fontWeight: FontWeight.w700),
-                ),
-                Text(
+                );
+                final rankText = Text(
                   profile.nextRank == null ? 'Top Rank' : 'Next: ${profile.nextRank!.name}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: contentColor.withOpacity(0.88), fontWeight: FontWeight.w600),
-                ),
-              ],
+                );
+                if (constraints.maxWidth < 260) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      xpText,
+                      const SizedBox(height: 2),
+                      rankText,
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: xpText),
+                    const SizedBox(width: 8),
+                    Flexible(child: Align(alignment: Alignment.centerRight, child: rankText)),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             ClipRRect(
@@ -217,8 +238,8 @@ class _RankMetric extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: TextStyle(color: contentColor, fontWeight: FontWeight.w900, fontSize: 16)),
-          Text(label, style: TextStyle(color: contentColor.withOpacity(0.82), fontSize: 11)),
+          Text(value, style: TextStyle(color: contentColor, fontWeight: FontWeight.w900, fontSize: responsiveFont(context, 16))),
+          Text(label, style: TextStyle(color: contentColor.withOpacity(0.82), fontSize: responsiveFont(context, 11))),
         ],
       ),
     );

@@ -137,9 +137,9 @@ extension AppFontScaleX on AppFontScale {
       case AppFontScale.medium:
         return 1.0;
       case AppFontScale.large:
-        return 1.12;
+        return 1.08;
       case AppFontScale.extraLarge:
-        return 1.24;
+        return 1.15;
     }
   }
 }

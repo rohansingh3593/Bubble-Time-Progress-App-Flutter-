@@ -148,54 +148,101 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           final categoryCounts = _countByField(analyticsTasks, (t) => t.category, const []);
           final delegatedAnalyticsCounts = _countByField(analyticsTasks, _delegateLabelForTask, const []);
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-            children: [
-              _buildDashboardHeader(rankProfile),
-              const SizedBox(height: 14),
-              _buildHeroCard(rankProfile, summary),
-              const SizedBox(height: 14),
-              _buildMottoHeroCard(),
-              const SizedBox(height: 14),
-              _summaryHeader(summary),
-              const SizedBox(height: 14),
-              _buildProgressOverviewStrip(timeProgress),
-              const SizedBox(height: 12),
-              _scopeTaskHeader(scopedTaskCounts),
-              const SizedBox(height: 12),
-              _yearProgressPanel(yearProgress),
-              const SizedBox(height: 12),
-              _timeProgressSection(timeProgress),
-              const SizedBox(height: 14),
-              _buildHabitRoutineSection(activeRoutineTasks),
-              const SizedBox(height: 14),
-              _buildDisabledRoutineBoard(disabledRoutineTasks),
-              const SizedBox(height: 14),
-              _todaysProductivitySection(todayProductivityStats, todayTaskRows),
-              const SizedBox(height: 14),
-              _todayTasksSection(todayTaskRows),
-              const SizedBox(height: 12),
-              _instructionProductivitySection(today),
-              const SizedBox(height: 12),
-              _productivityAnalyticsCenter(
-                tasks: analyticsTasks,
-                statusCounts: statusCounts,
-                categoryCounts: categoryCounts,
-                priorityCounts: priorityCounts,
-                delegateCounts: delegatedAnalyticsCounts,
-              ),
-              const SizedBox(height: 12),
-              _taskInsightsFiltersSection(
-                items: taskInsightItems,
-                priorityOptions: priorityOptions,
-                delegateOptions: personOptions,
-                statusOptions: statusOptions,
-                categoryOptions: categoryOptions,
-              ),
-              const SizedBox(height: 14),
-              _buildProjectsSection(nonRoutineDashboardTasks),
-              const SizedBox(height: 12),
-            ],
+          return DefaultTabController(
+            length: 6,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 960;
+                final content = Column(
+                  children: [
+                    _buildModernTopBar(rankProfile),
+                    const SizedBox(height: 12),
+                    _buildDashboardTabs(),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          _dashboardTabList([
+                            _buildHeroCard(rankProfile, summary),
+                            _buildQuickStatsRibbon(summary, scopedTaskCounts, rankProfile),
+                            _buildProgressOverviewStrip(timeProgress),
+                            _buildMottoHeroCard(),
+                            _summaryHeader(summary),
+                            _todaysProductivitySection(todayProductivityStats, todayTaskRows),
+                            _todayTasksSection(todayTaskRows),
+                            _instructionProductivitySection(today),
+                          ]),
+                          _dashboardTabList([
+                            _buildFeatureLaunchCard(
+                              icon: Icons.insert_chart_outlined_rounded,
+                              title: 'Reports & Analytics',
+                              subtitle: 'Progress now lives in its own sidebar page, keeping this tab focused on task analytics and productivity reports.',
+                              actionLabel: 'Open Progress',
+                              onTap: _openProgressScreen,
+                            ),
+                            _productivityAnalyticsCenter(
+                              tasks: analyticsTasks,
+                              statusCounts: statusCounts,
+                              categoryCounts: categoryCounts,
+                              priorityCounts: priorityCounts,
+                              delegateCounts: delegatedAnalyticsCounts,
+                            ),
+                          ]),
+                          _dashboardTabList([
+                            _scopeTaskHeader(scopedTaskCounts),
+                            _todayTasksSection(todayTaskRows),
+                            _buildHabitRoutineSection(activeRoutineTasks),
+                            _buildDisabledRoutineBoard(disabledRoutineTasks),
+                            _taskInsightsFiltersSection(
+                              items: taskInsightItems,
+                              priorityOptions: priorityOptions,
+                              delegateOptions: personOptions,
+                              statusOptions: statusOptions,
+                              categoryOptions: categoryOptions,
+                            ),
+                          ]),
+                          _dashboardTabList([
+                            _buildFeatureLaunchCard(
+                              icon: Icons.flag_circle_rounded,
+                              title: 'Goal Command Center',
+                              subtitle: 'Open active goals, completed goals, progress galleries, saved money, deadlines, and timelines without changing goal logic.',
+                              actionLabel: 'Open Goals',
+                              onTap: _openGoalDashboard,
+                            ),
+                            _buildProjectsSection(nonRoutineDashboardTasks),
+                          ]),
+                          _dashboardTabList([
+                            _buildFeatureLaunchCard(
+                              icon: Icons.rule_folder_rounded,
+                              title: 'Instruction Center',
+                              subtitle: 'Manage standalone instructions, task instructions, selectable levels, and daily follow/miss tracking with the existing engine.',
+                              actionLabel: 'Open Instructions',
+                              onTap: _openInstructionDashboard,
+                            ),
+                            _instructionProductivitySection(today),
+                          ]),
+                          _dashboardTabList([
+                            _buildFeatureLaunchCard(
+                              icon: Icons.auto_graph_rounded,
+                              title: 'Growth Timeline',
+                              subtitle: 'Review journal, reflections, achievements, XP history, money history, streak records, and motivation.',
+                              actionLabel: 'Open Timeline',
+                              onTap: _openJourneyTimeline,
+                            ),
+                            _buildMottoHeroCard(),
+                            _buildGrowthActionGrid(),
+                          ]),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(wide ? 20 : 16, 10, 16, 18),
+                  child: content,
+                );
+              },
+            ),
           );
         },
       ),
@@ -205,6 +252,228 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
 
 
+
+
+  Widget _dashboardTabList(List<Widget> children) {
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 18),
+      itemBuilder: (context, index) => children[index],
+      separatorBuilder: (_, __) => const SizedBox(height: 14),
+      itemCount: children.length,
+    );
+  }
+
+  Widget _buildModernTopBar(RankProfile profile) {
+    final style = _dashboardStyle();
+    final rewardSummary = widget.hiveService.getRewardMoneySummary();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final actions = Wrap(spacing: 8, runSpacing: 8, children: [
+          _headerActionButton(icon: Icons.search_rounded, tooltip: 'Search', style: style, onTap: _openProductivityTimeline),
+          _mottoHeaderButton(style),
+          _rewardMoneyBadge(style),
+          _headerActionButton(icon: Icons.settings_rounded, tooltip: 'Dashboard settings', style: style, onTap: _openSettingsPanel),
+        ]);
+        final profileIntro = Row(children: [
+          ProfileAvatar(profile: widget.hiveService.getUserProfile(), radius: 28, accentColor: style.primary, showGlow: true, onTap: _openProductivityTimeline),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Good Morning, ${profile.username}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                _topBarPill('Level ${profile.level}', Icons.military_tech_rounded),
+                _topBarPill('${_formatCompactNumber(profile.xp)} XP', Icons.bolt_rounded),
+                _topBarPill('₹${_formatCompactNumber(rewardSummary.availableRupees)} Earned', Icons.account_balance_wallet_rounded),
+                _topBarPill('${profile.activeStreak} Day Streak 🔥', Icons.local_fire_department_rounded),
+              ]),
+            ]),
+          ),
+        ]);
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [style.primary.withOpacity(0.18), style.secondary.withOpacity(0.10)]),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: style.primary.withOpacity(0.18)),
+          ),
+          child: constraints.maxWidth < 900
+              ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [profileIntro, const SizedBox(height: 12), actions])
+              : Row(children: [Expanded(child: profileIntro), const SizedBox(width: 12), actions]),
+        );
+      },
+    );
+  }
+
+  Widget _topBarPill(String label, IconData icon) {
+    final style = _dashboardStyle();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(color: style.surface.withOpacity(0.78), borderRadius: BorderRadius.circular(999), border: Border.all(color: style.primary.withOpacity(0.14))),
+      child: LayoutBuilder(
+        builder: (context, constraints) => FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: style.primary),
+              const SizedBox(width: 5),
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDashboardTabs() {
+    final style = _dashboardStyle();
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(color: style.surface, borderRadius: BorderRadius.circular(20), border: Border.all(color: style.primary.withOpacity(0.12))),
+      child: TabBar(
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        labelColor: AppThemeColors.readableTextOn(style.primary, style),
+        unselectedLabelColor: style.textMuted,
+        indicator: BoxDecoration(color: style.primary, borderRadius: BorderRadius.circular(16)),
+        dividerColor: Colors.transparent,
+        labelStyle: const TextStyle(fontWeight: FontWeight.w900),
+        tabs: const [
+          Tab(icon: Icon(Icons.dashboard_customize_rounded), text: 'Overview'),
+          Tab(icon: Icon(Icons.query_stats_rounded), text: 'Productivity'),
+          Tab(icon: Icon(Icons.task_alt_rounded), text: 'Tasks'),
+          Tab(icon: Icon(Icons.flag_rounded), text: 'Goals'),
+          Tab(icon: Icon(Icons.rule_rounded), text: 'Instructions'),
+          Tab(icon: Icon(Icons.trending_up_rounded), text: 'Growth'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernSidebar(RankProfile profile) {
+    final style = _dashboardStyle();
+    final items = [
+      (Icons.home_rounded, 'Dashboard', widget.onGoToDashboard ?? () {}),
+      (Icons.task_alt_rounded, 'Tasks', _openProductivityTimeline),
+      (Icons.repeat_rounded, 'Routine', _openProductivityTimeline),
+      (Icons.rule_folder_rounded, 'Instructions', _openInstructionDashboard),
+      (Icons.flag_circle_rounded, 'Goals', _openGoalDashboard),
+      (Icons.account_balance_wallet_rounded, 'Money', _openRewardMoneyHistory),
+      (Icons.lightbulb_rounded, 'Motivation', _openMotivationMottoDashboard),
+      (Icons.insert_chart_outlined_rounded, 'Progress', _openProgressScreen),
+      (Icons.analytics_rounded, 'Reports', _openProductivityTimeline),
+      (Icons.settings_rounded, 'Settings', _openSettingsPanel),
+    ];
+    return Container(
+      width: 230,
+      margin: const EdgeInsets.fromLTRB(16, 10, 0, 18),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: style.surface, borderRadius: BorderRadius.circular(28), border: Border.all(color: style.primary.withOpacity(0.14))),
+      child: SingleChildScrollView(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Momentum', style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
+          Text(profile.currentRank.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 18),
+          ...items.map((item) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: item.$3,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                child: Row(children: [
+                  Icon(item.$1, color: style.primary, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(item.$2, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800))),
+                ]),
+              ),
+            ),
+          )),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildQuickStatsRibbon(Map<String, int> summary, Map<String, int> scopedCounts, RankProfile profile) {
+    final cards = [
+      _quickStatCard('Tasks', scopedCounts['Today'] ?? 0, Icons.task_alt_rounded, () => _showTaskListSheet('Today tasks', _dedupeTasksForDashboard(widget.hiveService.getAllTasksByDate().values.expand((list) => list).toList()))),
+      _quickStatCard('Goals', summary['Completed'] ?? 0, Icons.flag_rounded, _openGoalDashboard),
+      _quickStatCard('Coins', widget.hiveService.getRewardMoneySummary().availableRupees, Icons.paid_rounded, _openRewardMoneyHistory),
+      _quickStatCard('XP', profile.xp, Icons.bolt_rounded, _openProductivityTimeline),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: cards
+            .map((card) => Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: SizedBox(width: 145, child: card),
+                ))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _quickStatCard(String label, int value, IconData icon, VoidCallback onTap) {
+    final style = _dashboardStyle();
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: style.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: style.primary.withOpacity(0.13))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, color: style.primary), const SizedBox(height: 10), Text(_formatCompactNumber(value), style: TextStyle(color: style.textPrimary, fontSize: 20, fontWeight: FontWeight.w900)), Text(label, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800))]),
+      ),
+    );
+  }
+
+  Widget _buildFeatureLaunchCard({required IconData icon, required String title, required String subtitle, required String actionLabel, required VoidCallback onTap}) {
+    final style = _dashboardStyle();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final leading = CircleAvatar(radius: 26, backgroundColor: style.primary.withOpacity(0.14), child: Icon(icon, color: style.primary));
+        final copy = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 18)),
+          const SizedBox(height: 4),
+          Text(subtitle, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+        ]);
+        final action = ElevatedButton(onPressed: onTap, child: Text(actionLabel, maxLines: 1, overflow: TextOverflow.ellipsis));
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(color: style.surface, borderRadius: BorderRadius.circular(24), border: Border.all(color: style.primary.withOpacity(0.14))),
+          child: constraints.maxWidth < 520
+              ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [leading, const SizedBox(width: 14), Expanded(child: copy)]),
+                  const SizedBox(height: 12),
+                  Align(alignment: Alignment.centerLeft, child: action),
+                ])
+              : Row(children: [
+                  leading,
+                  const SizedBox(width: 14),
+                  Expanded(child: copy),
+                  const SizedBox(width: 12),
+                  Flexible(flex: 0, child: action),
+                ]),
+        );
+      },
+    );
+  }
+
+  Widget _buildGrowthActionGrid() {
+    return Wrap(spacing: 12, runSpacing: 12, children: [
+      _growthButton(Icons.menu_book_rounded, 'Journal', _openJournal),
+      _growthButton(Icons.timeline_rounded, 'Personal Timeline', _openJourneyTimeline),
+      _growthButton(Icons.account_balance_wallet_rounded, 'Money History', _openRewardMoneyHistory),
+      _growthButton(Icons.insights_rounded, 'XP & Analytics', _openProductivityTimeline),
+    ]);
+  }
+
+  Widget _growthButton(IconData icon, String label, VoidCallback onTap) {
+    final style = _dashboardStyle();
+    return SizedBox(width: 210, child: OutlinedButton.icon(onPressed: onTap, icon: Icon(icon, color: style.primary), label: Text(label), style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), foregroundColor: style.textPrimary, side: BorderSide(color: style.primary.withOpacity(0.22)))));
+  }
 
   Widget _buildMottoHeroCard() {
     final motto = widget.hiveService.getFeaturedMotivationMotto();
@@ -337,6 +606,14 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ProductivityTimelineView(hiveService: widget.hiveService),
+      ),
+    );
+  }
+
+  void _openProgressScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => _buildProgressScreen(),
       ),
     );
   }
@@ -2075,13 +2352,13 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   Widget _paletteDots(DashboardPaletteType palette, {bool compact = false}) {
     final size = compact ? 5.0 : 12.0;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      spacing: 2,
+      runSpacing: 2,
       children: palette.colors
           .map((color) => Container(
                 width: size,
                 height: size,
-                margin: const EdgeInsets.only(right: 2),
                 decoration: BoxDecoration(
                   color: color,
                   shape: BoxShape.circle,
@@ -2385,42 +2662,76 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                ProfileAvatar(
-                                  profile: widget.hiveService.getUserProfile(),
-                                  radius: 26,
-                                  accentColor: const Color(0xFFFFD86D),
-                                  badge: profile.currentRank.emoji,
-                                  onTap: _openProductivityTimeline,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${profile.currentRank.name} ${profile.currentRank.emoji}',
-                                        style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700),
-                                      ),
-                                      Text(
-                                        'Level ${profile.level} • ${summary["TODAY'S TASKS"] ?? 0} tasks today',
-                                        style: const TextStyle(color: Color(0xFFD9D9FF)),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final identity = Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${profile.currentRank.name} ${profile.currentRank.emoji}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700),
+                                    ),
+                                    Text(
+                                      'Level ${profile.level} • ${summary["TODAY'S TASKS"] ?? 0} tasks today',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Color(0xFFD9D9FF)),
+                                    ),
+                                  ],
+                                );
+                                final streak = Column(
+                                  crossAxisAlignment: constraints.maxWidth < 360 ? CrossAxisAlignment.start : CrossAxisAlignment.end,
                                   children: [
                                     Text(
                                       '${profile.activeStreak} days',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                                     ),
-                                    const Text('Current streak', style: TextStyle(color: Color(0xFFD9D9FF))),
+                                    const Text('Current streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Color(0xFFD9D9FF))),
                                   ],
-                                ),
-                              ],
+                                );
+                                final avatar = ProfileAvatar(
+                                  profile: widget.hiveService.getUserProfile(),
+                                  radius: constraints.maxWidth < 180 ? 18 : 26,
+                                  accentColor: const Color(0xFFFFD86D),
+                                  badge: profile.currentRank.emoji,
+                                  onTap: _openProductivityTimeline,
+                                );
+                                if (constraints.maxWidth < 140) {
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      avatar,
+                                      const SizedBox(height: 8),
+                                      identity,
+                                      const SizedBox(height: 8),
+                                      streak,
+                                    ],
+                                  );
+                                }
+                                if (constraints.maxWidth < 360) {
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(children: [avatar, const SizedBox(width: 10), Expanded(child: identity)]),
+                                      const SizedBox(height: 8),
+                                      streak,
+                                    ],
+                                  );
+                                }
+                                return Row(
+                                  children: [
+                                    avatar,
+                                    const SizedBox(width: 12),
+                                    Expanded(child: identity),
+                                    const SizedBox(width: 12),
+                                    Flexible(flex: 0, child: streak),
+                                  ],
+                                );
+                              },
                             ),
                             const SizedBox(height: 16),
                             TweenAnimationBuilder<double>(
@@ -2438,42 +2749,47 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             const SizedBox(height: 8),
                             Text('$completed / $total completed', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 8,
-                              children: [
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    side: const BorderSide(color: Colors.white70),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      side: const BorderSide(color: Colors.white70),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                    ),
+                                    onPressed: _openJourneyTimeline,
+                                    icon: const Icon(Icons.menu_book_rounded, size: 16),
+                                    label: const Text('Open Journey Timeline'),
                                   ),
-                                  onPressed: _openJourneyTimeline,
-                                  icon: const Icon(Icons.menu_book_rounded, size: 16),
-                                  label: const Text('Open Journey Timeline'),
-                                ),
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    side: const BorderSide(color: Colors.white70),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                  const SizedBox(width: 10),
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      side: const BorderSide(color: Colors.white70),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                    ),
+                                    onPressed: _openProductivityTimeline,
+                                    icon: const Icon(Icons.show_chart_rounded, size: 16),
+                                    label: const Text('Open Productivity Timeline'),
                                   ),
-                                  onPressed: _openProductivityTimeline,
-                                  icon: const Icon(Icons.show_chart_rounded, size: 16),
-                                  label: const Text('Open Productivity Timeline'),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 10),
                             GestureDetector(
                               onTap: () => setState(() => _showDetails = !_showDetails),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.stars_rounded, color: Color(0xFFFFD86D), size: 16),
-                                  const SizedBox(width: 6),
-                                  Text(_showDetails ? 'Hide details' : 'Show details', style: const TextStyle(color: Colors.white)),
-                                ],
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.stars_rounded, color: Color(0xFFFFD86D), size: 16),
+                                    const SizedBox(width: 6),
+                                    Text(_showDetails ? 'Hide details' : 'Show details', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)),
+                                  ],
+                                ),
                               ),
                             ),
                             AnimatedSwitcher(
@@ -2533,6 +2849,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   opacity: t,
                   child: Transform.translate(offset: Offset(0, 18 * (1 - t)), child: child),
                 ),
+                child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: _openProgressScreen,
                 child: Container(
                 width: 145,
                 margin: const EdgeInsets.only(right: 10),
@@ -2564,6 +2883,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   Text('$remaining left', style: TextStyle(color: style.textMuted)),
                 ]),
               ),
+              ),
               );
             }).toList(),
           ),
@@ -2572,6 +2892,252 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
+
+
+  Widget _buildProgressScreen() {
+    final style = _dashboardStyle();
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final yearProgress = _buildYearProgress(todayStart);
+    final timeProgress = _buildTimeProgress(now);
+    return Scaffold(
+      backgroundColor: style.background,
+      appBar: AppBar(
+        title: const Text('Progress'),
+        backgroundColor: style.surface,
+        foregroundColor: style.textPrimary,
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: DefaultTabController(
+          length: 4,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: style.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: style.primary.withOpacity(0.14)),
+                  ),
+                  child: TabBar(
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    labelColor: AppThemeColors.readableTextOn(style.primary, style),
+                    unselectedLabelColor: style.textMuted,
+                    indicator: BoxDecoration(color: style.primary, borderRadius: BorderRadius.circular(14)),
+                    dividerColor: Colors.transparent,
+                    tabs: const [
+                      Tab(text: 'Year'),
+                      Tab(text: 'Month'),
+                      Tab(text: 'Week'),
+                      Tab(text: 'Time'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _progressTabList([_yearProgressDetailCard(yearProgress, todayStart)]),
+                      _progressTabList([_monthProgressDetailCard(timeProgress['Month']!, now)]),
+                      _progressTabList([_weekProgressDetailCard(timeProgress['Week']!, now)]),
+                      _progressTabList([_timeProgressSection(timeProgress)]),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _progressTabList(List<Widget> children) {
+    return ListView.separated(
+      itemBuilder: (context, index) => children[index],
+      separatorBuilder: (_, __) => const SizedBox(height: 14),
+      itemCount: children.length,
+    );
+  }
+
+  Widget _yearProgressDetailCard(Map<String, int> progress, DateTime todayStart) {
+    final style = _dashboardStyle();
+    final percent = progress['progressPercent'] ?? 0;
+    final total = progress['totalDays'] ?? 365;
+    final passed = progress['daysPassed'] ?? 0;
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return _progressDetailCard(
+      icon: Icons.calendar_month_rounded,
+      title: 'Year Progress',
+      percent: percent,
+      passedLabel: '$passed days passed',
+      remainingLabel: '${progress['daysRemaining'] ?? 0} days left',
+      color: style.primary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: monthNames.map((month) {
+                final selected = monthNames.indexOf(month) == todayStart.month - 1;
+                return Container(
+                  margin: const EdgeInsets.only(right: 18),
+                  child: Text(month, style: TextStyle(color: selected ? style.primary : style.textPrimary, fontWeight: FontWeight.w900)),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: List.generate(total, (index) {
+              final day = index + 1;
+              final isToday = day == passed;
+              final isPassed = day < passed;
+              return _progressBubble(
+                '$day',
+                isToday ? Colors.orange : isPassed ? style.primary : style.elevatedSurface,
+                isToday || isPassed ? AppThemeColors.readableTextOn(isToday ? Colors.orange : style.primary, style) : style.textMuted,
+                size: 26,
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _monthProgressDetailCard(Map<String, int> progress, DateTime now) {
+    final style = _dashboardStyle();
+    final total = progress['total'] ?? 31;
+    final passed = progress['passed'] ?? now.day;
+    return _progressDetailCard(
+      icon: Icons.calendar_view_month_rounded,
+      title: 'Month Progress',
+      percent: progress['percent'] ?? 0,
+      passedLabel: '$passed days passed',
+      remainingLabel: '${progress['remaining'] ?? 0} days left',
+      color: style.secondary,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: List.generate(total, (index) {
+          final day = index + 1;
+          final isToday = day == now.day;
+          final isPassed = day < now.day;
+          return _progressBubble(
+            '$day',
+            isToday ? Colors.orange : isPassed ? style.secondary : style.elevatedSurface,
+            isToday || isPassed ? AppThemeColors.readableTextOn(isToday ? Colors.orange : style.secondary, style) : style.textMuted,
+            size: 34,
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _weekProgressDetailCard(Map<String, int> progress, DateTime now) {
+    final style = _dashboardStyle();
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return _progressDetailCard(
+      icon: Icons.view_week_rounded,
+      title: 'Week Progress',
+      percent: progress['percent'] ?? 0,
+      passedLabel: '${progress['passed'] ?? 0} days passed',
+      remainingLabel: '${progress['remaining'] ?? 0} days left',
+      color: Colors.green,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: List.generate(7, (index) {
+            final day = index + 1;
+            final isToday = day == now.weekday;
+            final isPassed = day < now.weekday;
+            return SizedBox(
+              width: 64,
+              child: Column(
+                children: [
+                  _progressBubble(
+                    '$day',
+                    isToday ? Colors.orange : isPassed ? Colors.green : style.elevatedSurface,
+                    isToday || isPassed ? Colors.white : style.textMuted,
+                    size: 42,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(labels[index], style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
+                ],
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  Widget _progressDetailCard({required IconData icon, required String title, required int percent, required String passedLabel, required String remainingLabel, required Color color, required Widget child}) {
+    final style = _dashboardStyle();
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: style.surface,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: color.withOpacity(0.22)),
+        boxShadow: [BoxShadow(color: color.withOpacity(style.dark ? 0.16 : 0.08), blurRadius: 18, offset: const Offset(0, 8))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final titleBlock = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
+                Text('$passedLabel  •  $remainingLabel', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800)),
+              ]);
+              final percentBadge = Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                decoration: BoxDecoration(color: color.withOpacity(0.16), borderRadius: BorderRadius.circular(999), border: Border.all(color: color.withOpacity(0.28))),
+                child: Text('$percent%', style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w900)),
+              );
+              if (constraints.maxWidth < 430) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [CircleAvatar(backgroundColor: color.withOpacity(0.15), child: Icon(icon, color: color)), const SizedBox(width: 12), Expanded(child: titleBlock)]),
+                  const SizedBox(height: 10),
+                  percentBadge,
+                ]);
+              }
+              return Row(children: [
+                CircleAvatar(backgroundColor: color.withOpacity(0.15), child: Icon(icon, color: color)),
+                const SizedBox(width: 12),
+                Expanded(child: titleBlock),
+                const SizedBox(width: 12),
+                percentBadge,
+              ]);
+            },
+          ),
+          const SizedBox(height: 14),
+          LinearProgressIndicator(value: (percent / 100).clamp(0.0, 1.0).toDouble(), minHeight: 8, backgroundColor: style.elevatedSurface, color: color),
+          const SizedBox(height: 18),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _progressBubble(String label, Color background, Color foreground, {double size = 30}) {
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: background, shape: BoxShape.circle, border: Border.all(color: foreground.withOpacity(0.12))),
+      child: Text(label, style: TextStyle(color: foreground, fontSize: size < 30 ? 10 : 12, fontWeight: FontWeight.w900)),
+    );
+  }
 
   Widget _darkSection(String title, Widget child, {String? action, VoidCallback? onActionTap, bool pulseAction = false}) {
     final style = _dashboardStyle();

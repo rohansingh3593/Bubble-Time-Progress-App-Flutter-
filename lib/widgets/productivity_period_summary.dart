@@ -89,64 +89,77 @@ class ProductivityPeriodSummaryCard extends StatelessWidget {
         border: Border.all(color: AppColors.primary.withOpacity(0.18)),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 14, offset: const Offset(0, 8))],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${stats.title} • ${stats.periodLabel}',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary),
-                ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final contentWidth = constraints.hasBoundedWidth ? math.max(constraints.maxWidth, 360.0) : 360.0;
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: contentWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${stats.title} • ${stats.periodLabel}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary),
+                        ),
+                      ),
+                      _ScoreBadge(score: stats.productivityScore, rating: stats.rating),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _MetricCard(label: 'Productivity', value: '${stats.productivityScore.round()}%', icon: Icons.insights_rounded),
+                      _MetricCard(label: 'Rating', value: stats.rating, icon: Icons.emoji_events_outlined),
+                      _MetricCard(label: 'Total Points', value: '${stats.totalPoints} / ${stats.maximumPoints}', icon: Icons.diamond_outlined),
+                      _MetricCard(label: 'Total XP', value: '${stats.totalXp}', icon: Icons.bolt_rounded),
+                      _MetricCard(label: 'Focus Hours', value: _formatHours(stats.totalHours), icon: Icons.timer_outlined),
+                      _MetricCard(label: 'Active Days', value: '${stats.activeDays} / ${stats.totalDays}', icon: Icons.calendar_today_outlined),
+                      _MetricCard(label: 'Average Daily Score', value: '${stats.averageDailyScore.round()}%', icon: Icons.show_chart_rounded),
+                      _MetricCard(label: 'Completed Tasks', value: '${stats.completedTasks}', icon: Icons.check_circle_outline),
+                      _MetricCard(label: 'Completed Phases', value: '${stats.completedPhases}', icon: Icons.layers_outlined),
+                      _MetricCard(label: 'Routine Completion', value: '${stats.routineCompletionRate.round()}%', icon: Icons.repeat_rounded),
+                      _MetricCard(label: 'Streak Bonus', value: '${stats.streakBonusEarned}', icon: Icons.local_fire_department_outlined),
+                      _MetricCard(label: 'Best Day', value: _dayLabel(stats.bestDay), icon: Icons.arrow_upward_rounded),
+                      _MetricCard(label: 'Worst Day', value: _dayLabel(stats.worstDay), icon: Icons.arrow_downward_rounded),
+                      if (stats.bestInterval != null) _MetricCard(label: stats.title.contains('Year') ? 'Best Month' : 'Best Week', value: _intervalLabel(stats.bestInterval!), icon: Icons.trending_up_rounded),
+                      if (stats.worstInterval != null) _MetricCard(label: stats.title.contains('Year') ? 'Worst Month' : 'Worst Week', value: _intervalLabel(stats.worstInterval!), icon: Icons.trending_down_rounded),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Important / Urgent Category Hours', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  _categoryBreakdown(),
+                  const SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _trendBars()),
+                      const SizedBox(width: 12),
+                      SizedBox(width: 118, child: _completionDonut()),
+                    ],
+                  ),
+                  if (stats.intervals.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _intervalComparison(),
+                  ],
+                  if (showHeatMap) ...[
+                    const SizedBox(height: 16),
+                    _heatMap(),
+                  ],
+                ],
               ),
-              _ScoreBadge(score: stats.productivityScore, rating: stats.rating),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _MetricCard(label: 'Productivity', value: '${stats.productivityScore.round()}%', icon: Icons.insights_rounded),
-              _MetricCard(label: 'Rating', value: stats.rating, icon: Icons.emoji_events_outlined),
-              _MetricCard(label: 'Total Points', value: '${stats.totalPoints} / ${stats.maximumPoints}', icon: Icons.diamond_outlined),
-              _MetricCard(label: 'Total XP', value: '${stats.totalXp}', icon: Icons.bolt_rounded),
-              _MetricCard(label: 'Focus Hours', value: _formatHours(stats.totalHours), icon: Icons.timer_outlined),
-              _MetricCard(label: 'Active Days', value: '${stats.activeDays} / ${stats.totalDays}', icon: Icons.calendar_today_outlined),
-              _MetricCard(label: 'Average Daily Score', value: '${stats.averageDailyScore.round()}%', icon: Icons.show_chart_rounded),
-              _MetricCard(label: 'Completed Tasks', value: '${stats.completedTasks}', icon: Icons.check_circle_outline),
-              _MetricCard(label: 'Completed Phases', value: '${stats.completedPhases}', icon: Icons.layers_outlined),
-              _MetricCard(label: 'Routine Completion', value: '${stats.routineCompletionRate.round()}%', icon: Icons.repeat_rounded),
-              _MetricCard(label: 'Streak Bonus', value: '${stats.streakBonusEarned}', icon: Icons.local_fire_department_outlined),
-              _MetricCard(label: 'Best Day', value: _dayLabel(stats.bestDay), icon: Icons.arrow_upward_rounded),
-              _MetricCard(label: 'Worst Day', value: _dayLabel(stats.worstDay), icon: Icons.arrow_downward_rounded),
-              if (stats.bestInterval != null) _MetricCard(label: stats.title.contains('Year') ? 'Best Month' : 'Best Week', value: _intervalLabel(stats.bestInterval!), icon: Icons.trending_up_rounded),
-              if (stats.worstInterval != null) _MetricCard(label: stats.title.contains('Year') ? 'Worst Month' : 'Worst Week', value: _intervalLabel(stats.worstInterval!), icon: Icons.trending_down_rounded),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Text('Important / Urgent Category Hours', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-          const SizedBox(height: 8),
-          _categoryBreakdown(),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _trendBars()),
-              const SizedBox(width: 12),
-              SizedBox(width: 118, child: _completionDonut()),
-            ],
-          ),
-          if (stats.intervals.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _intervalComparison(),
-          ],
-          if (showHeatMap) ...[
-            const SizedBox(height: 16),
-            _heatMap(),
-          ],
-        ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -211,7 +224,7 @@ class ProductivityPeriodSummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📈 Productivity Trend', style: TextStyle(fontWeight: FontWeight.w900)),
+          const Text('📈 Productivity Trend', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w900)),
           const SizedBox(height: 8),
           Expanded(
             child: Row(
@@ -366,7 +379,7 @@ class _ScoreBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(color: AppColors.taskCompleted.withOpacity(0.14), borderRadius: BorderRadius.circular(999), border: Border.all(color: AppColors.taskCompleted.withOpacity(0.36))),
-      child: Text('${score.round()}% • $rating', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+      child: Text('${score.round()}% • $rating', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
     );
   }
 }
