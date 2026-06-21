@@ -242,6 +242,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Listenable? _mottoStorageListenable;
   String? _mottoReminderSignature;
   bool _sidebarExpanded = false;
+  bool _sidebarOverlayVisible = false;
 
   late final List<Widget> _screens;
 
@@ -370,6 +371,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     setState(() {
       _selectedIndex = index;
       _sidebarExpanded = false;
+      _sidebarOverlayVisible = false;
     });
   }
 
@@ -379,7 +381,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     });
   }
 
-  Widget _buildAnimatedSidebar(DashboardThemeStyle style, RankProfile profile) {
+  Widget _buildAnimatedSidebar(DashboardThemeStyle style, RankProfile profile, {bool overlay = false, bool forceExpanded = false}) {
     final items = <_SidebarNavItem>[
       _SidebarNavItem(icon: Icons.dashboard_rounded, label: 'Dashboard', selectedIndex: 0),
       _SidebarNavItem(icon: Icons.calendar_today_rounded, label: 'Year', selectedIndex: 1),
@@ -396,13 +398,15 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _SidebarNavItem(icon: Icons.analytics_rounded, label: 'Reports', selectedIndex: 12),
     ];
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = screenWidth < 600 || overlay;
     final isTablet = screenWidth >= 600 && screenWidth < 1000;
     final collapsedWidth = isMobile ? 64.0 : 72.0;
-    final expandedWidth = isMobile ? screenWidth * 0.68 : isTablet ? 220.0 : 260.0;
+    final expandedWidth = isMobile ? screenWidth * 0.70 : isTablet ? 220.0 : 260.0;
     final canExpand = !isMobile;
-    final expanded = canExpand && _sidebarExpanded;
-    final sidebarWidth = (expanded ? expandedWidth.clamp(64.0, 260.0) : collapsedWidth).toDouble();
+    final expanded = forceExpanded || (canExpand && _sidebarExpanded);
+    final sidebarWidth = overlay
+        ? expandedWidth.clamp(64.0, screenWidth * 0.70).toDouble()
+        : (expanded ? expandedWidth.clamp(64.0, 260.0) : collapsedWidth).toDouble();
     return MouseRegion(
       onEnter: (_) {
         if (canExpand) setState(() => _sidebarExpanded = true);
@@ -510,7 +514,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           lifetimeStats: widget.hiveService.getLifetimeProductivityStats(),
         );
         final screenWidth = MediaQuery.of(context).size.width;
+        final narrowSidebar = screenWidth < 700;
         final collapsedSidebarWidth = screenWidth < 600 ? 64.0 : 72.0;
+        final overlaySidebarWidth = (screenWidth * 0.70).clamp(220.0, 320.0).toDouble();
         final content = IndexedStack(
           index: _selectedIndex,
           children: _screens.asMap().entries.map((entry) {
@@ -523,16 +529,62 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         return Scaffold(
           body: Stack(
             children: [
-              Padding(
-                padding: EdgeInsets.only(left: collapsedSidebarWidth),
-                child: content,
-              ),
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                child: _buildAnimatedSidebar(dashboardStyle, profile),
-              ),
+              if (narrowSidebar)
+                content
+              else
+                Padding(
+                  padding: EdgeInsets.only(left: collapsedSidebarWidth),
+                  child: content,
+                ),
+              if (narrowSidebar) ...[
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 28,
+                  child: MouseRegion(
+                    onEnter: (_) => setState(() => _sidebarOverlayVisible = true),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () => setState(() => _sidebarOverlayVisible = true),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: 12,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: dashboardStyle.primary.withOpacity(0.24),
+                            borderRadius: const BorderRadius.horizontal(right: Radius.circular(999)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (_sidebarOverlayVisible)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _sidebarOverlayVisible = false),
+                      child: Container(color: Colors.black.withOpacity(0.18)),
+                    ),
+                  ),
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                  left: _sidebarOverlayVisible ? 0 : -overlaySidebarWidth,
+                  top: 0,
+                  bottom: 0,
+                  width: overlaySidebarWidth,
+                  child: _buildAnimatedSidebar(dashboardStyle, profile, overlay: true, forceExpanded: true),
+                ),
+              ] else
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: _buildAnimatedSidebar(dashboardStyle, profile),
+                ),
             ],
           ),
         );
