@@ -723,7 +723,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                               top: ((_scheduleNow.hour * 60 + _scheduleNow.minute) / 60) * hourHeight,
                               left: labelWidth,
                               right: 0,
-                              child: Row(children: [Expanded(child: Container(height: 2, color: AppThemeColors.fromDashboardStyle(theme).accent)), const SizedBox(width: 6), Text('NOW (${_formatScheduleTime(_scheduleNow.hour * 60 + _scheduleNow.minute)})', style: TextStyle(color: AppThemeColors.fromDashboardStyle(theme).accent, fontSize: 11, fontWeight: FontWeight.w900))]),
+                              child: Container(height: 2, color: AppThemeColors.fromDashboardStyle(theme).accent),
                             ),
                           for (final positioned in positionedEntries)
                             Positioned(
@@ -731,7 +731,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                               left: labelWidth + positioned.column * ((laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount + 6),
                               width: (laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount,
                               height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(36.0, timelineHeight),
-                              child: _taskScheduleTile(theme, positioned.entry, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 45),
+                              child: _taskScheduleTile(theme, positioned.entry, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 75),
                             ),
                         ],
                       ),
@@ -871,9 +871,12 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
         children: [
           if (!compact) SizedBox(width: 72, child: Text(_formatScheduleTime(entry.startMinutes), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w900))),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            child: ClipRect(
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                 if (active)
                   Container(
                     margin: const EdgeInsets.only(bottom: 6),
@@ -888,11 +891,13 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                   const SizedBox(height: 3),
                 ],
                 Text(_scheduleStatusLabel(status), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: color, fontWeight: FontWeight.w900)),
-                if ((entry.endMinutes - entry.startMinutes) >= 60) ...[
+                if ((entry.endMinutes - entry.startMinutes) >= 120) ...[
                   const SizedBox(height: 4),
                   _durationResizeControls(theme, task, entry),
                 ],
-              ],
+                  ],
+                ),
+              ),
             ),
           ),
         ],
