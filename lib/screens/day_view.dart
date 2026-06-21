@@ -619,7 +619,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                         top: (positioned.entry.startMinutes / 60) * hourHeight,
                         left: labelWidth + positioned.column * ((laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount + 6),
                         width: (laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount,
-                        height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(28.0, timelineHeight),
+                        height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(36.0, timelineHeight),
                         child: _taskScheduleTile(theme, positioned.entry, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 30),
                       ),
                   ],
@@ -646,7 +646,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
           borderRadius: BorderRadius.circular(16),
           onTap: () => _editTask(task),
           child: Container(
-            padding: EdgeInsets.all(compact ? 8 : 12),
+            padding: EdgeInsets.all(compact ? 4 : 12),
             decoration: BoxDecoration(
               color: color.withOpacity(active ? 0.28 : status == _DayScheduleStatus.missed ? 0.10 : 0.15),
               borderRadius: BorderRadius.circular(16),
@@ -657,7 +657,20 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
           ),
         );
       },
-      child: Row(
+      child: compact
+          ? Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${toTitleCase(task.task)} • ${_scheduleStatusLabel(status)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900, fontSize: 12),
+                  ),
+                ),
+              ],
+            )
+          : Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!compact) SizedBox(width: 72, child: Text(_formatScheduleTime(entry.startMinutes), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w900))),

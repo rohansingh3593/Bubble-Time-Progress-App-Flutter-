@@ -4156,7 +4156,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                           top: (positioned.entry.startMinutes / 60) * hourHeight,
                           left: labelWidth + positioned.column * ((laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount + 6),
                           width: (laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount,
-                          height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(28.0, timelineHeight),
+                          height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(36.0, timelineHeight),
                           child: _scheduleTaskTile(positioned.entry, theme, style, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 30),
                         ),
                     ],
@@ -4184,7 +4184,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           borderRadius: BorderRadius.circular(18),
           onTap: () => _openTodayTaskQuickOccurrence(row),
           child: Container(
-            padding: EdgeInsets.all(compact ? 8 : 12),
+            padding: EdgeInsets.all(compact ? 4 : 12),
             decoration: BoxDecoration(
               color: baseColor.withOpacity(opacity),
               borderRadius: BorderRadius.circular(18),
@@ -4195,7 +4195,20 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           ),
         );
       },
-      child: Row(
+      child: compact
+          ? Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${toTitleCase(row.task.task)} • ${_scheduleStateLabel(state)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 12),
+                  ),
+                ),
+              ],
+            )
+          : Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!compact) SizedBox(width: 76, child: Text(_formatScheduleTime(entry.startMinutes), style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w900))),
