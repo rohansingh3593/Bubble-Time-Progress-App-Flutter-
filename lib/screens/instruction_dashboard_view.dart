@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -703,15 +705,47 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   }
 
   void _showImagePathDialog(String path) {
+    final title = _imageTitleFromPath(path);
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Option Image'),
-        content: SelectableText(path),
+        title: Text(title),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Flexible(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Image.file(
+                    File(path),
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => SelectableText('Unable to preview image:\n$path'),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SelectableText(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 4),
+              SelectableText(path, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+            ],
+          ),
+        ),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
       ),
     );
   }
+
+  String _imageTitleFromPath(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final parts = normalized.split('/').where((part) => part.trim().isNotEmpty).toList();
+    final fileName = parts.isEmpty ? 'Option Image' : parts.last;
+    final dotIndex = fileName.lastIndexOf('.');
+    return dotIndex <= 0 ? fileName : fileName.substring(0, dotIndex);
+  }
+
 
   Future<void> _openOptionLink(String rawLink) async {
     final link = rawLink.trim();
