@@ -1055,20 +1055,21 @@ class HiveService {
     return null;
   }
 
-  Future<void> updateInstructionStatus(InstructionRule instruction, DateTime date, String status, {String note = '', InstructionLevel? level, InstructionOption? option}) async {
+  Future<void> updateInstructionStatus(InstructionRule instruction, DateTime date, String status, {String note = '', InstructionLevel? level, InstructionOption? option, List<InstructionOption> options = const []}) async {
     final occurrence = _instructionOccurrenceDate(instruction, date);
     final updatedHistory = instruction.history
         .where((entry) => !_isSameDate(_instructionOccurrenceDate(instruction, entry.date), occurrence))
         .toList();
     final followed = status == InstructionHistoryEntry.statusFollowed;
     final selectedLevel = followed ? level : null;
-    final selectedOption = followed ? option : null;
+    final selectedOptions = followed ? (options.isNotEmpty ? options : [if (option != null) option]) : <InstructionOption>[];
+    final selectedOption = selectedOptions.isNotEmpty ? selectedOptions.first : null;
     updatedHistory.add(
       InstructionHistoryEntry(
         date: occurrence,
         status: status,
-        bonusPoints: followed ? (selectedLevel?.bonusPoints ?? selectedOption?.bonusPoints ?? instruction.bonusPoints) : 0,
-        xpEarned: followed ? (selectedLevel?.xpEarned ?? selectedOption?.xpEarned ?? instruction.xpEarned) : 0,
+        bonusPoints: followed ? (selectedLevel?.bonusPoints ?? selectedOptions.fold<int>(0, (sum, item) => sum + item.bonusPoints)) : 0,
+        xpEarned: followed ? (selectedLevel?.xpEarned ?? selectedOptions.fold<int>(0, (sum, item) => sum + item.xpEarned)) : 0,
         note: note.trim(),
         levelId: selectedLevel?.id ?? '',
         levelName: selectedLevel?.name ?? '',
@@ -1077,6 +1078,7 @@ class HiveService {
         optionId: selectedOption?.id ?? '',
         optionName: selectedOption?.name ?? '',
         optionEmoji: selectedOption?.emoji ?? '',
+        selectedOptions: selectedOptions,
       ),
     );
     await saveInstruction(instruction.copyWith(history: updatedHistory));

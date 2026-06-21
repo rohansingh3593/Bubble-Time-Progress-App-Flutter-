@@ -15,6 +15,7 @@ class InstructionHistoryEntry {
   final String optionId;
   final String optionName;
   final String optionEmoji;
+  final List<InstructionOption> selectedOptions;
 
   const InstructionHistoryEntry({
     required this.date,
@@ -29,13 +30,15 @@ class InstructionHistoryEntry {
     this.optionId = '',
     this.optionName = '',
     this.optionEmoji = '',
+    this.selectedOptions = const [],
   });
 
   bool get followed => status == statusFollowed;
   bool get missed => status == statusMissed;
   bool get notApplicable => status == statusNotApplicable;
   bool get hasLevel => levelId.isNotEmpty;
-  bool get hasOption => optionId.isNotEmpty;
+  bool get hasOption => optionId.isNotEmpty || selectedOptions.isNotEmpty;
+  int get selectedOptionCount => selectedOptions.isNotEmpty ? selectedOptions.length : (optionId.isNotEmpty ? 1 : 0);
 
   String get levelSummary {
     if (!hasLevel) return '';
@@ -43,8 +46,26 @@ class InstructionHistoryEntry {
     return '$levelName - $targetText $unit'.trim();
   }
 
-  String get optionSummary => hasOption ? '$optionEmoji $optionName'.trim() : '';
+  String get optionSummary {
+    if (selectedOptions.isNotEmpty) {
+      return selectedOptions.map((option) => '${option.emoji} ${option.name}'.trim()).join(', ');
+    }
+    return optionId.isNotEmpty ? '$optionEmoji $optionName'.trim() : '';
+  }
+
   String get selectionSummary => hasOption ? optionSummary : levelSummary;
+
+  double selectedPercentage(int totalOptions) => totalOptions <= 0 ? 0 : (selectedOptionCount / totalOptions) * 100;
+
+  String progressEmoji(int totalOptions) {
+    if (missed) return '😞';
+    final percent = selectedPercentage(totalOptions);
+    if (percent >= 100) return '🤩';
+    if (percent >= 75) return '😄';
+    if (percent >= 50) return '😊';
+    if (percent >= 25) return '🙂';
+    return '😐';
+  }
 
   List<dynamic> toStorageList() => [
         date.toIso8601String(),
@@ -59,6 +80,7 @@ class InstructionHistoryEntry {
         optionId,
         optionName,
         optionEmoji,
+        selectedOptions.map((option) => option.toStorageList()).toList(),
       ];
 
   factory InstructionHistoryEntry.fromStorageList(List<dynamic> raw) {
@@ -75,6 +97,7 @@ class InstructionHistoryEntry {
       optionId: raw.length > 9 ? '${raw[9]}' : '',
       optionName: raw.length > 10 ? '${raw[10]}' : '',
       optionEmoji: raw.length > 11 ? '${raw[11]}' : '',
+      selectedOptions: _readOptions(raw, 12),
     );
   }
 }
@@ -158,6 +181,8 @@ class InstructionRule {
   static const String repeatOneTime = 'One-Time';
 
   static const String linkDelimiter = '|||';
+  static const String typeMultipleOption = 'Multiple Option Instruction';
+  static const String typeHowItWorks = 'How It Works';
   static const String typeSimple = 'Simple';
   static const String typeLevelBased = 'Level-Based';
   static const String typeOptionBased = 'Option-Based';
@@ -188,7 +213,7 @@ class InstructionRule {
     this.linkedTask = '',
     this.linkedPhase = '',
     this.repeatType = repeatDaily,
-    this.instructionType = typeSimple,
+    this.instructionType = typeMultipleOption,
     this.unit = '',
     this.levels = const [],
     this.options = const [],
@@ -209,9 +234,12 @@ class InstructionRule {
   bool get isTaskLinked => linkedTasks.isNotEmpty || linkedPhases.isNotEmpty;
 
   bool get isStandalone => !isTaskLinked;
-  bool get isLevelBased => instructionType == typeLevelBased;
-  bool get isOptionBased => instructionType == typeOptionBased;
-  bool get isSimple => !isLevelBased && !isOptionBased;
+  bool get isLevelBased => false;
+  bool get isOptionBased => true;
+  bool get isSimple => false;
+  int get totalOptionCount => options.length;
+
+  static String normalizeInstructionType(String value) => typeMultipleOption;
 
   bool isLinkedToTask(String taskName) {
     final normalizedTaskName = _normalizeLink(taskName);
@@ -334,7 +362,7 @@ class InstructionRule {
       linkedTask: raw.length > 3 ? '${raw[3]}' : '',
       linkedPhase: raw.length > 4 ? '${raw[4]}' : '',
       repeatType: raw.length > 5 ? '${raw[5]}' : repeatDaily,
-      instructionType: raw.length > 13 ? '${raw[13]}' : typeSimple,
+      instructionType: normalizeInstructionType(raw.length > 13 ? '${raw[13]}' : typeMultipleOption),
       unit: raw.length > 14 ? '${raw[14]}' : '',
       levels: parsedLevels,
       options: parsedOptions,
@@ -365,4 +393,13 @@ double _readDouble(List<dynamic> raw, int index, {double fallback = 0}) {
   final value = raw[index];
   if (value is num) return value.toDouble();
   return double.tryParse('$value') ?? fallback;
+}
+
+List<InstructionOption> _readOptions(List<dynamic> raw, int index) {
+  if (raw.length <= index || raw[index] is! Iterable) return const <InstructionOption>[];
+  final options = <InstructionOption>[];
+  for (final option in raw[index] as Iterable) {
+    if (option is List) options.add(InstructionOption.fromStorageList(option.cast<dynamic>()));
+  }
+  return options;
 }

@@ -135,13 +135,8 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   )
                 else if (entry == null && instruction.enabled) ...[
                   if (instruction.isOptionBased) ...[
+                    ListTile(leading: const Icon(Icons.checklist_rounded, color: Colors.green), title: const Text('Complete with checkbox options'), subtitle: const Text('Select one or many options'), onTap: () => Navigator.pop(context, 'options')),
                     ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
-                    ...instruction.options.map((option) => ListTile(
-                          leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
-                          title: Text('${option.name} (+${option.bonusPoints})'),
-                          subtitle: Text('${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
-                          onTap: () => Navigator.pop(context, 'option:${option.id}'),
-                        )),
                   ] else if (instruction.isLevelBased) ...[
                     ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
                     ...instruction.levels.map((level) => ListTile(
@@ -170,10 +165,15 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
       ),
     );
     if (!mounted || action == null) return;
-    if (action.startsWith('option:') && instruction.options.isNotEmpty) {
-      final optionId = action.substring('option:'.length);
-      final option = instruction.options.firstWhere((item) => item.id == optionId, orElse: () => instruction.options.first);
-      await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed, option: option);
+    if (action == 'options' && instruction.options.isNotEmpty) {
+      final selected = await _showInstructionOptionsCompletionDialog(instruction);
+      if (selected == null) return;
+      await widget.hiveService.updateInstructionStatus(
+        instruction,
+        today,
+        selected.isEmpty ? InstructionHistoryEntry.statusMissed : InstructionHistoryEntry.statusFollowed,
+        options: selected,
+      );
       return;
     }
     if (action.startsWith('level:') && instruction.levels.isNotEmpty) {
@@ -221,7 +221,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     final bonusController = TextEditingController(text: instruction == null ? '20' : '${instruction.bonusPoints}');
     final xpController = TextEditingController(text: instruction == null ? '5' : '${instruction.xpEarned}');
     final unitController = TextEditingController(text: instruction?.unit ?? 'km');
-    var instructionType = instruction?.instructionType ?? InstructionRule.typeSimple;
+    var instructionType = InstructionRule.typeMultipleOption;
     var levels = [...(instruction?.levels ?? const <InstructionLevel>[])];
     var options = [...(instruction?.options ?? const <InstructionOption>[])];
     if (options.isEmpty) {
@@ -269,13 +269,11 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
                     TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: instructionType,
-                      decoration: const InputDecoration(labelText: 'Instruction Type'),
-                      items: const [InstructionRule.typeSimple, InstructionRule.typeLevelBased, InstructionRule.typeOptionBased]
-                          .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-                          .toList(),
-                      onChanged: (value) => setDialogState(() => instructionType = value ?? instructionType),
+                    const ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.checklist_rounded),
+                      title: Text('Multiple Option Instruction'),
+                      subtitle: Text('How It Works: users can select one or many checkbox options; points and XP are added from all selected options.'),
                     ),
                     const SizedBox(height: 12),
                     const Text('Linked Task (Optional)', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black54)),
@@ -352,10 +350,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                           .toList(),
                       onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
                     ),
-                    if (instructionType == InstructionRule.typeSimple) ...[
-                      TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-                      TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
-                    ] else if (instructionType == InstructionRule.typeLevelBased) ...[
+                    if (false) ...[
                       TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
                       const SizedBox(height: 10),
                       Row(
@@ -489,13 +484,13 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     id: instruction?.id ?? 'instruction_${DateTime.now().microsecondsSinceEpoch}',
                     name: nameController.text.trim().isEmpty ? 'Instruction' : nameController.text.trim(),
                     description: descriptionController.text.trim(),
-                    linkedTask: '',
-                    linkedPhase: '',
+                    linkedTask: InstructionRule.encodeLinks(linkedTasks),
+                    linkedPhase: linkedPhase,
                     repeatType: repeatType,
-                    instructionType: instructionType,
-                    unit: instructionType == InstructionRule.typeLevelBased ? unitController.text.trim() : '',
-                    levels: instructionType == InstructionRule.typeLevelBased ? levels : const [],
-                    options: instructionType == InstructionRule.typeOptionBased ? options : const [],
+                    instructionType: InstructionRule.typeMultipleOption,
+                    unit: '',
+                    levels: const [],
+                    options: options,
                     bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
                     xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
                     colorValue: colorValue,
@@ -563,6 +558,53 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
       ),
     );
   }
+
+  Future<List<InstructionOption>?> _showInstructionOptionsCompletionDialog(InstructionRule instruction) async {
+    final selectedIds = <String>{};
+    return showDialog<List<InstructionOption>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(toTitleCase(instruction.name)),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: instruction.options.map((option) {
+                  final checked = selectedIds.contains(option.id);
+                  return CheckboxListTile(
+                    value: checked,
+                    title: Text('${option.name} +${option.bonusPoints} ${option.emoji}'),
+                    subtitle: Text('${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
+                    onChanged: (value) => setDialogState(() {
+                      if (value == true) {
+                        selectedIds.add(option.id);
+                      } else {
+                        selectedIds.remove(option.id);
+                      }
+                    }),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(context, const <InstructionOption>[]), child: const Text('Missed')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(
+                context,
+                instruction.options.where((option) => selectedIds.contains(option.id)).toList(),
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   Future<InstructionLevel?> _showInstructionLevelDialog({InstructionLevel? existing, required String defaultUnit, required int index}) async {
     final nameController = TextEditingController(text: existing?.name ?? 'Level ${index + 1}');
@@ -878,7 +920,7 @@ class _InstructionCard extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
-                Text((entry?.hasLevel == true || entry?.hasOption == true) ? 'Today: ${entry!.selectionSummary} • +${entry.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • ${instruction.isLevelBased ? '${instruction.levels.length} levels' : instruction.isOptionBased ? '${instruction.options.length} options' : '+${instruction.bonusPoints} points'} • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                Text((entry?.hasLevel == true || entry?.hasOption == true) ? 'Today: ${entry!.selectionSummary} • +${entry.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • ${instruction.options.length} options • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
                 if (instruction.linkedTasks.isNotEmpty) Text('Linked: ${_linkedTaskSummary(instruction)}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: const TextStyle(fontSize: 12, color: Colors.black45)),
               ]),
             ),

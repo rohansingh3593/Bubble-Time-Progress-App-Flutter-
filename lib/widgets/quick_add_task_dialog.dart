@@ -803,7 +803,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
   final xpController = TextEditingController(text: '${initialInstruction?.xpEarned ?? 5}');
   final unitController = TextEditingController(text: initialInstruction?.unit.isNotEmpty == true ? initialInstruction!.unit : 'km');
   var repeatType = initialInstruction?.repeatType ?? InstructionRule.repeatDaily;
-  var instructionType = initialInstruction?.instructionType ?? InstructionRule.typeSimple;
+  var instructionType = InstructionRule.typeMultipleOption;
   var levels = initialInstruction?.levels.isNotEmpty == true ? initialInstruction!.levels : const [
     InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, xpEarned: 5),
     InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, xpEarned: 8),
@@ -847,7 +847,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                 DropdownButtonFormField<String>(
                   value: instructionType,
                   decoration: const InputDecoration(labelText: 'Instruction Type'),
-                  items: const [InstructionRule.typeSimple, InstructionRule.typeLevelBased, InstructionRule.typeOptionBased]
+                  items: const [InstructionRule.typeMultipleOption]
                       .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                       .toList(),
                   onChanged: (value) => setDialogState(() => instructionType = value ?? instructionType),
@@ -860,10 +860,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                       .toList(),
                   onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
                 ),
-                if (instructionType == InstructionRule.typeSimple) ...[
-                  TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
-                ] else if (instructionType == InstructionRule.typeLevelBased) ...[
+                if (false) ...[
                   TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
                   const Align(alignment: Alignment.centerLeft, child: Text('Levels', style: TextStyle(fontWeight: FontWeight.w900))),
                   ...levels.asMap().entries.map((entry) {
@@ -986,12 +983,10 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                 linkedTask: InstructionRule.encodeLinks([taskName]),
                 linkedPhase: linkedPhase.trim(),
                 repeatType: repeatType,
-                instructionType: instructionType,
-                unit: instructionType == InstructionRule.typeLevelBased ? unitController.text.trim() : '',
-                levels: instructionType == InstructionRule.typeLevelBased
-                    ? levels.map((level) => InstructionLevel(id: level.id, name: level.name, target: level.target, unit: unitController.text.trim().isEmpty ? level.unit : unitController.text.trim(), bonusPoints: level.bonusPoints, xpEarned: level.xpEarned)).toList()
-                    : const [],
-                options: instructionType == InstructionRule.typeOptionBased ? options : const [],
+                instructionType: InstructionRule.typeMultipleOption,
+                unit: '',
+                levels: const [],
+                options: options,
                 bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
                 xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
                 colorValue: colorValue,
