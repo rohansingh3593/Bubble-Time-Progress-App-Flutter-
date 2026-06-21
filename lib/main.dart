@@ -25,6 +25,7 @@ import 'widgets/app_text.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _configureFlutterFrameworkErrorFiltering();
   await Hive.initFlutter();
 
   if (!Hive.isAdapterRegistered(0)) {
@@ -34,6 +35,22 @@ void main() async {
   await HiveService.instance.init();
 
   runApp(MyApp(hiveService: HiveService.instance));
+}
+
+
+void _configureFlutterFrameworkErrorFiltering() {
+  final defaultOnError = FlutterError.onError;
+  FlutterError.onError = (FlutterErrorDetails details) {
+    final message = details.exceptionAsString();
+    final library = details.library?.toLowerCase() ?? '';
+    final isWindowsAltKeyFrameworkNoise = library.contains('services') &&
+        message.contains('Attempted to send a key down event') &&
+        message.contains('keysPressed');
+
+    if (isWindowsAltKeyFrameworkNoise) return;
+
+    defaultOnError?.call(details);
+  };
 }
 
 class MyApp extends StatelessWidget {
