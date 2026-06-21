@@ -47,7 +47,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 96),
             children: [
-              _InstructionSummaryPanel(hiveService: widget.hiveService, instructions: instructions, today: today),
+              _InstructionSummaryPanel(hiveService: widget.hiveService, instructions: instructions, today: today, onOpenList: _showInstructionProductivityList),
               const SizedBox(height: 16),
               _filterChips(),
               const SizedBox(height: 12),
@@ -108,6 +108,71 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
           return true;
       }
     }).toList();
+  }
+
+
+  void _showInstructionProductivityList(String title, List<InstructionRule> instructions) {
+    final today = DateTime.now();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.82),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+              ),
+              Expanded(
+                child: instructions.isEmpty
+                    ? const Center(child: Text('No standalone instructions found for this filter.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)))
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+                        itemCount: instructions.length,
+                        separatorBuilder: (_, __) => const Divider(height: 18),
+                        itemBuilder: (context, index) {
+                          final instruction = instructions[index];
+                          final entry = widget.hiveService.instructionEntryForDate(instruction, today);
+                          final streak = widget.hiveService.instructionCurrentStreak(instruction, today);
+                          final status = !instruction.enabled
+                              ? 'Disabled'
+                              : entry?.followed == true
+                                  ? 'Followed Today'
+                                  : entry?.missed == true
+                                      ? 'Missed Today'
+                                      : 'Pending Today';
+                          final selected = entry?.selectionSummary.isNotEmpty == true ? entry!.selectionSummary : 'None';
+                          final lastUpdated = instruction.history.isEmpty ? 'Never' : _formatDate(instruction.history.last.date);
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900)),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(status, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                  Text('Selected: $selected'),
+                                  Text('Bonus: +${entry?.bonusPoints ?? 0} Points'),
+                                  Text('Streak: $streak Day${streak == 1 ? '' : 's'}'),
+                                  Text('Last Updated: $lastUpdated'),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showInstructionActions(InstructionRule instruction) async {
@@ -1052,18 +1117,21 @@ class _InstructionSummaryPanel extends StatelessWidget {
   final HiveService hiveService;
   final List<InstructionRule> instructions;
   final DateTime today;
+  final void Function(String title, List<InstructionRule> instructions) onOpenList;
 
-  const _InstructionSummaryPanel({required this.hiveService, required this.instructions, required this.today});
+  const _InstructionSummaryPanel({required this.hiveService, required this.instructions, required this.today, required this.onOpenList});
 
   @override
   Widget build(BuildContext context) {
     final standalone = instructions.where((i) => i.isStandalone).toList();
-    final followedToday = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.followed ?? false).length;
-    final missedToday = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.missed ?? false).length;
-    final active = standalone.where((i) => i.enabled).length;
-    final pendingToday = standalone.where((i) => i.enabled && hiveService.instructionEntryForDate(i, today) == null).length;
-    final bonus = hiveService.instructionBonusForDate(today, standaloneOnly: true);
-    final bestStreak = standalone.fold<int>(0, (best, i) {
+    final followedInstructions = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.followed ?? false).toList();
+    final missedInstructions = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.missed ?? false).toList();
+    final activeInstructions = standalone.where((i) => i.enabled).toList();
+    final pendingInstructions = standalone.where((i) => i.enabled && hiveService.instructionEntryForDate(i, today) == null).toList();
+    final streakInstructions = standalone.where((i) => hiveService.instructionCurrentStreak(i, today) > 0).toList();
+    final bonusInstructions = standalone.where((i) => (hiveService.instructionEntryForDate(i, today)?.bonusPoints ?? 0) > 0).toList();
+    final bonus = bonusInstructions.fold<int>(0, (sum, instruction) => sum + (hiveService.instructionEntryForDate(instruction, today)?.bonusPoints ?? 0));
+    final bestStreak = streakInstructions.fold<int>(0, (best, i) {
       final streak = hiveService.instructionCurrentStreak(i, today);
       return streak > best ? streak : best;
     });
@@ -1073,19 +1141,19 @@ class _InstructionSummaryPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📘 Standalone Instruction Summary', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          const Text('📘 Instruction Productivity', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
             runSpacing: 10,
             children: [
-              _InstructionStat(label: 'Standalone Instructions', value: '${standalone.length}'),
-              _InstructionStat(label: 'Followed Today', value: '$followedToday', color: Colors.green),
-              _InstructionStat(label: 'Missed Today', value: '$missedToday', color: Colors.red),
-              _InstructionStat(label: 'Pending Today', value: '$pendingToday'),
-              _InstructionStat(label: 'Active Instructions', value: '$active'),
-              _InstructionStat(label: 'Instruction Streak', value: '$bestStreak'),
-              _InstructionStat(label: 'Bonus Points Earned', value: '+$bonus'),
+              _InstructionStat(label: 'Standalone Instructions', value: '${standalone.length}', onTap: () => onOpenList('Standalone Instructions', standalone)),
+              _InstructionStat(label: 'Followed Today', value: '${followedInstructions.length}', color: Colors.green, onTap: () => onOpenList('Followed Today', followedInstructions)),
+              _InstructionStat(label: 'Missed Today', value: '${missedInstructions.length}', color: Colors.red, onTap: () => onOpenList('Missed Today', missedInstructions)),
+              _InstructionStat(label: 'Pending Today', value: '${pendingInstructions.length}', onTap: () => onOpenList('Pending Today', pendingInstructions)),
+              _InstructionStat(label: 'Active Instructions', value: '${activeInstructions.length}', onTap: () => onOpenList('Active Instructions', activeInstructions)),
+              _InstructionStat(label: 'Instruction Streak', value: '$bestStreak', onTap: () => onOpenList('Instruction Streak', streakInstructions)),
+              _InstructionStat(label: 'Bonus Points Earned', value: '+$bonus', onTap: () => onOpenList('Bonus Points Earned', bonusInstructions)),
             ],
           ),
         ],
@@ -1143,20 +1211,25 @@ class _InstructionStat extends StatelessWidget {
   final String label;
   final String value;
   final Color? color;
+  final VoidCallback? onTap;
 
-  const _InstructionStat({required this.label, required this.value, this.color});
+  const _InstructionStat({required this.label, required this.value, this.color, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 150,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.black12)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.black54)),
-        const SizedBox(height: 6),
-        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color ?? AppColors.textPrimary)),
-      ]),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: 150,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.black12)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.black54)),
+          const SizedBox(height: 6),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color ?? AppColors.textPrimary)),
+        ]),
+      ),
     );
   }
 }
