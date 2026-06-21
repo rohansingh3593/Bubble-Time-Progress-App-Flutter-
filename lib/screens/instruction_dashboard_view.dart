@@ -184,112 +184,178 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   }
 
   Future<void> _showInstructionActions(InstructionRule instruction) async {
-    final today = DateTime.now();
-    final entry = widget.hiveService.instructionEntryForDate(instruction, today);
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.86),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ListTile(
-                  title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900)),
-                  subtitle: Text(entry == null ? 'Pending for current period' : 'Already updated: ${entry.status}'),
-                ),
-                if (instruction.isTaskLinked)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Text(
-                      'This instruction is linked to a task. Update it from the task occurrence screen.',
-                      style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54),
-                    ),
-                  )
-                else if (entry == null && instruction.enabled) ...[
-                  if (instruction.isOptionBased) ...[
-                    ListTile(leading: const Icon(Icons.checklist_rounded, color: Colors.green), title: const Text('Complete with checkbox options'), subtitle: const Text('Select one or many options'), onTap: () => Navigator.pop(context, 'options')),
-                    ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
-                  ] else if (instruction.isLevelBased) ...[
-                    ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
-                    ...instruction.levels.map((level) => ListTile(
-                          leading: const Icon(Icons.emoji_events_outlined, color: Colors.green),
-                          title: Text('${level.displayLabel} (+${level.bonusPoints})'),
-                          subtitle: Text('${level.pointsEarned} Points'),
-                          onTap: () => Navigator.pop(context, 'level:${level.id}'),
-                        )),
-                  ] else ...[
-                    ListTile(leading: const Icon(Icons.check_circle_outline, color: Colors.green), title: const Text('Followed'), onTap: () => Navigator.pop(context, 'followed')),
-                    ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
-                  ],
-                ] else
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Text('Instruction already updated for this period.', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
-                  ),
-                ListTile(leading: const Icon(Icons.visibility_outlined), title: const Text('View Details'), onTap: () => Navigator.pop(context, 'details')),
-                ListTile(leading: Icon(instruction.enabled ? Icons.pause_circle_outline : Icons.play_circle_outline), title: Text(instruction.enabled ? 'Disable' : 'Enable'), onTap: () => Navigator.pop(context, 'toggle')),
-                ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Edit'), onTap: () => Navigator.pop(context, 'edit')),
-                ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Delete from dashboard'), onTap: () => Navigator.pop(context, 'delete')),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    if (!mounted || action == null) return;
-    if (action == 'options' && instruction.options.isNotEmpty) {
-      final selected = await _showInstructionOptionsCompletionDialog(instruction);
-      if (selected == null) return;
-      await widget.hiveService.updateInstructionStatus(
-        instruction,
-        today,
-        selected.isEmpty ? InstructionHistoryEntry.statusMissed : InstructionHistoryEntry.statusFollowed,
-        options: selected,
+    if (instruction.isTaskLinked) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Task-linked instructions are updated from the related task completion popup.')),
       );
       return;
     }
-    if (action.startsWith('level:') && instruction.levels.isNotEmpty) {
-      final levelId = action.substring('level:'.length);
-      final level = instruction.levels.firstWhere((item) => item.id == levelId, orElse: () => instruction.levels.first);
-      await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed, level: level);
-      return;
+    await _showInstructionUpdateDialog(instruction);
+  }
+
+  Future<void> _showInstructionUpdateDialog(InstructionRule instruction) async {
+    final today = DateTime.now();
+    final existingEntry = widget.hiveService.instructionEntryForDate(instruction, today);
+    var status = existingEntry?.missed == true ? InstructionHistoryEntry.statusMissed : InstructionHistoryEntry.statusFollowed;
+    final selectedIds = <String>{};
+    if (existingEntry != null) {
+      selectedIds.addAll(existingEntry.selectedOptions.map((option) => option.id));
+      if (existingEntry.optionId.isNotEmpty) selectedIds.add(existingEntry.optionId);
     }
-    switch (action) {
-      case 'followed':
-        await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed);
-        break;
-      case 'missed':
-        await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusMissed);
-        break;
-      case 'toggle':
-        await widget.hiveService.setInstructionEnabled(instruction, !instruction.enabled);
-        break;
-      case 'details':
-        _showInstructionDetails(instruction);
-        break;
-      case 'edit':
-        _showInstructionForm(instruction);
-        break;
-      case 'delete':
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Delete Instruction?'),
-            content: const Text('This removes the instruction from the dashboard and future tracking only. Past points, Points, money, timeline history, and completed history remain saved.'),
+
+    final saved = await showDialog<_InstructionUpdateResult>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final selectedOptions = instruction.options.where((option) => selectedIds.contains(option.id)).toList();
+          final bonus = status == InstructionHistoryEntry.statusFollowed ? selectedOptions.fold<int>(0, (sum, option) => sum + option.bonusPoints) : 0;
+          final percentage = status == InstructionHistoryEntry.statusMissed
+              ? 0.0
+              : instruction.options.isEmpty
+                  ? 100.0
+                  : (selectedOptions.length / instruction.options.length) * 100;
+          final emoji = _instructionEmojiStatus(status, selectedOptions.length, percentage);
+          return AlertDialog(
+            title: Text('Instruction Update\n${toTitleCase(instruction.name)}'),
+            content: SingleChildScrollView(
+              child: SizedBox(
+                width: 430,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (instruction.description.trim().isNotEmpty) ...[
+                      Text(instruction.description.trim(), style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                      const SizedBox(height: 12),
+                    ],
+                    const Text('Status', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                    RadioListTile<String>(
+                      value: InstructionHistoryEntry.statusFollowed,
+                      groupValue: status,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Followed'),
+                      onChanged: (value) => setDialogState(() => status = value ?? status),
+                    ),
+                    RadioListTile<String>(
+                      value: InstructionHistoryEntry.statusMissed,
+                      groupValue: status,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Missed'),
+                      onChanged: (value) => setDialogState(() => status = value ?? status),
+                    ),
+                    if (instruction.options.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      const Text('Options', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                      ...instruction.options.map((option) {
+                        final checked = selectedIds.contains(option.id);
+                        return CheckboxListTile(
+                          value: checked,
+                          enabled: status == InstructionHistoryEntry.statusFollowed,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('${option.name} (+${option.bonusPoints} Points)'),
+                          subtitle: option.description.trim().isEmpty ? null : Text(option.description.trim()),
+                          secondary: Text(option.emoji, style: const TextStyle(fontSize: 22)),
+                          onChanged: (value) => setDialogState(() {
+                            status = InstructionHistoryEntry.statusFollowed;
+                            if (value == true) {
+                              selectedIds.add(option.id);
+                            } else {
+                              selectedIds.remove(option.id);
+                            }
+                          }),
+                        );
+                      }),
+                    ],
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Total Bonus Points: +$bonus', style: const TextStyle(fontWeight: FontWeight.w900)),
+                          Text('Completion Percentage: ${percentage.round()}%', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                          Text('Emoji Status: $emoji', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-              ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete from dashboard only')),
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(
+                  context,
+                  _InstructionUpdateResult(
+                    status: status,
+                    selectedOptions: status == InstructionHistoryEntry.statusFollowed ? selectedOptions : const <InstructionOption>[],
+                    bonusPoints: bonus,
+                    percentage: percentage,
+                    emojiStatus: emoji,
+                  ),
+                ),
+                child: const Text('Save Update'),
+              ),
             ],
-          ),
-        );
-        if (confirm == true) await widget.hiveService.deleteInstruction(instruction.id);
-        break;
-    }
+          );
+        },
+      ),
+    );
+    if (saved == null) return;
+    await widget.hiveService.updateInstructionStatus(
+      instruction,
+      today,
+      saved.status,
+      options: saved.selectedOptions,
+    );
+    if (!mounted) return;
+    await _showInstructionUpdateResultDialog(instruction, saved);
+  }
+
+  Future<void> _showInstructionUpdateResultDialog(InstructionRule instruction, _InstructionUpdateResult result) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(toTitleCase(instruction.name)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Status: ${result.status}', style: const TextStyle(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 10),
+            const Text('Selected Options:', style: TextStyle(fontWeight: FontWeight.w900)),
+            if (result.selectedOptions.isEmpty)
+              const Text('• None')
+            else
+              ...result.selectedOptions.map((option) => Text('• ${option.name}')),
+            const SizedBox(height: 10),
+            Text('Bonus Points Earned: +${result.bonusPoints}', style: const TextStyle(fontWeight: FontWeight.w900)),
+            Text('Completion Percentage: ${result.percentage.round()}%'),
+            Text('Emoji Status: ${result.emojiStatus}'),
+          ],
+        ),
+        actions: [ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+      ),
+    );
+  }
+
+  String _instructionEmojiStatus(String status, int selectedCount, double percentage) {
+    if (status == InstructionHistoryEntry.statusMissed) return '😞 Missed';
+    if (percentage >= 100) return '🤩 Perfect';
+    if (percentage >= 75) return '😄 Excellent';
+    if (percentage >= 50) return '😊 Good';
+    if (selectedCount > 0) return '🙂 Followed';
+    return '😐 Neutral';
   }
 
   Future<void> _showInstructionForm([InstructionRule? instruction]) async {
@@ -835,53 +901,6 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   }
 
 
-  Future<List<InstructionOption>?> _showInstructionOptionsCompletionDialog(InstructionRule instruction) async {
-    final selectedIds = <String>{};
-    return showDialog<List<InstructionOption>>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(toTitleCase(instruction.name)),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: instruction.options.map((option) {
-                  final checked = selectedIds.contains(option.id);
-                  return CheckboxListTile(
-                    value: checked,
-                    title: Text('${option.name} +${option.bonusPoints} ${option.emoji}'),
-                    subtitle: Text('${option.pointsEarned} Points${option.description.isEmpty ? '' : ' • ${option.description}'}'),
-                    onChanged: (value) => setDialogState(() {
-                      if (value == true) {
-                        selectedIds.add(option.id);
-                      } else {
-                        selectedIds.remove(option.id);
-                      }
-                    }),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.pop(context, const <InstructionOption>[]), child: const Text('Missed')),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(
-                context,
-                instruction.options.where((option) => selectedIds.contains(option.id)).toList(),
-              ),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-
   Future<InstructionLevel?> _showInstructionLevelDialog({InstructionLevel? existing, required String defaultUnit, required int index}) async {
     final nameController = TextEditingController(text: existing?.name ?? 'Level ${index + 1}');
     final targetController = TextEditingController(text: existing == null ? '' : (existing.target % 1 == 0 ? existing.target.toStringAsFixed(0) : existing.target.toStringAsFixed(1)));
@@ -1062,44 +1081,6 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     );
   }
 
-  void _showInstructionDetails(InstructionRule instruction) {
-    final followed = instruction.history.where((entry) => entry.followed).length;
-    final missed = instruction.history.where((entry) => entry.missed).length;
-    final total = followed + missed;
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(toTitleCase(instruction.name)),
-        content: SingleChildScrollView(
-          child: SizedBox(
-            width: 420,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(instruction.description.isEmpty ? 'No description.' : instruction.description),
-                const SizedBox(height: 12),
-                _detailLine('Current streak', '${widget.hiveService.instructionCurrentStreak(instruction, DateTime.now())}'),
-                _detailLine('Best streak', '${widget.hiveService.instructionBestStreak(instruction)}'),
-                _detailLine('Followed count', '$followed'),
-                _detailLine('Missed count', '$missed'),
-                _detailLine('Completion', total == 0 ? '0%' : '${((followed / total) * 100).round()}%'),
-                _detailLine('Bonus earned', '+${instruction.history.fold<int>(0, (sum, entry) => sum + entry.bonusPoints)} pts'),
-                const SizedBox(height: 12),
-                const Text('Timeline history', style: TextStyle(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 6),
-                if (instruction.history.isEmpty)
-                  const Text('No updates yet.')
-                else
-                  ...instruction.history.reversed.take(10).map((entry) => Text('• ${_formatDate(entry.date)} — ${entry.hasLevel || entry.hasOption ? entry.selectionSummary : entry.status}${entry.followed ? ' (+${entry.bonusPoints} pts)' : ''}')),
-              ],
-            ),
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-      ),
-    );
-  }
 }
 
 
@@ -1119,6 +1100,23 @@ class _InstructionTaskOption {
     final category = task.category.trim().isEmpty ? 'Project' : task.category.trim();
     return 'Non-Routine • $category';
   }
+}
+
+
+class _InstructionUpdateResult {
+  final String status;
+  final List<InstructionOption> selectedOptions;
+  final int bonusPoints;
+  final double percentage;
+  final String emojiStatus;
+
+  const _InstructionUpdateResult({
+    required this.status,
+    required this.selectedOptions,
+    required this.bonusPoints,
+    required this.percentage,
+    required this.emojiStatus,
+  });
 }
 
 class _InstructionSummaryPanel extends StatelessWidget {
@@ -1396,13 +1394,6 @@ class _EmptyInstructionCard extends StatelessWidget {
       child: const Text('No instructions yet. Tap “Add Instruction” to create your first productivity rule.', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.black54)),
     );
   }
-}
-
-Widget _detailLine(String label, String value) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Row(children: [Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700))), Text(value, style: const TextStyle(fontWeight: FontWeight.w900))]),
-  );
 }
 
 String _linkedTaskSummary(InstructionRule instruction) {
