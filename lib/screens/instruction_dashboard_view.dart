@@ -275,10 +275,13 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
                     TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
                     const SizedBox(height: 12),
-                    Row(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: Text('Instruction Images (${instructionImagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900))),
+                        Text('Instruction Images (${instructionImagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 4),
                         TextButton.icon(
+                          style: TextButton.styleFrom(padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                           onPressed: () async {
                             final picked = await ImagePicker().pickMultiImage();
                             if (picked.isEmpty) return;
@@ -594,10 +597,13 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
                   TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
                   const SizedBox(height: 12),
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: Text('Option Images (${imagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900))),
+                      Text('Option Images (${imagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 4),
                       TextButton.icon(
+                        style: TextButton.styleFrom(padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                         onPressed: () async {
                           final picked = await ImagePicker().pickMultiImage();
                           if (picked.isEmpty) return;

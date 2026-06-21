@@ -839,10 +839,13 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                 TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
                 TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
                 const SizedBox(height: 12),
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: Text('Instruction Images (${instructionImagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900))),
+                    Text('Instruction Images (${instructionImagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 4),
                     TextButton.icon(
+                      style: TextButton.styleFrom(padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                       onPressed: () async {
                         final picked = await ImagePicker().pickMultiImage();
                         if (picked.isEmpty) return;
@@ -1122,7 +1125,7 @@ Future<InstructionOption?> _showInstructionOptionDialog(BuildContext context, In
   final xpController = TextEditingController(text: '${initial?.xpEarned ?? 2}');
   final linkController = TextEditingController();
   var imagePaths = [...(initial?.imagePaths ?? const <String>[])];
-    var linkUrls = [...(initial?.effectiveLinks ?? const <String>[])];
+  var linkUrls = [...(initial?.effectiveLinks ?? const <String>[])];
   var coverImagePath = initial?.coverImagePath ?? '';
   try {
     return await showDialog<InstructionOption>(
@@ -1142,10 +1145,13 @@ Future<InstructionOption?> _showInstructionOptionDialog(BuildContext context, In
                   TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
                   TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
                   const SizedBox(height: 12),
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: Text('Option Images (${imagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900))),
+                      Text('Option Images (${imagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 4),
                       TextButton.icon(
+                        style: TextButton.styleFrom(padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                         onPressed: () async {
                           final picked = await ImagePicker().pickMultiImage();
                           if (picked.isEmpty) return;
