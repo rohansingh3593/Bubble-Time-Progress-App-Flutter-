@@ -971,17 +971,19 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               children: [
                 ListTile(
                   title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900)),
-                  subtitle: Text(entry == null ? 'Have you followed this instruction today?' : 'This instruction is already updated today.'),
+                  subtitle: Text(entry == null
+                      ? (instruction.description.trim().isEmpty ? 'Choose Complete or Missed for today.' : instruction.description.trim())
+                      : 'This instruction is already updated today.'),
                 ),
                 if (entry == null && instruction.enabled) ...[
                   if (instruction.isOptionBased) ...[
+                    ListTile(
+                      leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                      title: const Text('Complete'),
+                      subtitle: const Text('Select one or more instruction options'),
+                      onTap: () => Navigator.pop(context, 'options'),
+                    ),
                     ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
-                    ...instruction.options.map((option) => ListTile(
-                          leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
-                          title: Text('${option.name} (+${option.bonusPoints})'),
-                          subtitle: Text('${option.pointsEarned} Points${option.description.isEmpty ? '' : ' • ${option.description}'}'),
-                          onTap: () => Navigator.pop(context, 'option:${option.id}'),
-                        )),
                   ] else if (instruction.isLevelBased) ...[
                     ListTile(
                       leading: const Icon(Icons.cancel_outlined, color: Colors.red),
@@ -1028,10 +1030,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       ),
     );
     if (!mounted || action == null || action == 'close') return;
-    if (action.startsWith('option:') && instruction.options.isNotEmpty) {
-      final optionId = action.substring('option:'.length);
-      final option = instruction.options.firstWhere((item) => item.id == optionId, orElse: () => instruction.options.first);
-      await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed, option: option);
+    if (action == 'options' && instruction.options.isNotEmpty) {
+      final selected = await _showInstructionOptionsCompletionDialog(instruction);
+      if (selected == null) return;
+      await widget.hiveService.updateInstructionStatus(
+        instruction,
+        today,
+        selected.isEmpty ? InstructionHistoryEntry.statusMissed : InstructionHistoryEntry.statusFollowed,
+        options: selected,
+      );
       return;
     }
     if (action.startsWith('level:') && instruction.levels.isNotEmpty) {
@@ -1051,6 +1058,61 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         await widget.hiveService.setInstructionEnabled(instruction, !instruction.enabled);
         break;
     }
+  }
+
+
+  Future<List<InstructionOption>?> _showInstructionOptionsCompletionDialog(InstructionRule instruction) async {
+    final selectedIds = <String>{};
+    return showDialog<List<InstructionOption>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(toTitleCase(instruction.name)),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (instruction.description.trim().isNotEmpty) ...[
+                    Text(instruction.description.trim(), style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                    const SizedBox(height: 10),
+                  ],
+                  ...instruction.options.map((option) {
+                    final checked = selectedIds.contains(option.id);
+                    return CheckboxListTile(
+                      value: checked,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('${option.name} +${option.bonusPoints} ${option.emoji}'),
+                      subtitle: Text('${option.pointsEarned} Points${option.description.isEmpty ? '' : ' • ${option.description}'}'),
+                      onChanged: (value) => setDialogState(() {
+                        if (value == true) {
+                          selectedIds.add(option.id);
+                        } else {
+                          selectedIds.remove(option.id);
+                        }
+                      }),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(context, const <InstructionOption>[]), child: const Text('Missed')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(
+                context,
+                instruction.options.where((option) => selectedIds.contains(option.id)).toList(),
+              ),
+              child: const Text('Complete'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showInstructionFilterSheet(String title, List<InstructionRule> instructions, DateTime today) {
