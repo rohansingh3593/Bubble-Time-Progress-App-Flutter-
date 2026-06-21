@@ -22,6 +22,7 @@ class InstructionDashboardView extends StatefulWidget {
 
 class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   String _filter = 'All';
+  String _instructionProductivityPeriod = InstructionRule.repeatDaily;
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +48,14 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 96),
             children: [
-              _InstructionSummaryPanel(hiveService: widget.hiveService, instructions: instructions, today: today, onOpenList: _showInstructionProductivityList),
+              _InstructionSummaryPanel(
+                hiveService: widget.hiveService,
+                instructions: instructions,
+                today: today,
+                period: _instructionProductivityPeriod,
+                onPeriodChanged: (period) => setState(() => _instructionProductivityPeriod = period),
+                onOpenList: _showInstructionProductivityList,
+              ),
               const SizedBox(height: 16),
               _filterChips(),
               const SizedBox(height: 12),
@@ -1117,15 +1125,18 @@ class _InstructionSummaryPanel extends StatelessWidget {
   final HiveService hiveService;
   final List<InstructionRule> instructions;
   final DateTime today;
+  final String period;
+  final ValueChanged<String> onPeriodChanged;
   final void Function(String title, List<InstructionRule> instructions) onOpenList;
 
-  const _InstructionSummaryPanel({required this.hiveService, required this.instructions, required this.today, required this.onOpenList});
+  const _InstructionSummaryPanel({required this.hiveService, required this.instructions, required this.today, required this.period, required this.onPeriodChanged, required this.onOpenList});
 
   @override
   Widget build(BuildContext context) {
-    final standalone = instructions.where((i) => i.isStandalone).toList();
+    final standalone = instructions.where((i) => i.isStandalone && i.repeatType == period).toList();
     final followedInstructions = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.followed ?? false).toList();
     final missedInstructions = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.missed ?? false).toList();
+    final unfollowedInstructions = standalone.where((i) { final entry = hiveService.instructionEntryForDate(i, today); return entry == null || entry.missed; }).toList();
     final activeInstructions = standalone.where((i) => i.enabled).toList();
     final pendingInstructions = standalone.where((i) => i.enabled && hiveService.instructionEntryForDate(i, today) == null).toList();
     final streakInstructions = standalone.where((i) => hiveService.instructionCurrentStreak(i, today) > 0).toList();
@@ -1142,6 +1153,21 @@ class _InstructionSummaryPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('📘 Instruction Productivity', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: const [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly].map((item) {
+              final selected = item == period;
+              return ChoiceChip(
+                selected: selected,
+                label: Text(item),
+                onSelected: (_) => onPeriodChanged(item),
+                selectedColor: AppColors.primary.withOpacity(0.18),
+                labelStyle: TextStyle(fontWeight: FontWeight.w900, color: selected ? AppColors.primary : AppColors.textPrimary),
+              );
+            }).toList(),
+          ),
           const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -1154,13 +1180,14 @@ class _InstructionSummaryPanel extends StatelessWidget {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  _InstructionStat(label: 'Standalone Instructions', value: '${standalone.length}', onTap: () => onOpenList('Standalone Instructions', standalone)),
-                  _InstructionStat(label: 'Followed Today', value: '${followedInstructions.length}', color: Colors.green, onTap: () => onOpenList('Followed Today', followedInstructions)),
-                  _InstructionStat(label: 'Missed Today', value: '${missedInstructions.length}', color: Colors.red, onTap: () => onOpenList('Missed Today', missedInstructions)),
-                  _InstructionStat(label: 'Pending Today', value: '${pendingInstructions.length}', onTap: () => onOpenList('Pending Today', pendingInstructions)),
-                  _InstructionStat(label: 'Active Instructions', value: '${activeInstructions.length}', onTap: () => onOpenList('Active Instructions', activeInstructions)),
-                  _InstructionStat(label: 'Instruction Streak', value: '$bestStreak', onTap: () => onOpenList('Instruction Streak', streakInstructions)),
-                  _InstructionStat(label: 'Bonus Points Earned', value: '+$bonus', onTap: () => onOpenList('Bonus Points Earned', bonusInstructions)),
+                  _InstructionStat(label: '$period Instructions', value: '${standalone.length}', onTap: () => onOpenList('$period Standalone Instructions', standalone)),
+                  _InstructionStat(label: 'Followed $period', value: '${followedInstructions.length}', color: Colors.green, onTap: () => onOpenList('Followed $period Instructions', followedInstructions)),
+                  _InstructionStat(label: 'Unfollowed $period', value: '${unfollowedInstructions.length}', color: Colors.orange, onTap: () => onOpenList('Unfollowed $period Instructions', unfollowedInstructions)),
+                  _InstructionStat(label: 'Missed $period', value: '${missedInstructions.length}', color: Colors.red, onTap: () => onOpenList('Missed $period Instructions', missedInstructions)),
+                  _InstructionStat(label: 'Pending $period', value: '${pendingInstructions.length}', onTap: () => onOpenList('Pending $period Instructions', pendingInstructions)),
+                  _InstructionStat(label: 'Active Instructions', value: '${activeInstructions.length}', onTap: () => onOpenList('Active $period Instructions', activeInstructions)),
+                  _InstructionStat(label: 'Instruction Streak', value: '$bestStreak', onTap: () => onOpenList('$period Instruction Streak', streakInstructions)),
+                  _InstructionStat(label: 'Bonus Points Earned', value: '+$bonus', onTap: () => onOpenList('$period Bonus Points Earned', bonusInstructions)),
                 ],
               );
               if (constraints.maxWidth < 620) {
