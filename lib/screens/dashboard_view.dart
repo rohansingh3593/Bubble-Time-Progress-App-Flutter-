@@ -225,7 +225,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             _buildFeatureLaunchCard(
                               icon: Icons.auto_graph_rounded,
                               title: 'Growth Timeline',
-                              subtitle: 'Review journal, reflections, achievements, XP history, money history, streak records, and motivation.',
+                              subtitle: 'Review journal, reflections, achievements, Points history, money history, streak records, and motivation.',
                               actionLabel: 'Open Timeline',
                               onTap: _openJourneyTimeline,
                             ),
@@ -283,7 +283,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               const SizedBox(height: 6),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 _topBarPill('Level ${profile.level}', Icons.military_tech_rounded),
-                _topBarPill('${_formatCompactNumber(profile.xp)} XP', Icons.bolt_rounded),
+                _topBarPill('${_formatCompactNumber(profile.xp)} Points', Icons.bolt_rounded),
                 _topBarPill('₹${_formatCompactNumber(rewardSummary.availableRupees)} Earned', Icons.account_balance_wallet_rounded),
                 _topBarPill('${profile.activeStreak} Day Streak 🔥', Icons.local_fire_department_rounded),
               ]),
@@ -401,7 +401,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       _quickStatCard('Tasks', scopedCounts['Today'] ?? 0, Icons.task_alt_rounded, () => _showTaskListSheet('Today tasks', _dedupeTasksForDashboard(widget.hiveService.getAllTasksByDate().values.expand((list) => list).toList()))),
       _quickStatCard('Goals', summary['Completed'] ?? 0, Icons.flag_rounded, _openGoalDashboard),
       _quickStatCard('Coins', widget.hiveService.getRewardMoneySummary().availableRupees, Icons.paid_rounded, _openRewardMoneyHistory),
-      _quickStatCard('XP', profile.xp, Icons.bolt_rounded, _openProductivityTimeline),
+      _quickStatCard('Points', profile.xp, Icons.bolt_rounded, _openProductivityTimeline),
     ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -466,7 +466,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       _growthButton(Icons.menu_book_rounded, 'Journal', _openJournal),
       _growthButton(Icons.timeline_rounded, 'Personal Timeline', _openJourneyTimeline),
       _growthButton(Icons.account_balance_wallet_rounded, 'Money History', _openRewardMoneyHistory),
-      _growthButton(Icons.insights_rounded, 'XP & Analytics', _openProductivityTimeline),
+      _growthButton(Icons.insights_rounded, 'Points & Analytics', _openProductivityTimeline),
     ]);
   }
 
@@ -1046,7 +1046,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                     ...instruction.options.map((option) => ListTile(
                           leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
                           title: Text('${option.name} (+${option.bonusPoints})'),
-                          subtitle: Text('${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
+                          subtitle: Text('${option.pointsEarned} Points${option.description.isEmpty ? '' : ' • ${option.description}'}'),
                           onTap: () => Navigator.pop(context, 'option:${option.id}'),
                         )),
                   ] else if (instruction.isLevelBased) ...[
@@ -1058,7 +1058,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                     ...instruction.levels.map((level) => ListTile(
                           leading: const Icon(Icons.emoji_events_outlined, color: Colors.green),
                           title: Text('${level.displayLabel} (+${level.bonusPoints})'),
-                          subtitle: Text('${level.xpEarned} XP'),
+                          subtitle: Text('${level.pointsEarned} Points'),
                           onTap: () => Navigator.pop(context, 'level:${level.id}'),
                         )),
                   ] else ...[
@@ -2804,7 +2804,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                                       padding: const EdgeInsets.only(top: 10),
                                       child: Row(
                                         children: [
-                                          Expanded(child: _heroMetric('XP', '${profile.xp}')),
+                                          Expanded(child: _heroMetric('Points', '${profile.points}')),
                                           Expanded(child: _heroMetric('Score', '${profile.productivityScore}%')),
                                           Expanded(child: _heroMetric('Streak', '${profile.activeStreak}')),
                                         ],

@@ -304,7 +304,7 @@ class _GoalDashboardViewState extends State<GoalDashboardView> {
                       contentPadding: EdgeInsets.zero,
                       leading: CircleAvatar(child: Text('${milestone.percent}%')),
                       title: Text(toTitleCase(milestone.title), style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text(milestone.reward.isEmpty ? 'Optional reward • ${milestone.bonusXp} XP' : '${milestone.reward} • ${milestone.bonusXp} XP'),
+                      subtitle: Text(milestone.reward.isEmpty ? 'Optional reward • ${milestone.bonusPoints} Points' : '${milestone.reward} • ${milestone.bonusPoints} Points'),
                     )),
                 ],
               ),

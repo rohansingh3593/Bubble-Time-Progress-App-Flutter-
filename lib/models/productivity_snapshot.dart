@@ -5,7 +5,7 @@ class ProductivityPointEvent {
   final int basePoints;
   final int streakBonusPoints;
   final int timingBonusPoints;
-  final int xpBonus;
+  final int pointsBonus;
   final int totalPoints;
   final String reason;
 
@@ -14,7 +14,7 @@ class ProductivityPointEvent {
     required this.basePoints,
     required this.streakBonusPoints,
     this.timingBonusPoints = 0,
-    this.xpBonus = 0,
+    this.pointsBonus = 0,
     required this.totalPoints,
     required this.reason,
   });
@@ -27,7 +27,7 @@ class ProductivityPointEvent {
       totalPoints,
       reason,
       timingBonusPoints,
-      xpBonus,
+      pointsBonus,
     ];
   }
 
@@ -40,7 +40,7 @@ class ProductivityPointEvent {
       basePoints: base,
       streakBonusPoints: bonus,
       timingBonusPoints: timing,
-      xpBonus: raw.length > 6 ? _readInt(raw, 6) : timing ~/ 4,
+      pointsBonus: raw.length > 6 ? _readInt(raw, 6) : timing ~/ 4,
       totalPoints: raw.length > 3 ? _readInt(raw, 3) : base + bonus + timing,
       reason: raw.length > 4 ? '${raw[4]}' : '',
     );
@@ -95,7 +95,7 @@ class ProductivitySnapshot {
     required this.pointEvents,
   });
 
-  int get xpEarned => totalPoints ~/ 10;
+  int get pointsEarned => totalPoints ~/ 10;
   double get focusedHours => bothHours + importantHours + urgentHours;
   double get distractionHours => neitherHours;
 
@@ -237,6 +237,8 @@ class LifetimeProductivityStats {
     required this.xp,
     required this.level,
   });
+
+  int get points => xp;
 
   factory LifetimeProductivityStats.fromSnapshots(List<ProductivitySnapshot> input, {DateTime? now}) {
     final snapshots = input.toList()..sort((a, b) => a.date.compareTo(b.date));

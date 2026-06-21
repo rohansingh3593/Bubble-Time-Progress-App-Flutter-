@@ -784,7 +784,7 @@ String _instructionSummary(InstructionRule instruction) {
   final phase = instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}';
   if (instruction.isLevelBased) return '${instruction.levels.length} levels${instruction.unit.isEmpty ? '' : ' • ${instruction.unit}'}$phase';
   if (instruction.isOptionBased) return '${instruction.options.length} options$phase';
-  return 'Simple • +${instruction.bonusPoints} pts • +${instruction.xpEarned} XP$phase';
+  return 'Simple • +${instruction.bonusPoints} pts • +${instruction.pointsEarned} Points$phase';
 }
 
 List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, String taskName) {
@@ -804,20 +804,20 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
   final nameController = TextEditingController(text: initialInstruction?.name ?? '');
   final descriptionController = TextEditingController(text: initialInstruction?.description ?? '');
   final bonusController = TextEditingController(text: '${initialInstruction?.bonusPoints ?? 20}');
-  final xpController = TextEditingController(text: '${initialInstruction?.xpEarned ?? 5}');
+  final xpController = TextEditingController(text: '${initialInstruction?.pointsEarned ?? 5}');
   final unitController = TextEditingController(text: initialInstruction?.unit.isNotEmpty == true ? initialInstruction!.unit : 'km');
   var repeatType = initialInstruction?.repeatType ?? InstructionRule.repeatDaily;
   var instructionType = InstructionRule.typeMultipleOption;
   var levels = initialInstruction?.levels.isNotEmpty == true ? initialInstruction!.levels : const [
-    InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, xpEarned: 5),
-    InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, xpEarned: 8),
-    InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, xpEarned: 12),
+    InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, pointsEarned: 5),
+    InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, pointsEarned: 8),
+    InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, pointsEarned: 12),
   ];
   var options = initialInstruction?.options.isNotEmpty == true ? initialInstruction!.options : const [
-    InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, xpEarned: 2, emoji: '🥤'),
-    InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, xpEarned: 5, emoji: '🥤'),
-    InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, xpEarned: 8, emoji: '🍊'),
-    InstructionOption(id: 'option_amla', name: 'Amla Juice', bonusPoints: 50, xpEarned: 10, emoji: '🥤'),
+    InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, pointsEarned: 2, emoji: '🥤'),
+    InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, pointsEarned: 5, emoji: '🥤'),
+    InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, pointsEarned: 8, emoji: '🍊'),
+    InstructionOption(id: 'option_amla', name: 'Amla Juice', bonusPoints: 50, pointsEarned: 10, emoji: '🥤'),
   ];
   var enabled = initialInstruction?.enabled ?? true;
   var streakTracking = initialInstruction?.streakTracking ?? true;
@@ -922,7 +922,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                       dense: true,
                       leading: const Icon(Icons.emoji_events_outlined),
                       title: Text(toTitleCase(level.displayLabel)),
-                      subtitle: Text('+${level.bonusPoints} points • ${level.xpEarned} XP'),
+                      subtitle: Text('+${level.bonusPoints} points • ${level.pointsEarned} Points'),
                       trailing: Wrap(
                         spacing: 4,
                         children: [
@@ -967,7 +967,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                       dense: true,
                       leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
                       title: Text(toTitleCase(option.name)),
-                      subtitle: Text('+${option.bonusPoints} points • ${option.xpEarned} XP'),
+                      subtitle: Text('+${option.bonusPoints} points • ${option.pointsEarned} Points'),
                       trailing: Wrap(
                         spacing: 4,
                         children: [
@@ -1040,7 +1040,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                 levels: const [],
                 options: options,
                 bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
-                xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
+                pointsEarned: int.tryParse(xpController.text.trim()) ?? 5,
                 colorValue: colorValue,
                 enabled: enabled,
                 streakTracking: streakTracking,
@@ -1071,7 +1071,7 @@ Future<InstructionLevel?> _showInstructionLevelDialog(BuildContext context, Inst
   final targetController = TextEditingController(text: initial == null ? '' : (initial.target % 1 == 0 ? initial.target.toStringAsFixed(0) : initial.target.toString()));
   final unitController = TextEditingController(text: initial?.unit ?? defaultUnit);
   final pointsController = TextEditingController(text: '${initial?.bonusPoints ?? 20}');
-  final xpController = TextEditingController(text: '${initial?.xpEarned ?? 5}');
+  final xpController = TextEditingController(text: '${initial?.pointsEarned ?? 5}');
   try {
     return await showDialog<InstructionLevel>(
       context: context,
@@ -1085,7 +1085,7 @@ Future<InstructionLevel?> _showInstructionLevelDialog(BuildContext context, Inst
               TextField(controller: targetController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target')),
               TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
               TextField(controller: pointsController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus XP')),
+              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
             ],
           ),
         ),
@@ -1100,7 +1100,7 @@ Future<InstructionLevel?> _showInstructionLevelDialog(BuildContext context, Inst
                 target: double.tryParse(targetController.text.trim()) ?? 0,
                 unit: unitController.text.trim(),
                 bonusPoints: int.tryParse(pointsController.text.trim()) ?? 0,
-                xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
+                pointsEarned: int.tryParse(xpController.text.trim()) ?? 0,
               ),
             ),
             child: const Text('Save'),
@@ -1122,7 +1122,7 @@ Future<InstructionOption?> _showInstructionOptionDialog(BuildContext context, In
   final nameController = TextEditingController(text: initial?.name ?? '');
   final descriptionController = TextEditingController(text: initial?.description ?? '');
   final pointsController = TextEditingController(text: '${initial?.bonusPoints ?? 10}');
-  final xpController = TextEditingController(text: '${initial?.xpEarned ?? 2}');
+  final xpController = TextEditingController(text: '${initial?.pointsEarned ?? 2}');
   final linkController = TextEditingController();
   var imagePaths = [...(initial?.imagePaths ?? const <String>[])];
   var linkUrls = [...(initial?.effectiveLinks ?? const <String>[])];
@@ -1142,7 +1142,7 @@ Future<InstructionOption?> _showInstructionOptionDialog(BuildContext context, In
                 children: [
                   TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Option Name')),
                   TextField(controller: pointsController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Points')),
                   TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
                   const SizedBox(height: 12),
                   Column(
@@ -1241,7 +1241,7 @@ Future<InstructionOption?> _showInstructionOptionDialog(BuildContext context, In
                   id: initial?.id ?? 'option_${DateTime.now().microsecondsSinceEpoch}',
                   name: nameController.text.trim().isEmpty ? 'Option' : nameController.text.trim(),
                   bonusPoints: int.tryParse(pointsController.text.trim()) ?? 0,
-                  xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
+                  pointsEarned: int.tryParse(xpController.text.trim()) ?? 0,
                   emoji: emojiController.text.trim().isEmpty ? '•' : emojiController.text.trim(),
                   description: descriptionController.text.trim(),
                   imagePaths: imagePaths,

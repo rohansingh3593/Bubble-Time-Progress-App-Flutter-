@@ -6,7 +6,7 @@ class InstructionHistoryEntry {
   final DateTime date;
   final String status;
   final int bonusPoints;
-  final int xpEarned;
+  final int pointsEarned;
   final String note;
   final String levelId;
   final String levelName;
@@ -21,7 +21,7 @@ class InstructionHistoryEntry {
     required this.date,
     required this.status,
     this.bonusPoints = 0,
-    this.xpEarned = 0,
+    this.pointsEarned = 0,
     this.note = '',
     this.levelId = '',
     this.levelName = '',
@@ -71,7 +71,7 @@ class InstructionHistoryEntry {
         date.toIso8601String(),
         status,
         bonusPoints,
-        xpEarned,
+        pointsEarned,
         note,
         levelId,
         levelName,
@@ -88,7 +88,7 @@ class InstructionHistoryEntry {
       date: raw.isNotEmpty ? DateTime.tryParse('${raw[0]}') ?? DateTime.now() : DateTime.now(),
       status: raw.length > 1 ? '${raw[1]}' : statusMissed,
       bonusPoints: _readInt(raw, 2),
-      xpEarned: _readInt(raw, 3),
+      pointsEarned: _readInt(raw, 3),
       note: raw.length > 4 ? '${raw[4]}' : '',
       levelId: raw.length > 5 ? '${raw[5]}' : '',
       levelName: raw.length > 6 ? '${raw[6]}' : '',
@@ -108,7 +108,7 @@ class InstructionLevel {
   final double target;
   final String unit;
   final int bonusPoints;
-  final int xpEarned;
+  final int pointsEarned;
 
   const InstructionLevel({
     required this.id,
@@ -116,7 +116,7 @@ class InstructionLevel {
     required this.target,
     required this.unit,
     required this.bonusPoints,
-    required this.xpEarned,
+    required this.pointsEarned,
   });
 
   String get targetLabel {
@@ -126,7 +126,7 @@ class InstructionLevel {
 
   String get displayLabel => '$name - $targetLabel';
 
-  List<dynamic> toStorageList() => [id, name, target, unit, bonusPoints, xpEarned];
+  List<dynamic> toStorageList() => [id, name, target, unit, bonusPoints, pointsEarned];
 
   factory InstructionLevel.fromStorageList(List<dynamic> raw) {
     return InstructionLevel(
@@ -135,7 +135,7 @@ class InstructionLevel {
       target: _readDouble(raw, 2),
       unit: raw.length > 3 ? '${raw[3]}' : '',
       bonusPoints: _readInt(raw, 4),
-      xpEarned: _readInt(raw, 5),
+      pointsEarned: _readInt(raw, 5),
     );
   }
 }
@@ -145,7 +145,7 @@ class InstructionOption {
   final String id;
   final String name;
   final int bonusPoints;
-  final int xpEarned;
+  final int pointsEarned;
   final String emoji;
   final String description;
   final List<String> imagePaths;
@@ -157,7 +157,7 @@ class InstructionOption {
     required this.id,
     required this.name,
     required this.bonusPoints,
-    required this.xpEarned,
+    required this.pointsEarned,
     this.emoji = '🥤',
     this.description = '',
     this.imagePaths = const [],
@@ -179,14 +179,14 @@ class InstructionOption {
 
   bool get hasLink => effectiveLinks.isNotEmpty;
 
-  List<dynamic> toStorageList() => [id, name, bonusPoints, xpEarned, emoji, description, imagePaths, coverImagePath, linkUrl, linkUrls];
+  List<dynamic> toStorageList() => [id, name, bonusPoints, pointsEarned, emoji, description, imagePaths, coverImagePath, linkUrl, linkUrls];
 
   factory InstructionOption.fromStorageList(List<dynamic> raw) {
     return InstructionOption(
       id: raw.isNotEmpty ? '${raw[0]}' : 'option_${DateTime.now().microsecondsSinceEpoch}',
       name: raw.length > 1 ? '${raw[1]}' : 'Option',
       bonusPoints: _readInt(raw, 2),
-      xpEarned: _readInt(raw, 3),
+      pointsEarned: _readInt(raw, 3),
       emoji: raw.length > 4 ? '${raw[4]}' : '🥤',
       description: raw.length > 5 ? '${raw[5]}' : '',
       imagePaths: _readStringList(raw, 6),
@@ -222,7 +222,7 @@ class InstructionRule {
   final List<InstructionOption> options;
   final bool archived;
   final int bonusPoints;
-  final int xpEarned;
+  final int pointsEarned;
   final int colorValue;
   final bool enabled;
   final bool streakTracking;
@@ -244,7 +244,7 @@ class InstructionRule {
     this.options = const [],
     this.archived = false,
     this.bonusPoints = 20,
-    this.xpEarned = 5,
+    this.pointsEarned = 5,
     this.colorValue = 0xFF43A047,
     this.enabled = true,
     this.streakTracking = true,
@@ -315,7 +315,7 @@ class InstructionRule {
     List<InstructionOption>? options,
     bool? archived,
     int? bonusPoints,
-    int? xpEarned,
+    int? pointsEarned,
     int? colorValue,
     bool? enabled,
     bool? streakTracking,
@@ -336,7 +336,7 @@ class InstructionRule {
       options: options ?? this.options,
       archived: archived ?? this.archived,
       bonusPoints: bonusPoints ?? this.bonusPoints,
-      xpEarned: xpEarned ?? this.xpEarned,
+      pointsEarned: pointsEarned ?? this.pointsEarned,
       colorValue: colorValue ?? this.colorValue,
       enabled: enabled ?? this.enabled,
       streakTracking: streakTracking ?? this.streakTracking,
@@ -355,7 +355,7 @@ class InstructionRule {
         linkedPhase,
         repeatType,
         bonusPoints,
-        xpEarned,
+        pointsEarned,
         colorValue,
         enabled,
         streakTracking,
@@ -402,7 +402,7 @@ class InstructionRule {
       options: parsedOptions,
       archived: raw.length > 17 ? raw[17] == true || '${raw[17]}'.toLowerCase() == 'true' : false,
       bonusPoints: _readInt(raw, 6, fallback: 20),
-      xpEarned: _readInt(raw, 7, fallback: 5),
+      pointsEarned: _readInt(raw, 7, fallback: 5),
       colorValue: _readInt(raw, 8, fallback: 0xFF43A047),
       enabled: raw.length > 9 ? raw[9] == true || '${raw[9]}'.toLowerCase() == 'true' : true,
       streakTracking: raw.length > 10 ? raw[10] == true || '${raw[10]}'.toLowerCase() == 'true' : true,

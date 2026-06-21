@@ -146,7 +146,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     ...instruction.levels.map((level) => ListTile(
                           leading: const Icon(Icons.emoji_events_outlined, color: Colors.green),
                           title: Text('${level.displayLabel} (+${level.bonusPoints})'),
-                          subtitle: Text('${level.xpEarned} XP'),
+                          subtitle: Text('${level.pointsEarned} Points'),
                           onTap: () => Navigator.pop(context, 'level:${level.id}'),
                         )),
                   ] else ...[
@@ -207,7 +207,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Delete Instruction?'),
-            content: const Text('This removes the instruction from the dashboard and future tracking only. Past points, XP, money, timeline history, and completed history remain saved.'),
+            content: const Text('This removes the instruction from the dashboard and future tracking only. Past points, Points, money, timeline history, and completed history remain saved.'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
               ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete from dashboard only')),
@@ -223,24 +223,24 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     final nameController = TextEditingController(text: instruction?.name ?? '');
     final descriptionController = TextEditingController(text: instruction?.description ?? '');
     final bonusController = TextEditingController(text: instruction == null ? '20' : '${instruction.bonusPoints}');
-    final xpController = TextEditingController(text: instruction == null ? '5' : '${instruction.xpEarned}');
+    final xpController = TextEditingController(text: instruction == null ? '5' : '${instruction.pointsEarned}');
     final unitController = TextEditingController(text: instruction?.unit ?? 'km');
     var instructionType = InstructionRule.typeMultipleOption;
     var levels = [...(instruction?.levels ?? const <InstructionLevel>[])];
     var options = [...(instruction?.options ?? const <InstructionOption>[])];
     if (options.isEmpty) {
       options = const [
-        InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, xpEarned: 2, emoji: '🥤'),
-        InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, xpEarned: 5, emoji: '🥤'),
-        InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, xpEarned: 8, emoji: '🍊'),
-        InstructionOption(id: 'option_amla', name: 'Amla Juice', bonusPoints: 50, xpEarned: 10, emoji: '🟢'),
+        InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, pointsEarned: 2, emoji: '🥤'),
+        InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, pointsEarned: 5, emoji: '🥤'),
+        InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, pointsEarned: 8, emoji: '🍊'),
+        InstructionOption(id: 'option_amla', name: 'Amla Juice', bonusPoints: 50, pointsEarned: 10, emoji: '🟢'),
       ];
     }
     if (levels.isEmpty) {
       levels = const [
-        InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, xpEarned: 5),
-        InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, xpEarned: 8),
-        InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, xpEarned: 12),
+        InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, pointsEarned: 5),
+        InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, pointsEarned: 8),
+        InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, pointsEarned: 12),
       ];
     }
     var instructionImagePaths = [...(instruction?.imagePaths ?? const <String>[])];
@@ -325,7 +325,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(Icons.checklist_rounded),
                       title: Text('Multiple Option Instruction'),
-                      subtitle: Text('How It Works: users can select one or many checkbox options; points and XP are added from all selected options.'),
+                      subtitle: Text('How It Works: users can select one or many checkbox options; points and Points are added from all selected options.'),
                     ),
                     const SizedBox(height: 12),
                     const Text('Linked Task (Optional)', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black54)),
@@ -429,7 +429,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                               children: [
                                 Text(level.displayLabel, style: const TextStyle(fontWeight: FontWeight.w900)),
                                 const SizedBox(height: 4),
-                                Text('+${level.bonusPoints} points • ${level.xpEarned} XP', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+                                Text('+${level.bonusPoints} points • ${level.pointsEarned} Points', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
                                 Align(
                                   alignment: Alignment.centerRight,
                                   child: Wrap(
@@ -482,7 +482,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                                           Text(option.name, style: const TextStyle(fontWeight: FontWeight.w900)),
                                           const SizedBox(height: 4),
                                           Text(
-                                            '+${option.bonusPoints} points • ${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}',
+                                            '+${option.bonusPoints} points • ${option.pointsEarned} Points${option.description.isEmpty ? '' : ' • ${option.description}'}',
                                             style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
                                           ),
                                         ],
@@ -544,7 +544,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     levels: const [],
                     options: options,
                     bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
-                    xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
+                    pointsEarned: int.tryParse(xpController.text.trim()) ?? 5,
                     colorValue: colorValue,
                     enabled: enabled,
                     streakTracking: streakTracking,
@@ -573,7 +573,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   Future<InstructionOption?> _showInstructionOptionDialog({InstructionOption? existing, required int index}) async {
     final nameController = TextEditingController(text: existing?.name ?? 'Option ${index + 1}');
     final bonusController = TextEditingController(text: existing == null ? '10' : '${existing.bonusPoints}');
-    final xpController = TextEditingController(text: existing == null ? '2' : '${existing.xpEarned}');
+    final xpController = TextEditingController(text: existing == null ? '2' : '${existing.pointsEarned}');
     final emojiController = TextEditingController(text: existing?.emoji ?? '🥤');
     final linkController = TextEditingController();
     final descriptionController = TextEditingController(text: existing?.description ?? '');
@@ -594,7 +594,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 children: [
                   TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Option Name')),
                   TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Points')),
                   TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
                   const SizedBox(height: 12),
                   Column(
@@ -693,7 +693,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   id: existing?.id ?? 'option_${DateTime.now().microsecondsSinceEpoch}',
                   name: nameController.text.trim().isEmpty ? 'Option ${index + 1}' : nameController.text.trim(),
                   bonusPoints: int.tryParse(bonusController.text.trim()) ?? 0,
-                  xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
+                  pointsEarned: int.tryParse(xpController.text.trim()) ?? 0,
                   emoji: emojiController.text.trim().isEmpty ? '🥤' : emojiController.text.trim(),
                   description: descriptionController.text.trim(),
                   imagePaths: imagePaths,
@@ -779,7 +779,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   return CheckboxListTile(
                     value: checked,
                     title: Text('${option.name} +${option.bonusPoints} ${option.emoji}'),
-                    subtitle: Text('${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
+                    subtitle: Text('${option.pointsEarned} Points${option.description.isEmpty ? '' : ' • ${option.description}'}'),
                     onChanged: (value) => setDialogState(() {
                       if (value == true) {
                         selectedIds.add(option.id);
@@ -814,7 +814,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     final targetController = TextEditingController(text: existing == null ? '' : (existing.target % 1 == 0 ? existing.target.toStringAsFixed(0) : existing.target.toStringAsFixed(1)));
     final unitController = TextEditingController(text: existing?.unit ?? (defaultUnit.isEmpty ? 'km' : defaultUnit));
     final bonusController = TextEditingController(text: existing == null ? '30' : '${existing.bonusPoints}');
-    final xpController = TextEditingController(text: existing == null ? '5' : '${existing.xpEarned}');
+    final xpController = TextEditingController(text: existing == null ? '5' : '${existing.pointsEarned}');
     return showDialog<InstructionLevel>(
       context: context,
       builder: (context) => AlertDialog(
@@ -827,7 +827,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
               TextField(controller: targetController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Target')),
               TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
               TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Points')),
             ],
           ),
         ),
@@ -842,7 +842,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 target: double.tryParse(targetController.text.trim()) ?? 0,
                 unit: unitController.text.trim(),
                 bonusPoints: int.tryParse(bonusController.text.trim()) ?? 0,
-                xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
+                pointsEarned: int.tryParse(xpController.text.trim()) ?? 0,
               ),
             ),
             child: const Text('Save'),

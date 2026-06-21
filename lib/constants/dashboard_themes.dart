@@ -97,11 +97,11 @@ extension AppFontFamilyX on AppFontFamily {
       case AppFontFamily.rounded:
         return 'Playful habits and reflection';
       case AppFontFamily.tech:
-        return 'Analytics, XP, and statistics';
+        return 'Analytics, Points, and statistics';
       case AppFontFamily.luxury:
         return 'Luxury SaaS profile style';
       case AppFontFamily.futuristic:
-        return 'Rank, XP, and hero cards';
+        return 'Rank, Points, and hero cards';
     }
   }
 }
@@ -615,7 +615,7 @@ extension DashboardThemeTypeX on DashboardThemeType {
       case DashboardThemeType.dark:
         return 'Focus mode with neon contrast';
       case DashboardThemeType.gamified:
-        return 'XP, rank glow, and motivational gradients';
+        return 'Points, rank glow, and motivational gradients';
       case DashboardThemeType.calm:
         return 'Journal-friendly cream, green, and orange tones';
       case DashboardThemeType.minimal:
@@ -1036,7 +1036,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
   Color get skipped => textMuted;
   Color get bonus => success;
   Color get coins => accent;
-  Color get xp => secondary;
+  Color get points => secondary;
   Color get muted => textMuted;
   Color get mutedSurface => surfaceVariant.withOpacity(0.70);
   Color get primaryLight => primarySoft;

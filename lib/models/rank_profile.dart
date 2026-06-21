@@ -10,8 +10,8 @@ class RankProfile {
   final RankTier? nextRank;
   final int level;
   final int xp;
-  final int currentLevelXp;
-  final int xpForNextLevel;
+  final int currentLevelPoints;
+  final int pointsForNextLevel;
   final int activeStreak;
   final int longestStreak;
   final int totalTasksCompleted;
@@ -30,8 +30,8 @@ class RankProfile {
     required this.nextRank,
     required this.level,
     required this.xp,
-    required this.currentLevelXp,
-    required this.xpForNextLevel,
+    required this.currentLevelPoints,
+    required this.pointsForNextLevel,
     required this.activeStreak,
     required this.longestStreak,
     required this.totalTasksCompleted,
@@ -45,7 +45,9 @@ class RankProfile {
     required this.completionRate,
   });
 
-  double get levelProgress => xpForNextLevel == 0 ? 1 : currentLevelXp / xpForNextLevel;
+  int get points => xp;
+
+  double get levelProgress => pointsForNextLevel == 0 ? 1 : currentLevelPoints / pointsForNextLevel;
   double get nextRankProgress {
     if (nextRank == null) return 1;
     final currentThreshold = currentRank.minimumLevel;
@@ -110,8 +112,8 @@ class RankProfile {
     final taskScore = completedTasks * 10 + importantCompleted * 8 + recurringCompleted * 6;
     final journalScore = journalCount * 8 + reflectiveDays * 4;
     final productivityScore = lifetimeStats == null ? (completionRate * 100).round() : lifetimeStats.averageDailyScore.round();
-    final lifetimeXp = lifetimeStats?.xp ?? 0;
-    final xp = taskScore + consistencyScore + streakScore + journalScore + productivityScore + lifetimeXp;
+    final lifetimePoints = lifetimeStats?.xp ?? 0;
+    final xp = taskScore + consistencyScore + streakScore + journalScore + productivityScore + lifetimePoints;
     final level = math.max(1, (xp ~/ 120) + 1);
     final currentRank = RankTier.forLevel(level);
     final nextRank = RankTier.nextAfter(currentRank);
@@ -122,8 +124,8 @@ class RankProfile {
       nextRank: nextRank,
       level: level,
       xp: xp,
-      currentLevelXp: xp % 120,
-      xpForNextLevel: 120,
+      currentLevelPoints: xp % 120,
+      pointsForNextLevel: 120,
       activeStreak: activeStreak,
       longestStreak: longestStreak,
       totalTasksCompleted: completedTasks,

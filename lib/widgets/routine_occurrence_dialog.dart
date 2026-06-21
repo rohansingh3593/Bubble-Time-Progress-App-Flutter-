@@ -202,7 +202,7 @@ Future<RoutineOccurrenceAction?> showRoutineOccurrenceDialog({
                                         value: checked,
                                         dense: true,
                                         title: Text('${option.name} +${option.bonusPoints} ${option.emoji}'),
-                                        subtitle: option.description.isEmpty ? Text('${option.xpEarned} XP') : Text('${option.xpEarned} XP • ${option.description}'),
+                                        subtitle: option.description.isEmpty ? Text('${option.pointsEarned} Points') : Text('${option.pointsEarned} Points • ${option.description}'),
                                         onChanged: instructionChoicesEnabled
                                             ? (value) => setDialogState(() {
                                                   final selected = selectedOptionIds.putIfAbsent(instruction.id, () => <String>{});
@@ -332,7 +332,7 @@ AlertDialog _completionSummaryDialog(
   ];
   final followedCount = entries.where((entry) => entry.value?.followed ?? false).length;
   final instructionBonus = entries.fold<int>(0, (sum, entry) => sum + (entry.value?.bonusPoints ?? 0));
-  final xpBonus = entries.fold<int>(0, (sum, entry) => sum + (entry.value?.xpEarned ?? 0));
+  final pointsBonus = entries.fold<int>(0, (sum, entry) => sum + (entry.value?.pointsEarned ?? 0));
   final mood = _completionMood(followedCount, linkedInstructions.length);
   final basePoints = task.priority.trim().toLowerCase() == 'high' ? 30 : task.priority.trim().toLowerCase() == 'low' ? 10 : 20;
   final totalPoints = basePoints + instructionBonus;
@@ -372,7 +372,7 @@ AlertDialog _completionSummaryDialog(
                           if (history?.selectionSummary.isNotEmpty == true)
                             Text('Selected: ${history!.selectionSummary}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                           Text(
-                            'Status: ${followed ? 'Followed ✅' : history?.notApplicable == true ? 'Not Applicable' : 'Missed'} • Bonus: +$points points • +${history?.xpEarned ?? 0} XP',
+                            'Status: ${followed ? 'Followed ✅' : history?.notApplicable == true ? 'Not Applicable' : 'Missed'} • Bonus: +$points points • +${history?.pointsEarned ?? 0} Points',
                             style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w700),
                           ),
                         ],
@@ -393,7 +393,7 @@ AlertDialog _completionSummaryDialog(
             _rewardLine('Instruction Bonus', instructionBonus),
             _rewardLine('Timing Bonus', 0),
             _rewardLine('Streak Bonus', 0),
-            _rewardLine('Instruction XP', xpBonus),
+            _rewardLine('Instruction Points', pointsBonus),
             const SizedBox(height: 6),
             _rewardLine('Total Points', totalPoints, bold: true),
           ],

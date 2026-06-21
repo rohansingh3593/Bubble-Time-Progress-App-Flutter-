@@ -110,7 +110,7 @@ class RankProfileCard extends StatelessWidget {
             LayoutBuilder(
               builder: (context, constraints) {
                 final xpText = Text(
-                  '${profile.currentLevelXp}/${profile.xpForNextLevel} XP to Level ${profile.level + 1}',
+                  '${profile.currentLevelPoints}/${profile.pointsForNextLevel} Points to Level ${profile.level + 1}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: contentColor, fontWeight: FontWeight.w700),

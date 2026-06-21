@@ -1069,7 +1069,7 @@ class HiveService {
         date: occurrence,
         status: status,
         bonusPoints: followed ? (selectedLevel?.bonusPoints ?? selectedOptions.fold<int>(0, (sum, item) => sum + item.bonusPoints)) : 0,
-        xpEarned: followed ? (selectedLevel?.xpEarned ?? selectedOptions.fold<int>(0, (sum, item) => sum + item.xpEarned)) : 0,
+        pointsEarned: followed ? (selectedLevel?.pointsEarned ?? selectedOptions.fold<int>(0, (sum, item) => sum + item.pointsEarned)) : 0,
         note: note.trim(),
         levelId: selectedLevel?.id ?? '',
         levelName: selectedLevel?.name ?? '',
@@ -1391,7 +1391,7 @@ class HiveService {
             basePoints: taskBasePoints,
             streakBonusPoints: 0,
             timingBonusPoints: 0,
-            xpBonus: 0,
+            pointsBonus: 0,
             totalPoints: taskBasePoints,
             reason: '$completedPhaseCount project phase${completedPhaseCount == 1 ? '' : 's'} completed • ${taskRecordedMinutes} min recorded',
           ),
@@ -1417,7 +1417,7 @@ class HiveService {
       var reason = 'Base productivity points';
 
       var taskTimingBonusPoints = 0;
-      var taskTimingXpBonus = 0;
+      var taskTimingPointsBonus = 0;
       if (_isCompletedTask(task)) {
         completedTasks++;
         completedTaskNames.add(task.task);
@@ -1431,7 +1431,7 @@ class HiveService {
 
           final timingBonus = _routineTimingBonusForTask(task);
           taskTimingBonusPoints = timingBonus.points;
-          taskTimingXpBonus = timingBonus.xp;
+          taskTimingPointsBonus = timingBonus.xp;
           if (taskTimingBonusPoints > 0) {
             reason = reason == 'Base productivity points'
                 ? timingBonus.reason
@@ -1449,7 +1449,7 @@ class HiveService {
           basePoints: taskBasePoints,
           streakBonusPoints: taskBonusPoints,
           timingBonusPoints: taskTimingBonusPoints,
-          xpBonus: taskTimingXpBonus,
+          pointsBonus: taskTimingPointsBonus,
           totalPoints: taskBasePoints + taskBonusPoints + taskTimingBonusPoints,
           reason: reason,
         ),
@@ -1467,7 +1467,7 @@ class HiveService {
           basePoints: 0,
           streakBonusPoints: 0,
           timingBonusPoints: entry.bonusPoints,
-          xpBonus: entry.xpEarned,
+          pointsBonus: entry.pointsEarned,
           totalPoints: entry.bonusPoints,
           reason: instruction.description.isEmpty ? 'Instruction bonus' : instruction.description,
         ),
@@ -1736,12 +1736,12 @@ class HiveService {
         lines.add('🔥 ${event.title} • ${event.reason} • +${event.streakBonusPoints} streak bonus points');
       }
       if (event.timingBonusPoints > 0) {
-        lines.add('⏰ ${event.title} • ${event.reason} • +${event.timingBonusPoints} timing bonus points • +${event.xpBonus} XP');
+        lines.add('⏰ ${event.title} • ${event.reason} • +${event.timingBonusPoints} timing bonus points • +${event.pointsBonus} Points');
       }
     }
     lines.add('💎 Lifetime points: ${lifetime.totalPoints}');
     lines.add('🔥 Streak: ${lifetime.currentStreak} day${lifetime.currentStreak == 1 ? '' : 's'}');
-    lines.add('🏅 Lifetime XP: ${lifetime.xp} • Level ${lifetime.level}');
+    lines.add('🏅 Lifetime Points: ${lifetime.points} • Level ${lifetime.level}');
 
     if (journal != null) {
       lines.add('😊 Mood: ${journal.mood}');
