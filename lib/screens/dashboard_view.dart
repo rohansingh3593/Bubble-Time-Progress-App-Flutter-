@@ -155,8 +155,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 final wide = constraints.maxWidth >= 960;
                 final content = Column(
                   children: [
-                    _buildModernTopBar(rankProfile),
-                    const SizedBox(height: 12),
                     _buildDashboardTabs(),
                     const SizedBox(height: 12),
                     Expanded(
@@ -259,69 +257,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       itemBuilder: (context, index) => children[index],
       separatorBuilder: (_, __) => const SizedBox(height: 14),
       itemCount: children.length,
-    );
-  }
-
-  Widget _buildModernTopBar(RankProfile profile) {
-    final style = _dashboardStyle();
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final actions = Wrap(spacing: 8, runSpacing: 8, children: [
-          _headerActionButton(icon: Icons.search_rounded, tooltip: 'Search', style: style, onTap: _openProductivityTimeline),
-          _mottoHeaderButton(style),
-          _rewardMoneyBadge(style),
-          _headerActionButton(icon: Icons.settings_rounded, tooltip: 'Dashboard settings', style: style, onTap: _openSettingsPanel),
-        ]);
-        final profileIntro = Row(children: [
-          ProfileAvatar(profile: widget.hiveService.getUserProfile(), radius: 28, accentColor: style.primary, showGlow: true, onTap: _openProductivityTimeline),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Good Morning, ${profile.username}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 6),
-              Text(
-                'Your key totals are combined in the main card below.',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700, fontSize: 12),
-              ),
-            ]),
-          ),
-        ]);
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [style.primary.withOpacity(0.18), style.secondary.withOpacity(0.10)]),
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(color: style.primary.withOpacity(0.18)),
-          ),
-          child: constraints.maxWidth < 900
-              ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [profileIntro, const SizedBox(height: 12), actions])
-              : Row(children: [Expanded(child: profileIntro), const SizedBox(width: 12), actions]),
-        );
-      },
-    );
-  }
-
-  Widget _topBarPill(String label, IconData icon) {
-    final style = _dashboardStyle();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(color: style.surface.withOpacity(0.78), borderRadius: BorderRadius.circular(999), border: Border.all(color: style.primary.withOpacity(0.14))),
-      child: LayoutBuilder(
-        builder: (context, constraints) => FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 15, color: style.primary),
-              const SizedBox(width: 5),
-              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -2815,9 +2750,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                                       padding: const EdgeInsets.only(top: 10),
                                       child: Row(
                                         children: [
-                                          Expanded(child: _heroMetric('Points', '${profile.points}')),
                                           Expanded(child: _heroMetric('Score', '${profile.productivityScore}%')),
-                                          Expanded(child: _heroMetric('Streak', '${profile.activeStreak}')),
+                                          Expanded(child: _heroMetric('Active Days', '${profile.totalActiveDays}')),
+                                          Expanded(child: _heroMetric('Journals', '${profile.journalEntries}')),
                                         ],
                                       ),
                                     )
