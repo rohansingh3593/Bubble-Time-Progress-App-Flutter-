@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../constants/colors.dart';
 import '../models/productivity_snapshot.dart';
+import '../models/task_model.dart';
 import '../models/reward_money.dart';
 import '../models/rank_profile.dart';
 import '../models/user_profile.dart';
@@ -26,6 +27,7 @@ class ProductivityTimelineView extends StatefulWidget {
 
 class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
   String _range = 'Last 30 Days';
+  String _followedPiePeriod = _TimelineFollowedPeriod.daily;
   Timer? _rewardReminderTimer;
   int _rewardReminderIndex = 0;
   DateTime? _rewardReminderSnoozedUntil;
@@ -73,6 +75,12 @@ class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
               _PointsTotalsCard(snapshots: snapshots, stats: stats),
               const SizedBox(height: 16),
               _PointsAnalyticsCard(snapshots: snapshots),
+              const SizedBox(height: 16),
+              _TimelineFollowedPieCard(
+                period: _followedPiePeriod,
+                counts: _followedCountsForPeriod(_followedPiePeriod),
+                onPeriodChanged: (period) => setState(() => _followedPiePeriod = period),
+              ),
               const SizedBox(height: 16),
               _OverviewCards(stats: stats),
               const SizedBox(height: 16),
@@ -147,6 +155,54 @@ class _ProductivityTimelineViewState extends State<ProductivityTimelineView> {
     final cutoff = DateTime(now.year, now.month, now.day).subtract(Duration(days: days - 1));
     return snapshots.where((snapshot) => !snapshot.date.isBefore(cutoff)).toList();
   }
+
+
+  _TimelineFollowedCounts _followedCountsForPeriod(String period) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = _periodStart(today, period);
+    var routineTasks = 0;
+    var nonRoutineTasks = 0;
+
+    for (final entry in widget.hiveService.getAllTasksByDate().entries) {
+      final day = DateTime(entry.key.year, entry.key.month, entry.key.day);
+      if (day.isBefore(start) || day.isAfter(today)) continue;
+      for (final task in entry.value) {
+        if (!_taskIsCompleted(task)) continue;
+        if (task.repeatTask) {
+          routineTasks++;
+        } else {
+          nonRoutineTasks++;
+        }
+      }
+    }
+
+    var followedInstructions = 0;
+    for (final instruction in widget.hiveService.getInstructions()) {
+      for (final history in instruction.history) {
+        final day = DateTime(history.date.year, history.date.month, history.date.day);
+        if (day.isBefore(start) || day.isAfter(today)) continue;
+        if (history.followed) followedInstructions++;
+      }
+    }
+
+    return _TimelineFollowedCounts(
+      routineTasks: routineTasks,
+      nonRoutineTasks: nonRoutineTasks,
+      instructions: followedInstructions,
+    );
+  }
+
+  DateTime _periodStart(DateTime today, String period) {
+    return switch (period) {
+      _TimelineFollowedPeriod.weekly => today.subtract(Duration(days: today.weekday - 1)),
+      _TimelineFollowedPeriod.monthly => DateTime(today.year, today.month),
+      _TimelineFollowedPeriod.yearly => DateTime(today.year),
+      _ => today,
+    };
+  }
+
+  bool _taskIsCompleted(Task task) => task.done || task.status.trim().toLowerCase() == 'completed';
 
   void _showSnapshotDetails(ProductivitySnapshot snapshot) {
     showDialog<void>(
@@ -516,6 +572,191 @@ class _PhotoGalleryCard extends StatelessWidget {
             ),
     );
   }
+}
+
+
+class _TimelineFollowedPeriod {
+  static const String daily = 'Daily';
+  static const String weekly = 'Weekly';
+  static const String monthly = 'Monthly';
+  static const String yearly = 'Yearly';
+  static const List<String> values = [daily, weekly, monthly, yearly];
+}
+
+class _TimelineFollowedCounts {
+  final int routineTasks;
+  final int nonRoutineTasks;
+  final int instructions;
+
+  const _TimelineFollowedCounts({
+    required this.routineTasks,
+    required this.nonRoutineTasks,
+    required this.instructions,
+  });
+
+  int get total => routineTasks + nonRoutineTasks + instructions;
+}
+
+class _TimelineFollowedPieCard extends StatelessWidget {
+  final String period;
+  final _TimelineFollowedCounts counts;
+  final ValueChanged<String> onPeriodChanged;
+
+  const _TimelineFollowedPieCard({
+    required this.period,
+    required this.counts,
+    required this.onPeriodChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final segments = [
+      _TimelinePieSegment(label: 'Routine Tasks', value: counts.routineTasks, color: Colors.green.shade600, icon: '🔁'),
+      _TimelinePieSegment(label: 'Non-Routine Tasks', value: counts.nonRoutineTasks, color: Colors.blue.shade600, icon: '✅'),
+      _TimelinePieSegment(label: 'Instructions', value: counts.instructions, color: Colors.purple.shade600, icon: '📋'),
+    ];
+
+    return _TimelineSection(
+      title: 'Followed Productivity',
+      trailing: Text('$period • ${counts.total} total', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.black54)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Compare followed routine tasks, non-routine tasks, and instructions for the selected time period.',
+            style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _TimelineFollowedPeriod.values.map((value) {
+              final selected = value == period;
+              return ChoiceChip(
+                selected: selected,
+                label: Text(value),
+                selectedColor: AppColors.primary.withOpacity(0.18),
+                labelStyle: TextStyle(fontWeight: FontWeight.w900, color: selected ? AppColors.textPrimary : Colors.black54),
+                onSelected: (_) => onPeriodChanged(value),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 460;
+              final pie = SizedBox(
+                width: 170,
+                height: 170,
+                child: CustomPaint(
+                  painter: _TimelineFollowedPiePainter(segments: segments),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_formatInt(counts.total), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                        const Text('Followed', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.black54)),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+              final legend = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: segments
+                    .map((segment) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _TimelinePieLegendTile(segment: segment, total: counts.total),
+                        ))
+                    .toList(),
+              );
+              if (narrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [pie, const SizedBox(height: 16), legend],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [pie, const SizedBox(width: 18), Expanded(child: legend)],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelinePieSegment {
+  final String label;
+  final int value;
+  final Color color;
+  final String icon;
+
+  const _TimelinePieSegment({required this.label, required this.value, required this.color, required this.icon});
+}
+
+class _TimelinePieLegendTile extends StatelessWidget {
+  final _TimelinePieSegment segment;
+  final int total;
+
+  const _TimelinePieLegendTile({required this.segment, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = total == 0 ? 0 : ((segment.value / total) * 100).round();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: segment.color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: segment.color.withOpacity(0.22)),
+      ),
+      child: Row(
+        children: [
+          Container(width: 12, height: 12, decoration: BoxDecoration(color: segment.color, shape: BoxShape.circle)),
+          const SizedBox(width: 10),
+          Expanded(child: Text('${segment.icon} ${segment.label}', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary))),
+          Text('${_formatInt(segment.value)} • $percent%', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.black54)),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelineFollowedPiePainter extends CustomPainter {
+  final List<_TimelinePieSegment> segments;
+
+  const _TimelineFollowedPiePainter({required this.segments});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = segments.fold<int>(0, (sum, segment) => sum + segment.value);
+    final rect = Offset.zero & size;
+    final strokeWidth = size.shortestSide * 0.18;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    if (total == 0) {
+      paint.color = Colors.grey.shade300;
+      canvas.drawArc(rect.deflate(strokeWidth / 2), -math.pi / 2, math.pi * 2, false, paint);
+      return;
+    }
+
+    var start = -math.pi / 2;
+    for (final segment in segments.where((segment) => segment.value > 0)) {
+      final sweep = (segment.value / total) * math.pi * 2;
+      paint.color = segment.color;
+      canvas.drawArc(rect.deflate(strokeWidth / 2), start, sweep, false, paint);
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TimelineFollowedPiePainter oldDelegate) => oldDelegate.segments != segments;
 }
 
 class _PointsTotalsCard extends StatelessWidget {
