@@ -246,8 +246,10 @@ class _TaskScreenState extends State<TaskScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder(
-      valueListenable: widget.hiveService.getBoxListenable(),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: ValueListenableBuilder(
+        valueListenable: widget.hiveService.getBoxListenable(),
       builder: (context, box, _) {
         final allTaskEntries = widget.hiveService
             .getAllTasksByDate()
@@ -266,9 +268,6 @@ class _TaskScreenState extends State<TaskScreen> {
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-          ),
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -426,26 +425,22 @@ class _TaskScreenState extends State<TaskScreen> {
                         },
                       ),
               ),
-              const SizedBox(height: 10),
-
-              // Sticky add task button anchored at the bottom of the task panel.
-              SafeArea(
-                top: false,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.only(top: 10),
-                  decoration: BoxDecoration(border: Border(top: BorderSide(color: Colors.black.withOpacity(0.08)))),
-                  child: ElevatedButton.icon(
-                    onPressed: _addTaskWithDialog,
-                    icon: const Icon(Icons.add),
-                    label: const Text('+ Add Task'),
-                  ),
-                ),
-              ),
             ],
           ),
         );
-      },
+        },
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: ElevatedButton.icon(
+            onPressed: _addTaskWithDialog,
+            icon: const Icon(Icons.add),
+            label: const Text('+ Add Task'),
+          ),
+        ),
+      ),
     );
   }
 }
