@@ -148,6 +148,9 @@ class InstructionOption {
   final int xpEarned;
   final String emoji;
   final String description;
+  final List<String> imagePaths;
+  final String coverImagePath;
+  final String linkUrl;
 
   const InstructionOption({
     required this.id,
@@ -156,11 +159,16 @@ class InstructionOption {
     required this.xpEarned,
     this.emoji = '🥤',
     this.description = '',
+    this.imagePaths = const [],
+    this.coverImagePath = '',
+    this.linkUrl = '',
   });
 
   String get displayLabel => '$emoji $name'.trim();
+  String get activeCoverImage => coverImagePath.isNotEmpty ? coverImagePath : (imagePaths.isNotEmpty ? imagePaths.first : '');
+  bool get hasLink => linkUrl.trim().isNotEmpty;
 
-  List<dynamic> toStorageList() => [id, name, bonusPoints, xpEarned, emoji, description];
+  List<dynamic> toStorageList() => [id, name, bonusPoints, xpEarned, emoji, description, imagePaths, coverImagePath, linkUrl];
 
   factory InstructionOption.fromStorageList(List<dynamic> raw) {
     return InstructionOption(
@@ -170,6 +178,9 @@ class InstructionOption {
       xpEarned: _readInt(raw, 3),
       emoji: raw.length > 4 ? '${raw[4]}' : '🥤',
       description: raw.length > 5 ? '${raw[5]}' : '',
+      imagePaths: _readStringList(raw, 6),
+      coverImagePath: raw.length > 7 ? '${raw[7]}' : '',
+      linkUrl: raw.length > 8 ? '${raw[8]}' : '',
     );
   }
 }
@@ -402,4 +413,9 @@ List<InstructionOption> _readOptions(List<dynamic> raw, int index) {
     if (option is List) options.add(InstructionOption.fromStorageList(option.cast<dynamic>()));
   }
   return options;
+}
+
+List<String> _readStringList(List<dynamic> raw, int index) {
+  if (raw.length <= index || raw[index] is! Iterable) return const <String>[];
+  return (raw[index] as Iterable).map((item) => '$item').where((item) => item.trim().isNotEmpty).toList();
 }

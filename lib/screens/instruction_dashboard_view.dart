@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../constants/colors.dart';
 import '../models/instruction.dart';
@@ -521,43 +523,121 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     final bonusController = TextEditingController(text: existing == null ? '10' : '${existing.bonusPoints}');
     final xpController = TextEditingController(text: existing == null ? '2' : '${existing.xpEarned}');
     final emojiController = TextEditingController(text: existing?.emoji ?? '🥤');
+    final linkController = TextEditingController(text: existing?.linkUrl ?? '');
     final descriptionController = TextEditingController(text: existing?.description ?? '');
+    var imagePaths = [...(existing?.imagePaths ?? const <String>[])];
+    var coverImagePath = existing?.coverImagePath ?? '';
     return showDialog<InstructionOption>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(existing == null ? 'Add Option' : 'Edit Option'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Option Name')),
-              TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
-              TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
-              TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(
-              context,
-              InstructionOption(
-                id: existing?.id ?? 'option_${DateTime.now().microsecondsSinceEpoch}',
-                name: nameController.text.trim().isEmpty ? 'Option ${index + 1}' : nameController.text.trim(),
-                bonusPoints: int.tryParse(bonusController.text.trim()) ?? 0,
-                xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
-                emoji: emojiController.text.trim().isEmpty ? '🥤' : emojiController.text.trim(),
-                description: descriptionController.text.trim(),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(existing == null ? 'Add Option' : 'Edit Option'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 430,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Option Name')),
+                  TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+                  TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: Text('Option Images (${imagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900))),
+                      TextButton.icon(
+                        onPressed: () async {
+                          final picked = await ImagePicker().pickMultiImage();
+                          if (picked.isEmpty) return;
+                          setDialogState(() {
+                            imagePaths = [...imagePaths, ...picked.map((image) => image.path)];
+                            if (coverImagePath.isEmpty && imagePaths.isNotEmpty) coverImagePath = imagePaths.first;
+                          });
+                        },
+                        icon: const Icon(Icons.add_photo_alternate_outlined),
+                        label: Text(imagePaths.isEmpty ? 'Choose From Gallery' : 'Add More Images'),
+                      ),
+                    ],
+                  ),
+                  if (imagePaths.isEmpty)
+                    const Text('No images added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                  else
+                    ...imagePaths.map((path) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(path == coverImagePath ? Icons.star_rounded : Icons.image_outlined, color: path == coverImagePath ? Colors.amber : null),
+                          title: Text(path.split('/').last, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(path == coverImagePath ? 'Cover image' : 'Image'),
+                          trailing: Wrap(
+                            spacing: 2,
+                            children: [
+                              IconButton(tooltip: 'View', icon: const Icon(Icons.visibility_outlined, size: 18), onPressed: () => _showImagePathDialog(path)),
+                              IconButton(tooltip: 'Change Cover', icon: const Icon(Icons.star_border_rounded, size: 18), onPressed: () => setDialogState(() => coverImagePath = path)),
+                              IconButton(
+                                tooltip: 'Remove',
+                                icon: const Icon(Icons.delete_outline, size: 18),
+                                onPressed: () => setDialogState(() {
+                                  imagePaths = imagePaths.where((item) => item != path).toList();
+                                  if (coverImagePath == path) coverImagePath = imagePaths.isEmpty ? '' : imagePaths.first;
+                                }),
+                              ),
+                            ],
+                          ),
+                        )),
+                  TextField(controller: linkController, decoration: const InputDecoration(labelText: 'Website / Video Link Optional', hintText: 'https://youtube.com/...'), onChanged: (_) => setDialogState(() {})),
+                  if (linkController.text.trim().isNotEmpty)
+                    Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => _openOptionLink(linkController.text), icon: const Icon(Icons.open_in_new), label: const Text('Open Link'))),
+                  TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+                ],
               ),
             ),
-            child: const Text('Save'),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(
+                context,
+                InstructionOption(
+                  id: existing?.id ?? 'option_${DateTime.now().microsecondsSinceEpoch}',
+                  name: nameController.text.trim().isEmpty ? 'Option ${index + 1}' : nameController.text.trim(),
+                  bonusPoints: int.tryParse(bonusController.text.trim()) ?? 0,
+                  xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
+                  emoji: emojiController.text.trim().isEmpty ? '🥤' : emojiController.text.trim(),
+                  description: descriptionController.text.trim(),
+                  imagePaths: imagePaths,
+                  coverImagePath: coverImagePath,
+                  linkUrl: linkController.text.trim(),
+                ),
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  void _showImagePathDialog(String path) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Option Image'),
+        content: SelectableText(path),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  Future<void> _openOptionLink(String rawLink) async {
+    final link = rawLink.trim();
+    if (link.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: link));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Link copied: $link')));
+  }
+
 
   Future<List<InstructionOption>?> _showInstructionOptionsCompletionDialog(InstructionRule instruction) async {
     final selectedIds = <String>{};
