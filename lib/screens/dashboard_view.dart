@@ -173,8 +173,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             _buildMottoHeroCard(),
                             _summaryHeader(summary),
                             _todayScheduleSection(todayTaskRows, todayProductivityStats),
-                            _todaysProductivitySection(todayProductivityStats, todayTaskRows),
                             _todayTasksSection(todayTaskRows),
+                            _todaysProductivitySection(todayProductivityStats, todayTaskRows),
                             _instructionProductivitySection(today),
                           ]),
                           _dashboardTabList([
@@ -1321,14 +1321,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
 
   _ScheduleRange? _scheduleRangeForTask(Task task) {
     final routineSchedule = _dashboardRoutineScheduleForTask(task);
-    if (routineSchedule != null) {
-      return _ScheduleRange(start: routineSchedule.startMinutes, end: routineSchedule.endMinutes);
-    }
-    final hasExplicitTime = task.dueDate.hour != 0 || task.dueDate.minute != 0 || task.hourSlot != null;
-    if (!hasExplicitTime) return null;
-    final start = (task.hourSlot ?? task.dueDate.hour) * 60 + (task.hourSlot == null ? task.dueDate.minute : 0);
-    final end = (start + taskPlannedMinutes(task)).clamp(start + 15, 24 * 60).toInt();
-    return _ScheduleRange(start: start, end: end);
+    if (routineSchedule == null) return null;
+    return _ScheduleRange(start: routineSchedule.startMinutes, end: routineSchedule.endMinutes);
   }
 
   _TodayScheduleState _scheduleStateFor(_DashboardTodayTask row, _TodayScheduleEntry entry, DateTime now) {
@@ -1382,6 +1376,24 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
     final period = hour >= 12 ? 'PM' : 'AM';
     return minute == 0 ? '$displayHour $period' : '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+  }
+
+  List<_PositionedTodayScheduleEntry> _positionOverlappingTodayEntries(List<_TodayScheduleEntry> entries) {
+    final positioned = <_PositionedTodayScheduleEntry>[];
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final overlappingIndexes = <int>[];
+      for (var j = 0; j < entries.length; j++) {
+        final other = entries[j];
+        if (entry.startMinutes < other.endMinutes && other.startMinutes < entry.endMinutes) {
+          overlappingIndexes.add(j);
+        }
+      }
+      final columnCount = overlappingIndexes.length.clamp(1, 4).toInt();
+      final column = overlappingIndexes.indexOf(i).clamp(0, columnCount - 1).toInt();
+      positioned.add(_PositionedTodayScheduleEntry(entry: entry, column: column, columnCount: columnCount));
+    }
+    return positioned;
   }
 
   Map<String, int> _buildYearProgress(DateTime todayStart) {
@@ -4071,7 +4083,11 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final theme = AppThemeColors.fromDashboardStyle(style);
     final now = _scheduleNow;
     final entries = _buildTodayScheduleEntries(todayRows, now);
+    final positionedEntries = _positionOverlappingTodayEntries(entries.where((entry) => entry.taskRow != null).toList());
     final dateLabel = '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+    const hourHeight = 72.0;
+    const labelWidth = 58.0;
+    const timelineHeight = hourHeight * 24;
 
     return _panel(
       title: 'TODAY SCHEDULE',
@@ -4105,22 +4121,48 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               ],
             ),
             const SizedBox(height: 14),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 560),
-              child: entries.isEmpty
-                  ? _freeTimeTile(start: 8 * 60, end: 18 * 60, onTap: _openQuickAddForNow)
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      itemBuilder: (context, index) {
-                        final entry = entries[index];
-                        if (entry.taskRow == null) {
-                          return _freeTimeTile(start: entry.startMinutes, end: entry.endMinutes, onTap: _openQuickAddForNow);
-                        }
-                        return _scheduleTaskTile(entry, theme, style);
-                      },
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemCount: entries.length,
-                    ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final laneAreaWidth = constraints.maxWidth - labelWidth;
+                return SizedBox(
+                  height: timelineHeight,
+                  child: Stack(
+                    children: [
+                      for (var hour = 0; hour < 24; hour++)
+                        Positioned(
+                          top: hour * hourHeight,
+                          left: 0,
+                          right: 0,
+                          height: hourHeight,
+                          child: InkWell(
+                            onTap: _openQuickAddForNow,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(width: labelWidth, child: Text(_formatScheduleTime(hour * 60), style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800))),
+                                Expanded(child: Container(decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.border.withOpacity(0.35)))))),
+                              ],
+                            ),
+                          ),
+                        ),
+                      Positioned(
+                        top: ((now.hour * 60 + now.minute) / 60) * hourHeight,
+                        left: labelWidth,
+                        right: 0,
+                        child: Container(height: 2, color: theme.accent),
+                      ),
+                      for (final positioned in positionedEntries)
+                        Positioned(
+                          top: (positioned.entry.startMinutes / 60) * hourHeight,
+                          left: labelWidth + positioned.column * ((laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount + 6),
+                          width: (laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount,
+                          height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(28.0, timelineHeight),
+                          child: _scheduleTaskTile(positioned.entry, theme, style, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 30),
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -4128,7 +4170,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     );
   }
 
-  Widget _scheduleTaskTile(_TodayScheduleEntry entry, AppThemeColors theme, DashboardThemeStyle style) {
+  Widget _scheduleTaskTile(_TodayScheduleEntry entry, AppThemeColors theme, DashboardThemeStyle style, {bool compact = false}) {
     final row = entry.taskRow!;
     final state = _scheduleStateFor(row, entry, _scheduleNow);
     final baseColor = _scheduleStateColor(state, theme);
@@ -4142,7 +4184,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
           borderRadius: BorderRadius.circular(18),
           onTap: () => _openTodayTaskQuickOccurrence(row),
           child: Container(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(compact ? 8 : 12),
             decoration: BoxDecoration(
               color: baseColor.withOpacity(opacity),
               borderRadius: BorderRadius.circular(18),
@@ -4156,7 +4198,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 76, child: Text(_formatScheduleTime(entry.startMinutes), style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w900))),
+          if (!compact) SizedBox(width: 76, child: Text(_formatScheduleTime(entry.startMinutes), style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w900))),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -4169,10 +4211,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                     child: Text('Active Now', style: TextStyle(color: AppThemeColors.readableTextOn(theme.accent, style), fontWeight: FontWeight.w900, fontSize: 12)),
                   ),
                 Text(toTitleCase(row.task.task), style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)),
-                const SizedBox(height: 4),
-                Text('${_formatScheduleTime(entry.startMinutes)} - ${_formatScheduleTime(entry.endMinutes)}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                Text(_scheduleStateLabel(state), style: TextStyle(color: baseColor, fontWeight: FontWeight.w900)),
+                if (!compact) ...[
+                  const SizedBox(height: 4),
+                  Text('${_formatScheduleTime(entry.startMinutes)} - ${_formatScheduleTime(entry.endMinutes)}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                ],
+                Text(_scheduleStateLabel(state), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: baseColor, fontWeight: FontWeight.w900)),
               ],
             ),
           ),
@@ -5008,6 +5052,18 @@ class _TodayScheduleEntry {
     required this.startMinutes,
     required this.endMinutes,
     this.taskRow,
+  });
+}
+
+class _PositionedTodayScheduleEntry {
+  final _TodayScheduleEntry entry;
+  final int column;
+  final int columnCount;
+
+  const _PositionedTodayScheduleEntry({
+    required this.entry,
+    required this.column,
+    required this.columnCount,
   });
 }
 

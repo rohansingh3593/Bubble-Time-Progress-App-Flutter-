@@ -300,34 +300,22 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   }
 
   _DayScheduleRange? _scheduleRangeForTask(Task task) {
-    final descriptionRange = _scheduleRangeFromDescription(task.description);
-    if (descriptionRange != null) return descriptionRange;
-    final hasExplicitTime = task.dueDate.hour != 0 || task.dueDate.minute != 0 || task.hourSlot != null;
-    if (!hasExplicitTime) return null;
-    final start = (task.hourSlot ?? task.dueDate.hour) * 60 + (task.hourSlot == null ? task.dueDate.minute : 0);
-    final end = (start + taskPlannedMinutes(task)).clamp(start + 15, 24 * 60).toInt();
-    return _DayScheduleRange(start: start, end: end);
+    return _scheduleRangeFromDescription(task.description);
   }
 
   _DayScheduleRange? _scheduleRangeFromDescription(String description) {
     int? start;
     int? end;
-    int? legacy;
     for (final line in description.split('\n')) {
       final trimmed = line.trim();
       if (trimmed.startsWith('⏰ Schedule Start:')) {
         start = _parseScheduleMinutes(trimmed.substring('⏰ Schedule Start:'.length).trim());
       } else if (trimmed.startsWith('⏰ Schedule End:')) {
         end = _parseScheduleMinutes(trimmed.substring('⏰ Schedule End:'.length).trim());
-      } else if (trimmed.startsWith('⏰ Scheduled:')) {
-        legacy = _parseScheduleMinutes(trimmed.substring('⏰ Scheduled:'.length).trim());
       }
     }
-    if (start == null && end == null && legacy != null) {
-      start = (legacy - 15).clamp(0, 24 * 60).toInt();
-      end = (legacy + 15).clamp(0, 24 * 60).toInt();
-    }
     if (start == null || end == null) return null;
+    if (end <= start) end = (start + 15).clamp(0, 24 * 60).toInt();
     return _DayScheduleRange(start: start, end: end);
   }
 
@@ -391,6 +379,24 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
       case _DayScheduleStatus.missed:
         return 'Missed';
     }
+  }
+
+  List<_PositionedDayScheduleEntry> _positionOverlappingEntries(List<_DayScheduleEntry> entries) {
+    final positioned = <_PositionedDayScheduleEntry>[];
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final overlappingIndexes = <int>[];
+      for (var j = 0; j < entries.length; j++) {
+        final other = entries[j];
+        if (entry.startMinutes < other.endMinutes && other.startMinutes < entry.endMinutes) {
+          overlappingIndexes.add(j);
+        }
+      }
+      final columnCount = overlappingIndexes.length.clamp(1, 4).toInt();
+      final column = overlappingIndexes.indexOf(i).clamp(0, columnCount - 1).toInt();
+      positioned.add(_PositionedDayScheduleEntry(entry: entry, column: column, columnCount: columnCount));
+    }
+    return positioned;
   }
 
   @override
@@ -526,7 +532,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
           const SizedBox(height: 14),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(compact ? 8 : 12),
             decoration: BoxDecoration(
               color: const Color(0xFFF3F7FF),
               borderRadius: BorderRadius.circular(18),
@@ -544,9 +550,13 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
 
   Widget _todaySchedulePanel(List<Task> tasks, DashboardThemeStyle theme) {
     final entries = _buildDayScheduleEntries(tasks);
+    final positionedEntries = _positionOverlappingEntries(entries.where((entry) => entry.task != null).toList());
     final visibleTasks = tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
     final completed = visibleTasks.where((task) => task.done || task.status.trim().toLowerCase() == 'completed').length;
     final completionRate = visibleTasks.isEmpty ? 0 : ((completed / visibleTasks.length) * 100).round();
+    const hourHeight = 72.0;
+    const labelWidth = 58.0;
+    const timelineHeight = hourHeight * 24;
 
     return Container(
       width: double.infinity,
@@ -569,19 +579,60 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
           const SizedBox(height: 6),
           Text('$completionRate% Complete', style: TextStyle(color: theme.primary, fontWeight: FontWeight.w900)),
           const SizedBox(height: 12),
-          if (entries.isEmpty)
-            _freeScheduleTile(theme, 8 * 60, 18 * 60)
-          else
-            ...entries.map((entry) {
-              if (entry.task == null) return Padding(padding: const EdgeInsets.only(bottom: 8), child: _freeScheduleTile(theme, entry.startMinutes, entry.endMinutes));
-              return Padding(padding: const EdgeInsets.only(bottom: 8), child: _taskScheduleTile(theme, entry));
-            }),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final laneAreaWidth = constraints.maxWidth - labelWidth;
+              return SizedBox(
+                height: timelineHeight,
+                child: Stack(
+                  children: [
+                    for (var hour = 0; hour < 24; hour++)
+                      Positioned(
+                        top: hour * hourHeight,
+                        left: 0,
+                        right: 0,
+                        height: hourHeight,
+                        child: InkWell(
+                          onTap: () => showTaskFormDialog(context, date: _currentDay, initialHourSlot: hour),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(width: labelWidth, child: Text(_formatScheduleTime(hour * 60), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800))),
+                              Expanded(
+                                child: Container(
+                                  decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.textMuted.withOpacity(0.35)))),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (_sameDate(_currentDay, _scheduleNow))
+                      Positioned(
+                        top: ((_scheduleNow.hour * 60 + _scheduleNow.minute) / 60) * hourHeight,
+                        left: labelWidth,
+                        right: 0,
+                        child: Container(height: 2, color: AppThemeColors.fromDashboardStyle(theme).accent),
+                      ),
+                    for (final positioned in positionedEntries)
+                      Positioned(
+                        top: (positioned.entry.startMinutes / 60) * hourHeight,
+                        left: labelWidth + positioned.column * ((laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount + 6),
+                        width: (laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount,
+                        height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(28.0, timelineHeight),
+                        child: _taskScheduleTile(theme, positioned.entry, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 30),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _taskScheduleTile(DashboardThemeStyle theme, _DayScheduleEntry entry) {
+  Widget _taskScheduleTile(DashboardThemeStyle theme, _DayScheduleEntry entry, {bool compact = false}) {
     final task = entry.task!;
     final status = _scheduleStatusFor(task, entry);
     final color = _scheduleStatusColor(status, theme);
@@ -609,7 +660,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 72, child: Text(_formatScheduleTime(entry.startMinutes), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w900))),
+          if (!compact) SizedBox(width: 72, child: Text(_formatScheduleTime(entry.startMinutes), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w900))),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -622,10 +673,12 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                     child: Text('Active Now', style: TextStyle(color: AppThemeColors.readableTextOn(color, theme), fontWeight: FontWeight.w900, fontSize: 11)),
                   ),
                 Text(toTitleCase(task.task), style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 3),
-                Text('${_formatScheduleTime(entry.startMinutes)} - ${_formatScheduleTime(entry.endMinutes)}', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 3),
-                Text(_scheduleStatusLabel(status), style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+                if (!compact) ...[
+                  const SizedBox(height: 3),
+                  Text('${_formatScheduleTime(entry.startMinutes)} - ${_formatScheduleTime(entry.endMinutes)}', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                ],
+                Text(_scheduleStatusLabel(status), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: color, fontWeight: FontWeight.w900)),
               ],
             ),
           ),
@@ -980,5 +1033,17 @@ class _DayScheduleEntry {
     required this.startMinutes,
     required this.endMinutes,
     this.task,
+  });
+}
+
+class _PositionedDayScheduleEntry {
+  final _DayScheduleEntry entry;
+  final int column;
+  final int columnCount;
+
+  const _PositionedDayScheduleEntry({
+    required this.entry,
+    required this.column,
+    required this.columnCount,
   });
 }
