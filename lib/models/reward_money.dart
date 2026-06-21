@@ -112,11 +112,11 @@ class RewardGoalMilestone {
   final String description;
   final String imagePath;
   final String reward;
-  final int bonusXp;
+  final int bonusPoints;
 
-  const RewardGoalMilestone({required this.id, required this.percent, required this.title, this.description = '', this.imagePath = '', this.reward = '', this.bonusXp = 0});
+  const RewardGoalMilestone({required this.id, required this.percent, required this.title, this.description = '', this.imagePath = '', this.reward = '', this.bonusPoints = 0});
 
-  List<dynamic> toStorageList() => [id, percent, title, description, imagePath, reward, bonusXp];
+  List<dynamic> toStorageList() => [id, percent, title, description, imagePath, reward, bonusPoints];
 
   factory RewardGoalMilestone.fromStorageList(List<dynamic> raw) {
     return RewardGoalMilestone(
@@ -126,7 +126,7 @@ class RewardGoalMilestone {
       description: raw.length > 3 ? '${raw[3]}' : '',
       imagePath: raw.length > 4 ? '${raw[4]}' : '',
       reward: raw.length > 5 ? '${raw[5]}' : '',
-      bonusXp: _readInt(raw, 6),
+      bonusPoints: _readInt(raw, 6),
     );
   }
 }

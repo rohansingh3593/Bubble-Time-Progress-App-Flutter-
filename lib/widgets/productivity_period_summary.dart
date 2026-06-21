@@ -37,7 +37,7 @@ class PeriodProductivityStats {
   });
 
   int get totalPoints => snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.totalPoints);
-  int get totalXp => totalPoints ~/ 10;
+  int get totalRewardPoints => totalPoints ~/ 10;
   int get streakBonusEarned => snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.streakBonusPoints);
   int get completedPhases => snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.projectPhasesCompleted);
   int get routineCompletions => snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.routineCompletions);
@@ -120,7 +120,7 @@ class ProductivityPeriodSummaryCard extends StatelessWidget {
                       _MetricCard(label: 'Productivity', value: '${stats.productivityScore.round()}%', icon: Icons.insights_rounded),
                       _MetricCard(label: 'Rating', value: stats.rating, icon: Icons.emoji_events_outlined),
                       _MetricCard(label: 'Total Points', value: '${stats.totalPoints} / ${stats.maximumPoints}', icon: Icons.diamond_outlined),
-                      _MetricCard(label: 'Total XP', value: '${stats.totalXp}', icon: Icons.bolt_rounded),
+                      _MetricCard(label: 'Total Points', value: '${stats.totalRewardPoints}', icon: Icons.bolt_rounded),
                       _MetricCard(label: 'Focus Hours', value: _formatHours(stats.totalHours), icon: Icons.timer_outlined),
                       _MetricCard(label: 'Active Days', value: '${stats.activeDays} / ${stats.totalDays}', icon: Icons.calendar_today_outlined),
                       _MetricCard(label: 'Average Daily Score', value: '${stats.averageDailyScore.round()}%', icon: Icons.show_chart_rounded),

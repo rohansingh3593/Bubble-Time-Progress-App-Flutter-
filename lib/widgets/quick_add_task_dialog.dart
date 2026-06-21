@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/instruction.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
@@ -780,7 +784,7 @@ String _instructionSummary(InstructionRule instruction) {
   final phase = instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}';
   if (instruction.isLevelBased) return '${instruction.levels.length} levels${instruction.unit.isEmpty ? '' : ' • ${instruction.unit}'}$phase';
   if (instruction.isOptionBased) return '${instruction.options.length} options$phase';
-  return 'Simple • +${instruction.bonusPoints} pts • +${instruction.xpEarned} XP$phase';
+  return 'Simple • +${instruction.bonusPoints} pts • +${instruction.pointsEarned} Points$phase';
 }
 
 List<InstructionRule> _linkedInstructionsForTask(HiveService hiveService, String taskName) {
@@ -800,25 +804,27 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
   final nameController = TextEditingController(text: initialInstruction?.name ?? '');
   final descriptionController = TextEditingController(text: initialInstruction?.description ?? '');
   final bonusController = TextEditingController(text: '${initialInstruction?.bonusPoints ?? 20}');
-  final xpController = TextEditingController(text: '${initialInstruction?.xpEarned ?? 5}');
+  final xpController = TextEditingController(text: '${initialInstruction?.pointsEarned ?? 5}');
   final unitController = TextEditingController(text: initialInstruction?.unit.isNotEmpty == true ? initialInstruction!.unit : 'km');
   var repeatType = initialInstruction?.repeatType ?? InstructionRule.repeatDaily;
-  var instructionType = initialInstruction?.instructionType ?? InstructionRule.typeSimple;
+  var instructionType = InstructionRule.typeMultipleOption;
   var levels = initialInstruction?.levels.isNotEmpty == true ? initialInstruction!.levels : const [
-    InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, xpEarned: 5),
-    InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, xpEarned: 8),
-    InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, xpEarned: 12),
+    InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, pointsEarned: 5),
+    InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, pointsEarned: 8),
+    InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, pointsEarned: 12),
   ];
   var options = initialInstruction?.options.isNotEmpty == true ? initialInstruction!.options : const [
-    InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, xpEarned: 2, emoji: '🥤'),
-    InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, xpEarned: 5, emoji: '🥤'),
-    InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, xpEarned: 8, emoji: '🍊'),
-    InstructionOption(id: 'option_amla', name: 'Amla Juice', bonusPoints: 50, xpEarned: 10, emoji: '🥤'),
+    InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, pointsEarned: 2, emoji: '🥤'),
+    InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, pointsEarned: 5, emoji: '🥤'),
+    InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, pointsEarned: 8, emoji: '🍊'),
+    InstructionOption(id: 'option_amla', name: 'Amla Juice', bonusPoints: 50, pointsEarned: 10, emoji: '🥤'),
   ];
   var enabled = initialInstruction?.enabled ?? true;
   var streakTracking = initialInstruction?.streakTracking ?? true;
   var colorValue = initialInstruction?.colorValue ?? 0xFF43A047;
   var linkedPhase = initialInstruction?.linkedPhase ?? '';
+  var instructionImagePaths = [...(initialInstruction?.imagePaths ?? const <String>[])];
+  var instructionCoverImagePath = initialInstruction?.coverImagePath ?? '';
   final instruction = await showDialog<InstructionRule>(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -832,6 +838,52 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
               children: [
                 TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
                 TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+                const SizedBox(height: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Instruction Images (${instructionImagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 4),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      onPressed: () async {
+                        final picked = await ImagePicker().pickMultiImage();
+                        if (picked.isEmpty) return;
+                        setDialogState(() {
+                          instructionImagePaths = [...instructionImagePaths, ...picked.map((image) => image.path)];
+                          if (instructionCoverImagePath.isEmpty && instructionImagePaths.isNotEmpty) instructionCoverImagePath = instructionImagePaths.first;
+                        });
+                      },
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: Text(instructionImagePaths.isEmpty ? 'Add Images' : 'Add More Images'),
+                    ),
+                  ],
+                ),
+                if (instructionImagePaths.isEmpty)
+                  const Align(alignment: Alignment.centerLeft, child: Text('No instruction images added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)))
+                else
+                  ...instructionImagePaths.map((path) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(path == instructionCoverImagePath ? Icons.star_rounded : Icons.image_outlined, color: path == instructionCoverImagePath ? Colors.amber : null),
+                        title: Text(path.split('/').last, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(path == instructionCoverImagePath ? 'Cover image' : 'Instruction image'),
+                        trailing: Wrap(
+                          spacing: 2,
+                          children: [
+                            IconButton(tooltip: 'View', icon: const Icon(Icons.visibility_outlined, size: 18), onPressed: () => _showOptionImagePathDialog(context, path)),
+                            IconButton(tooltip: 'Change Cover', icon: const Icon(Icons.star_border_rounded, size: 18), onPressed: () => setDialogState(() => instructionCoverImagePath = path)),
+                            IconButton(
+                              tooltip: 'Remove',
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              onPressed: () => setDialogState(() {
+                                instructionImagePaths = instructionImagePaths.where((item) => item != path).toList();
+                                if (instructionCoverImagePath == path) instructionCoverImagePath = instructionImagePaths.isEmpty ? '' : instructionImagePaths.first;
+                              }),
+                            ),
+                          ],
+                        ),
+                      )),
                 if (phaseNames.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
@@ -847,7 +899,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                 DropdownButtonFormField<String>(
                   value: instructionType,
                   decoration: const InputDecoration(labelText: 'Instruction Type'),
-                  items: const [InstructionRule.typeSimple, InstructionRule.typeLevelBased, InstructionRule.typeOptionBased]
+                  items: const [InstructionRule.typeMultipleOption]
                       .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                       .toList(),
                   onChanged: (value) => setDialogState(() => instructionType = value ?? instructionType),
@@ -860,10 +912,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                       .toList(),
                   onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
                 ),
-                if (instructionType == InstructionRule.typeSimple) ...[
-                  TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
-                ] else if (instructionType == InstructionRule.typeLevelBased) ...[
+                if (false) ...[
                   TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
                   const Align(alignment: Alignment.centerLeft, child: Text('Levels', style: TextStyle(fontWeight: FontWeight.w900))),
                   ...levels.asMap().entries.map((entry) {
@@ -873,7 +922,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                       dense: true,
                       leading: const Icon(Icons.emoji_events_outlined),
                       title: Text(toTitleCase(level.displayLabel)),
-                      subtitle: Text('+${level.bonusPoints} points • ${level.xpEarned} XP'),
+                      subtitle: Text('+${level.bonusPoints} points • ${level.pointsEarned} Points'),
                       trailing: Wrap(
                         spacing: 4,
                         children: [
@@ -918,7 +967,7 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                       dense: true,
                       leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
                       title: Text(toTitleCase(option.name)),
-                      subtitle: Text('+${option.bonusPoints} points • ${option.xpEarned} XP'),
+                      subtitle: Text('+${option.bonusPoints} points • ${option.pointsEarned} Points'),
                       trailing: Wrap(
                         spacing: 4,
                         children: [
@@ -986,19 +1035,19 @@ Future<InstructionRule?> _showAddInstructionForTaskDialog(
                 linkedTask: InstructionRule.encodeLinks([taskName]),
                 linkedPhase: linkedPhase.trim(),
                 repeatType: repeatType,
-                instructionType: instructionType,
-                unit: instructionType == InstructionRule.typeLevelBased ? unitController.text.trim() : '',
-                levels: instructionType == InstructionRule.typeLevelBased
-                    ? levels.map((level) => InstructionLevel(id: level.id, name: level.name, target: level.target, unit: unitController.text.trim().isEmpty ? level.unit : unitController.text.trim(), bonusPoints: level.bonusPoints, xpEarned: level.xpEarned)).toList()
-                    : const [],
-                options: instructionType == InstructionRule.typeOptionBased ? options : const [],
+                instructionType: InstructionRule.typeMultipleOption,
+                unit: '',
+                levels: const [],
+                options: options,
                 bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
-                xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
+                pointsEarned: int.tryParse(xpController.text.trim()) ?? 5,
                 colorValue: colorValue,
                 enabled: enabled,
                 streakTracking: streakTracking,
                 createdAt: initialInstruction?.createdAt ?? DateTime.now(),
                 history: initialInstruction?.history ?? const [],
+                imagePaths: instructionImagePaths,
+                coverImagePath: instructionCoverImagePath,
               ),
             ),
             child: const Text('Save'),
@@ -1022,7 +1071,7 @@ Future<InstructionLevel?> _showInstructionLevelDialog(BuildContext context, Inst
   final targetController = TextEditingController(text: initial == null ? '' : (initial.target % 1 == 0 ? initial.target.toStringAsFixed(0) : initial.target.toString()));
   final unitController = TextEditingController(text: initial?.unit ?? defaultUnit);
   final pointsController = TextEditingController(text: '${initial?.bonusPoints ?? 20}');
-  final xpController = TextEditingController(text: '${initial?.xpEarned ?? 5}');
+  final xpController = TextEditingController(text: '${initial?.pointsEarned ?? 5}');
   try {
     return await showDialog<InstructionLevel>(
       context: context,
@@ -1036,7 +1085,7 @@ Future<InstructionLevel?> _showInstructionLevelDialog(BuildContext context, Inst
               TextField(controller: targetController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target')),
               TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
               TextField(controller: pointsController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus XP')),
+              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
             ],
           ),
         ),
@@ -1051,7 +1100,7 @@ Future<InstructionLevel?> _showInstructionLevelDialog(BuildContext context, Inst
                 target: double.tryParse(targetController.text.trim()) ?? 0,
                 unit: unitController.text.trim(),
                 bonusPoints: int.tryParse(pointsController.text.trim()) ?? 0,
-                xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
+                pointsEarned: int.tryParse(xpController.text.trim()) ?? 0,
               ),
             ),
             child: const Text('Save'),
@@ -1073,41 +1122,138 @@ Future<InstructionOption?> _showInstructionOptionDialog(BuildContext context, In
   final nameController = TextEditingController(text: initial?.name ?? '');
   final descriptionController = TextEditingController(text: initial?.description ?? '');
   final pointsController = TextEditingController(text: '${initial?.bonusPoints ?? 10}');
-  final xpController = TextEditingController(text: '${initial?.xpEarned ?? 2}');
+  final xpController = TextEditingController(text: '${initial?.pointsEarned ?? 2}');
+  final linkController = TextEditingController();
+  var imagePaths = [...(initial?.imagePaths ?? const <String>[])];
+  var linkUrls = [...(initial?.effectiveLinks ?? const <String>[])];
+  var coverImagePath = initial?.coverImagePath ?? '';
   try {
     return await showDialog<InstructionOption>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(initial == null ? 'Add Option' : 'Edit Option'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Option Title')),
-              TextField(controller: descriptionController, decoration: const InputDecoration(labelText: 'Description')),
-              TextField(controller: pointsController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus XP')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(
-              context,
-              InstructionOption(
-                id: initial?.id ?? 'option_${DateTime.now().microsecondsSinceEpoch}',
-                name: nameController.text.trim().isEmpty ? 'Option' : nameController.text.trim(),
-                bonusPoints: int.tryParse(pointsController.text.trim()) ?? 0,
-                xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
-                emoji: emojiController.text.trim().isEmpty ? '•' : emojiController.text.trim(),
-                description: descriptionController.text.trim(),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(initial == null ? 'Add Option' : 'Edit Option'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 430,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Option Name')),
+                  TextField(controller: pointsController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Points')),
+                  TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
+                  const SizedBox(height: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Option Images (${imagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 4),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                        onPressed: () async {
+                          final picked = await ImagePicker().pickMultiImage();
+                          if (picked.isEmpty) return;
+                          setDialogState(() {
+                            imagePaths = [...imagePaths, ...picked.map((image) => image.path)];
+                            if (coverImagePath.isEmpty && imagePaths.isNotEmpty) coverImagePath = imagePaths.first;
+                          });
+                        },
+                        icon: const Icon(Icons.add_photo_alternate_outlined),
+                        label: Text(imagePaths.isEmpty ? 'Choose From Gallery' : 'Add More Images'),
+                      ),
+                    ],
+                  ),
+                  if (imagePaths.isEmpty)
+                    const Text('No images added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                  else
+                    ...imagePaths.map((path) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(path == coverImagePath ? Icons.star_rounded : Icons.image_outlined, color: path == coverImagePath ? Colors.amber : null),
+                          title: Text(path.split('/').last, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(path == coverImagePath ? 'Cover image' : 'Image'),
+                          trailing: Wrap(
+                            spacing: 2,
+                            children: [
+                              IconButton(tooltip: 'View', icon: const Icon(Icons.visibility_outlined, size: 18), onPressed: () => _showOptionImagePathDialog(context, path)),
+                              IconButton(tooltip: 'Change Cover', icon: const Icon(Icons.star_border_rounded, size: 18), onPressed: () => setDialogState(() => coverImagePath = path)),
+                              IconButton(
+                                tooltip: 'Remove',
+                                icon: const Icon(Icons.delete_outline, size: 18),
+                                onPressed: () => setDialogState(() {
+                                  imagePaths = imagePaths.where((item) => item != path).toList();
+                                  if (coverImagePath == path) coverImagePath = imagePaths.isEmpty ? '' : imagePaths.first;
+                                }),
+                              ),
+                            ],
+                          ),
+                        )),
+                  const SizedBox(height: 10),
+                  const Text('Website / Video Links Optional', style: TextStyle(fontWeight: FontWeight.w900)),
+                  Row(
+                    children: [
+                      Expanded(child: TextField(controller: linkController, decoration: const InputDecoration(hintText: 'https://youtube.com/...'))),
+                      IconButton(
+                        tooltip: 'Add Link',
+                        icon: const Icon(Icons.add_link),
+                        onPressed: () => setDialogState(() {
+                          final link = linkController.text.trim();
+                          if (link.isEmpty || linkUrls.contains(link)) return;
+                          linkUrls = [...linkUrls, link];
+                          linkController.clear();
+                        }),
+                      ),
+                    ],
+                  ),
+                  if (linkUrls.isEmpty)
+                    const Text('No links added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                  else
+                    ...linkUrls.map((link) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.link),
+                          title: Text(link, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: Wrap(
+                            spacing: 2,
+                            children: [
+                              TextButton.icon(onPressed: () => _copyOptionLink(context, link), icon: const Icon(Icons.open_in_new, size: 18), label: const Text('Open Link')),
+                              IconButton(
+                                tooltip: 'Remove Link',
+                                icon: const Icon(Icons.delete_outline, size: 18),
+                                onPressed: () => setDialogState(() => linkUrls = linkUrls.where((item) => item != link).toList()),
+                              ),
+                            ],
+                          ),
+                        )),
+                  TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+                ],
               ),
             ),
-            child: const Text('Save'),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(
+                context,
+                InstructionOption(
+                  id: initial?.id ?? 'option_${DateTime.now().microsecondsSinceEpoch}',
+                  name: nameController.text.trim().isEmpty ? 'Option' : nameController.text.trim(),
+                  bonusPoints: int.tryParse(pointsController.text.trim()) ?? 0,
+                  pointsEarned: int.tryParse(xpController.text.trim()) ?? 0,
+                  emoji: emojiController.text.trim().isEmpty ? '•' : emojiController.text.trim(),
+                  description: descriptionController.text.trim(),
+                  imagePaths: imagePaths,
+                  coverImagePath: coverImagePath,
+                  linkUrl: linkUrls.isEmpty ? '' : linkUrls.first,
+                  linkUrls: linkUrls,
+                ),
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
   } finally {
@@ -1116,7 +1262,59 @@ Future<InstructionOption?> _showInstructionOptionDialog(BuildContext context, In
     descriptionController.dispose();
     pointsController.dispose();
     xpController.dispose();
+    linkController.dispose();
   }
+}
+
+void _showOptionImagePathDialog(BuildContext context, String path) {
+  final title = _imageTitleFromPath(path);
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Flexible(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.file(
+                  File(path),
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => SelectableText('Unable to preview image:\n$path'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SelectableText(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            SelectableText(path, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+          ],
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+    ),
+  );
+}
+
+String _imageTitleFromPath(String path) {
+  final normalized = path.replaceAll('\\', '/');
+  final parts = normalized.split('/').where((part) => part.trim().isNotEmpty).toList();
+    final fileName = parts.isEmpty ? 'Option Image' : parts.last;
+  final dotIndex = fileName.lastIndexOf('.');
+  return dotIndex <= 0 ? fileName : fileName.substring(0, dotIndex);
+}
+
+
+Future<void> _copyOptionLink(BuildContext context, String rawLink) async {
+  final link = rawLink.trim();
+  if (link.isEmpty) return;
+  await Clipboard.setData(ClipboardData(text: link));
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Link copied: $link')));
 }
 
 class _ScheduleDraft {

@@ -155,8 +155,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                 final wide = constraints.maxWidth >= 960;
                 final content = Column(
                   children: [
-                    _buildModernTopBar(rankProfile),
-                    const SizedBox(height: 12),
                     _buildDashboardTabs(),
                     const SizedBox(height: 12),
                     Expanded(
@@ -164,7 +162,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                         children: [
                           _dashboardTabList([
                             _buildHeroCard(rankProfile, summary),
-                            _buildQuickStatsRibbon(summary, scopedTaskCounts, rankProfile),
                             _buildProgressOverviewStrip(timeProgress),
                             _buildMottoHeroCard(),
                             _summaryHeader(summary),
@@ -225,7 +222,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             _buildFeatureLaunchCard(
                               icon: Icons.auto_graph_rounded,
                               title: 'Growth Timeline',
-                              subtitle: 'Review journal, reflections, achievements, XP history, money history, streak records, and motivation.',
+                              subtitle: 'Review journal, reflections, achievements, Points history, money history, streak records, and motivation.',
                               actionLabel: 'Open Timeline',
                               onTap: _openJourneyTimeline,
                             ),
@@ -260,70 +257,6 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       itemBuilder: (context, index) => children[index],
       separatorBuilder: (_, __) => const SizedBox(height: 14),
       itemCount: children.length,
-    );
-  }
-
-  Widget _buildModernTopBar(RankProfile profile) {
-    final style = _dashboardStyle();
-    final rewardSummary = widget.hiveService.getRewardMoneySummary();
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final actions = Wrap(spacing: 8, runSpacing: 8, children: [
-          _headerActionButton(icon: Icons.search_rounded, tooltip: 'Search', style: style, onTap: _openProductivityTimeline),
-          _mottoHeaderButton(style),
-          _rewardMoneyBadge(style),
-          _headerActionButton(icon: Icons.settings_rounded, tooltip: 'Dashboard settings', style: style, onTap: _openSettingsPanel),
-        ]);
-        final profileIntro = Row(children: [
-          ProfileAvatar(profile: widget.hiveService.getUserProfile(), radius: 28, accentColor: style.primary, showGlow: true, onTap: _openProductivityTimeline),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Good Morning, ${profile.username}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 6),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                _topBarPill('Level ${profile.level}', Icons.military_tech_rounded),
-                _topBarPill('${_formatCompactNumber(profile.xp)} XP', Icons.bolt_rounded),
-                _topBarPill('₹${_formatCompactNumber(rewardSummary.availableRupees)} Earned', Icons.account_balance_wallet_rounded),
-                _topBarPill('${profile.activeStreak} Day Streak 🔥', Icons.local_fire_department_rounded),
-              ]),
-            ]),
-          ),
-        ]);
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [style.primary.withOpacity(0.18), style.secondary.withOpacity(0.10)]),
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(color: style.primary.withOpacity(0.18)),
-          ),
-          child: constraints.maxWidth < 900
-              ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [profileIntro, const SizedBox(height: 12), actions])
-              : Row(children: [Expanded(child: profileIntro), const SizedBox(width: 12), actions]),
-        );
-      },
-    );
-  }
-
-  Widget _topBarPill(String label, IconData icon) {
-    final style = _dashboardStyle();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(color: style.surface.withOpacity(0.78), borderRadius: BorderRadius.circular(999), border: Border.all(color: style.primary.withOpacity(0.14))),
-      child: LayoutBuilder(
-        builder: (context, constraints) => FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 15, color: style.primary),
-              const SizedBox(width: 5),
-              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800, fontSize: 12)),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -401,7 +334,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       _quickStatCard('Tasks', scopedCounts['Today'] ?? 0, Icons.task_alt_rounded, () => _showTaskListSheet('Today tasks', _dedupeTasksForDashboard(widget.hiveService.getAllTasksByDate().values.expand((list) => list).toList()))),
       _quickStatCard('Goals', summary['Completed'] ?? 0, Icons.flag_rounded, _openGoalDashboard),
       _quickStatCard('Coins', widget.hiveService.getRewardMoneySummary().availableRupees, Icons.paid_rounded, _openRewardMoneyHistory),
-      _quickStatCard('XP', profile.xp, Icons.bolt_rounded, _openProductivityTimeline),
+      _quickStatCard('Points', profile.xp, Icons.bolt_rounded, _openProductivityTimeline),
     ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -466,7 +399,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       _growthButton(Icons.menu_book_rounded, 'Journal', _openJournal),
       _growthButton(Icons.timeline_rounded, 'Personal Timeline', _openJourneyTimeline),
       _growthButton(Icons.account_balance_wallet_rounded, 'Money History', _openRewardMoneyHistory),
-      _growthButton(Icons.insights_rounded, 'XP & Analytics', _openProductivityTimeline),
+      _growthButton(Icons.insights_rounded, 'Points & Analytics', _openProductivityTimeline),
     ]);
   }
 
@@ -1038,17 +971,19 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
               children: [
                 ListTile(
                   title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900)),
-                  subtitle: Text(entry == null ? 'Have you followed this instruction today?' : 'This instruction is already updated today.'),
+                  subtitle: Text(entry == null
+                      ? (instruction.description.trim().isEmpty ? 'Choose Complete or Missed for today.' : instruction.description.trim())
+                      : 'This instruction is already updated today.'),
                 ),
                 if (entry == null && instruction.enabled) ...[
                   if (instruction.isOptionBased) ...[
+                    ListTile(
+                      leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                      title: const Text('Complete'),
+                      subtitle: const Text('Select one or more instruction options'),
+                      onTap: () => Navigator.pop(context, 'options'),
+                    ),
                     ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
-                    ...instruction.options.map((option) => ListTile(
-                          leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
-                          title: Text('${option.name} (+${option.bonusPoints})'),
-                          subtitle: Text('${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
-                          onTap: () => Navigator.pop(context, 'option:${option.id}'),
-                        )),
                   ] else if (instruction.isLevelBased) ...[
                     ListTile(
                       leading: const Icon(Icons.cancel_outlined, color: Colors.red),
@@ -1058,7 +993,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                     ...instruction.levels.map((level) => ListTile(
                           leading: const Icon(Icons.emoji_events_outlined, color: Colors.green),
                           title: Text('${level.displayLabel} (+${level.bonusPoints})'),
-                          subtitle: Text('${level.xpEarned} XP'),
+                          subtitle: Text('${level.pointsEarned} Points'),
                           onTap: () => Navigator.pop(context, 'level:${level.id}'),
                         )),
                   ] else ...[
@@ -1095,10 +1030,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       ),
     );
     if (!mounted || action == null || action == 'close') return;
-    if (action.startsWith('option:') && instruction.options.isNotEmpty) {
-      final optionId = action.substring('option:'.length);
-      final option = instruction.options.firstWhere((item) => item.id == optionId, orElse: () => instruction.options.first);
-      await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed, option: option);
+    if (action == 'options' && instruction.options.isNotEmpty) {
+      final selected = await _showInstructionOptionsCompletionDialog(instruction);
+      if (selected == null) return;
+      await widget.hiveService.updateInstructionStatus(
+        instruction,
+        today,
+        selected.isEmpty ? InstructionHistoryEntry.statusMissed : InstructionHistoryEntry.statusFollowed,
+        options: selected,
+      );
       return;
     }
     if (action.startsWith('level:') && instruction.levels.isNotEmpty) {
@@ -1118,6 +1058,61 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         await widget.hiveService.setInstructionEnabled(instruction, !instruction.enabled);
         break;
     }
+  }
+
+
+  Future<List<InstructionOption>?> _showInstructionOptionsCompletionDialog(InstructionRule instruction) async {
+    final selectedIds = <String>{};
+    return showDialog<List<InstructionOption>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(toTitleCase(instruction.name)),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (instruction.description.trim().isNotEmpty) ...[
+                    Text(instruction.description.trim(), style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                    const SizedBox(height: 10),
+                  ],
+                  ...instruction.options.map((option) {
+                    final checked = selectedIds.contains(option.id);
+                    return CheckboxListTile(
+                      value: checked,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('${option.name} +${option.bonusPoints} ${option.emoji}'),
+                      subtitle: Text('${option.pointsEarned} Points${option.description.isEmpty ? '' : ' • ${option.description}'}'),
+                      onChanged: (value) => setDialogState(() {
+                        if (value == true) {
+                          selectedIds.add(option.id);
+                        } else {
+                          selectedIds.remove(option.id);
+                        }
+                      }),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(context, const <InstructionOption>[]), child: const Text('Missed')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(
+                context,
+                instruction.options.where((option) => selectedIds.contains(option.id)).toList(),
+              ),
+              child: const Text('Complete'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showInstructionFilterSheet(String title, List<InstructionRule> instructions, DateTime today) {
@@ -2624,6 +2619,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
     final completed = summary['COMPLETED'] ?? 0;
     final total = (summary['TOTAL TASKS'] ?? 1).clamp(1, 999999);
     final progress = completed / total;
+    final rewardSummary = widget.hiveService.getRewardMoneySummary();
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -2674,7 +2670,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                                       style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700),
                                     ),
                                     Text(
-                                      'Level ${profile.level} • ${summary["TODAY'S TASKS"] ?? 0} tasks today',
+                                      'Combined dashboard summary',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(color: Color(0xFFD9D9FF)),
@@ -2685,12 +2681,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                                   crossAxisAlignment: constraints.maxWidth < 360 ? CrossAxisAlignment.start : CrossAxisAlignment.end,
                                   children: [
                                     Text(
-                                      '${profile.activeStreak} days',
+                                      'All totals',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                                     ),
-                                    const Text('Current streak', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Color(0xFFD9D9FF))),
+                                    const Text('No duplicate cards', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Color(0xFFD9D9FF))),
                                   ],
                                 );
                                 final avatar = ProfileAvatar(
@@ -2749,6 +2745,18 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             const SizedBox(height: 8),
                             Text('$completed / $total completed', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                _heroMetric('Level', '${profile.level}'),
+                                _heroMetric('Points', _formatCompactNumber(profile.points)),
+                                _heroMetric('Money', '₹${_formatCompactNumber(rewardSummary.availableRupees)}'),
+                                _heroMetric('Streak', '${profile.activeStreak} days'),
+                                _heroMetric('Today Tasks', '${summary["TODAY'S TASKS"] ?? 0}'),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
                             SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: Row(
@@ -2804,9 +2812,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                                       padding: const EdgeInsets.only(top: 10),
                                       child: Row(
                                         children: [
-                                          Expanded(child: _heroMetric('XP', '${profile.xp}')),
                                           Expanded(child: _heroMetric('Score', '${profile.productivityScore}%')),
-                                          Expanded(child: _heroMetric('Streak', '${profile.activeStreak}')),
+                                          Expanded(child: _heroMetric('Active Days', '${profile.totalActiveDays}')),
+                                          Expanded(child: _heroMetric('Journals', '${profile.journalEntries}')),
                                         ],
                                       ),
                                     )

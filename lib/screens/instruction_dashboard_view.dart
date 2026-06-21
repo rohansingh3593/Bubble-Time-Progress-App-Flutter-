@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../constants/colors.dart';
 import '../models/instruction.dart';
@@ -18,6 +22,7 @@ class InstructionDashboardView extends StatefulWidget {
 
 class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   String _filter = 'All';
+  String _instructionProductivityPeriod = InstructionRule.repeatDaily;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +48,14 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 96),
             children: [
-              _InstructionSummaryPanel(hiveService: widget.hiveService, instructions: instructions, today: today),
+              _InstructionSummaryPanel(
+                hiveService: widget.hiveService,
+                instructions: instructions,
+                today: today,
+                period: _instructionProductivityPeriod,
+                onPeriodChanged: (period) => setState(() => _instructionProductivityPeriod = period),
+                onOpenList: _showInstructionProductivityList,
+              ),
               const SizedBox(height: 16),
               _filterChips(),
               const SizedBox(height: 12),
@@ -106,139 +118,272 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     }).toList();
   }
 
-  Future<void> _showInstructionActions(InstructionRule instruction) async {
+
+  void _showInstructionProductivityList(String title, List<InstructionRule> instructions) {
     final today = DateTime.now();
-    final entry = widget.hiveService.instructionEntryForDate(instruction, today);
-    final action = await showModalBottomSheet<String>(
+    showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) => SafeArea(
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.86),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ListTile(
-                  title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900)),
-                  subtitle: Text(entry == null ? 'Pending for current period' : 'Already updated: ${entry.status}'),
-                ),
-                if (instruction.isTaskLinked)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Text(
-                      'This instruction is linked to a task. Update it from the task occurrence screen.',
-                      style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54),
-                    ),
-                  )
-                else if (entry == null && instruction.enabled) ...[
-                  if (instruction.isOptionBased) ...[
-                    ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
-                    ...instruction.options.map((option) => ListTile(
-                          leading: Text(option.emoji, style: const TextStyle(fontSize: 22)),
-                          title: Text('${option.name} (+${option.bonusPoints})'),
-                          subtitle: Text('${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}'),
-                          onTap: () => Navigator.pop(context, 'option:${option.id}'),
-                        )),
-                  ] else if (instruction.isLevelBased) ...[
-                    ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
-                    ...instruction.levels.map((level) => ListTile(
-                          leading: const Icon(Icons.emoji_events_outlined, color: Colors.green),
-                          title: Text('${level.displayLabel} (+${level.bonusPoints})'),
-                          subtitle: Text('${level.xpEarned} XP'),
-                          onTap: () => Navigator.pop(context, 'level:${level.id}'),
-                        )),
-                  ] else ...[
-                    ListTile(leading: const Icon(Icons.check_circle_outline, color: Colors.green), title: const Text('Followed'), onTap: () => Navigator.pop(context, 'followed')),
-                    ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.red), title: const Text('Missed'), onTap: () => Navigator.pop(context, 'missed')),
-                  ],
-                ] else
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Text('Instruction already updated for this period.', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
-                  ),
-                ListTile(leading: const Icon(Icons.visibility_outlined), title: const Text('View Details'), onTap: () => Navigator.pop(context, 'details')),
-                ListTile(leading: Icon(instruction.enabled ? Icons.pause_circle_outline : Icons.play_circle_outline), title: Text(instruction.enabled ? 'Disable' : 'Enable'), onTap: () => Navigator.pop(context, 'toggle')),
-                ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Edit'), onTap: () => Navigator.pop(context, 'edit')),
-                ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Delete from dashboard'), onTap: () => Navigator.pop(context, 'delete')),
-              ],
-            ),
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.82),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+              ),
+              Expanded(
+                child: instructions.isEmpty
+                    ? const Center(child: Text('No standalone instructions found for this filter.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)))
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+                        itemCount: instructions.length,
+                        separatorBuilder: (_, __) => const Divider(height: 18),
+                        itemBuilder: (context, index) {
+                          final instruction = instructions[index];
+                          final entry = widget.hiveService.instructionEntryForDate(instruction, today);
+                          final streak = widget.hiveService.instructionCurrentStreak(instruction, today);
+                          final status = !instruction.enabled
+                              ? 'Disabled'
+                              : entry?.followed == true
+                                  ? 'Followed Today'
+                                  : entry?.missed == true
+                                      ? 'Missed Today'
+                                      : 'Pending Today';
+                          final selected = entry?.selectionSummary.isNotEmpty == true ? entry!.selectionSummary : 'None';
+                          final lastUpdated = instruction.history.isEmpty ? 'Never' : _formatDate(instruction.history.last.date);
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900)),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(status, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                  Text('Selected: $selected'),
+                                  Text('Bonus: +${entry?.bonusPoints ?? 0} Points'),
+                                  Text('Streak: $streak Day${streak == 1 ? '' : 's'}'),
+                                  Text('Last Updated: $lastUpdated'),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           ),
         ),
       ),
     );
-    if (!mounted || action == null) return;
-    if (action.startsWith('option:') && instruction.options.isNotEmpty) {
-      final optionId = action.substring('option:'.length);
-      final option = instruction.options.firstWhere((item) => item.id == optionId, orElse: () => instruction.options.first);
-      await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed, option: option);
+  }
+
+  Future<void> _showInstructionActions(InstructionRule instruction) async {
+    if (instruction.isTaskLinked) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Task-linked instructions are updated from the related task completion popup.')),
+      );
       return;
     }
-    if (action.startsWith('level:') && instruction.levels.isNotEmpty) {
-      final levelId = action.substring('level:'.length);
-      final level = instruction.levels.firstWhere((item) => item.id == levelId, orElse: () => instruction.levels.first);
-      await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed, level: level);
-      return;
+    await _showInstructionUpdateDialog(instruction);
+  }
+
+  Future<void> _showInstructionUpdateDialog(InstructionRule instruction) async {
+    final today = DateTime.now();
+    final existingEntry = widget.hiveService.instructionEntryForDate(instruction, today);
+    var status = existingEntry?.missed == true ? InstructionHistoryEntry.statusMissed : InstructionHistoryEntry.statusFollowed;
+    final selectedIds = <String>{};
+    if (existingEntry != null) {
+      selectedIds.addAll(existingEntry.selectedOptions.map((option) => option.id));
+      if (existingEntry.optionId.isNotEmpty) selectedIds.add(existingEntry.optionId);
     }
-    switch (action) {
-      case 'followed':
-        await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusFollowed);
-        break;
-      case 'missed':
-        await widget.hiveService.updateInstructionStatus(instruction, today, InstructionHistoryEntry.statusMissed);
-        break;
-      case 'toggle':
-        await widget.hiveService.setInstructionEnabled(instruction, !instruction.enabled);
-        break;
-      case 'details':
-        _showInstructionDetails(instruction);
-        break;
-      case 'edit':
-        _showInstructionForm(instruction);
-        break;
-      case 'delete':
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Delete Instruction?'),
-            content: const Text('This removes the instruction from the dashboard and future tracking only. Past points, XP, money, timeline history, and completed history remain saved.'),
+
+    final saved = await showDialog<_InstructionUpdateResult>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final selectedOptions = instruction.options.where((option) => selectedIds.contains(option.id)).toList();
+          final bonus = status == InstructionHistoryEntry.statusFollowed ? selectedOptions.fold<int>(0, (sum, option) => sum + option.bonusPoints) : 0;
+          final percentage = status == InstructionHistoryEntry.statusMissed
+              ? 0.0
+              : instruction.options.isEmpty
+                  ? 100.0
+                  : (selectedOptions.length / instruction.options.length) * 100;
+          final emoji = _instructionEmojiStatus(status, selectedOptions.length, percentage);
+          return AlertDialog(
+            title: Text('Instruction Update\n${toTitleCase(instruction.name)}'),
+            content: SingleChildScrollView(
+              child: SizedBox(
+                width: 430,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (instruction.description.trim().isNotEmpty) ...[
+                      Text(instruction.description.trim(), style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                      const SizedBox(height: 12),
+                    ],
+                    const Text('Status', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                    RadioListTile<String>(
+                      value: InstructionHistoryEntry.statusFollowed,
+                      groupValue: status,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Followed'),
+                      onChanged: (value) => setDialogState(() => status = value ?? status),
+                    ),
+                    RadioListTile<String>(
+                      value: InstructionHistoryEntry.statusMissed,
+                      groupValue: status,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Missed'),
+                      onChanged: (value) => setDialogState(() => status = value ?? status),
+                    ),
+                    if (instruction.options.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      const Text('Options', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                      ...instruction.options.map((option) {
+                        final checked = selectedIds.contains(option.id);
+                        return CheckboxListTile(
+                          value: checked,
+                          enabled: status == InstructionHistoryEntry.statusFollowed,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('${option.name} (+${option.bonusPoints} Points)'),
+                          subtitle: option.description.trim().isEmpty ? null : Text(option.description.trim()),
+                          secondary: Text(option.emoji, style: const TextStyle(fontSize: 22)),
+                          onChanged: (value) => setDialogState(() {
+                            status = InstructionHistoryEntry.statusFollowed;
+                            if (value == true) {
+                              selectedIds.add(option.id);
+                            } else {
+                              selectedIds.remove(option.id);
+                            }
+                          }),
+                        );
+                      }),
+                    ],
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Total Bonus Points: +$bonus', style: const TextStyle(fontWeight: FontWeight.w900)),
+                          Text('Completion Percentage: ${percentage.round()}%', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                          Text('Emoji Status: $emoji', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-              ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete from dashboard only')),
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(
+                  context,
+                  _InstructionUpdateResult(
+                    status: status,
+                    selectedOptions: status == InstructionHistoryEntry.statusFollowed ? selectedOptions : const <InstructionOption>[],
+                    bonusPoints: bonus,
+                    percentage: percentage,
+                    emojiStatus: emoji,
+                  ),
+                ),
+                child: const Text('Save Update'),
+              ),
             ],
-          ),
-        );
-        if (confirm == true) await widget.hiveService.deleteInstruction(instruction.id);
-        break;
-    }
+          );
+        },
+      ),
+    );
+    if (saved == null) return;
+    await widget.hiveService.updateInstructionStatus(
+      instruction,
+      today,
+      saved.status,
+      options: saved.selectedOptions,
+    );
+    if (!mounted) return;
+    await _showInstructionUpdateResultDialog(instruction, saved);
+  }
+
+  Future<void> _showInstructionUpdateResultDialog(InstructionRule instruction, _InstructionUpdateResult result) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(toTitleCase(instruction.name)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Status: ${result.status}', style: const TextStyle(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 10),
+            const Text('Selected Options:', style: TextStyle(fontWeight: FontWeight.w900)),
+            if (result.selectedOptions.isEmpty)
+              const Text('• None')
+            else
+              ...result.selectedOptions.map((option) => Text('• ${option.name}')),
+            const SizedBox(height: 10),
+            Text('Bonus Points Earned: +${result.bonusPoints}', style: const TextStyle(fontWeight: FontWeight.w900)),
+            Text('Completion Percentage: ${result.percentage.round()}%'),
+            Text('Emoji Status: ${result.emojiStatus}'),
+          ],
+        ),
+        actions: [ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+      ),
+    );
+  }
+
+  String _instructionEmojiStatus(String status, int selectedCount, double percentage) {
+    if (status == InstructionHistoryEntry.statusMissed) return '😞 Missed';
+    if (percentage >= 100) return '🤩 Perfect';
+    if (percentage >= 75) return '😄 Excellent';
+    if (percentage >= 50) return '😊 Good';
+    if (selectedCount > 0) return '🙂 Followed';
+    return '😐 Neutral';
   }
 
   Future<void> _showInstructionForm([InstructionRule? instruction]) async {
     final nameController = TextEditingController(text: instruction?.name ?? '');
     final descriptionController = TextEditingController(text: instruction?.description ?? '');
     final bonusController = TextEditingController(text: instruction == null ? '20' : '${instruction.bonusPoints}');
-    final xpController = TextEditingController(text: instruction == null ? '5' : '${instruction.xpEarned}');
+    final xpController = TextEditingController(text: instruction == null ? '5' : '${instruction.pointsEarned}');
     final unitController = TextEditingController(text: instruction?.unit ?? 'km');
-    var instructionType = instruction?.instructionType ?? InstructionRule.typeSimple;
+    var instructionType = InstructionRule.typeMultipleOption;
     var levels = [...(instruction?.levels ?? const <InstructionLevel>[])];
     var options = [...(instruction?.options ?? const <InstructionOption>[])];
     if (options.isEmpty) {
       options = const [
-        InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, xpEarned: 2, emoji: '🥤'),
-        InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, xpEarned: 5, emoji: '🥤'),
-        InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, xpEarned: 8, emoji: '🍊'),
-        InstructionOption(id: 'option_amla', name: 'Amla Juice', bonusPoints: 50, xpEarned: 10, emoji: '🟢'),
+        InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, pointsEarned: 2, emoji: '🥤'),
+        InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, pointsEarned: 5, emoji: '🥤'),
+        InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, pointsEarned: 8, emoji: '🍊'),
+        InstructionOption(id: 'option_amla', name: 'Amla Juice', bonusPoints: 50, pointsEarned: 10, emoji: '🟢'),
       ];
     }
     if (levels.isEmpty) {
       levels = const [
-        InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, xpEarned: 5),
-        InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, xpEarned: 8),
-        InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, xpEarned: 12),
+        InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, pointsEarned: 5),
+        InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, pointsEarned: 8),
+        InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, pointsEarned: 12),
       ];
     }
+    var instructionImagePaths = [...(instruction?.imagePaths ?? const <String>[])];
+    var instructionCoverImagePath = instruction?.coverImagePath ?? '';
     var linkedTasks = [...(instruction?.linkedTasks ?? const <String>[])];
     final initialPhases = instruction?.linkedPhases ?? const <String>[];
     var linkedPhase = initialPhases.isEmpty ? '' : initialPhases.first;
@@ -269,13 +414,57 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
                     TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: instructionType,
-                      decoration: const InputDecoration(labelText: 'Instruction Type'),
-                      items: const [InstructionRule.typeSimple, InstructionRule.typeLevelBased, InstructionRule.typeOptionBased]
-                          .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-                          .toList(),
-                      onChanged: (value) => setDialogState(() => instructionType = value ?? instructionType),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Instruction Images (${instructionImagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 4),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                          onPressed: () async {
+                            final picked = await ImagePicker().pickMultiImage();
+                            if (picked.isEmpty) return;
+                            setDialogState(() {
+                              instructionImagePaths = [...instructionImagePaths, ...picked.map((image) => image.path)];
+                              if (instructionCoverImagePath.isEmpty && instructionImagePaths.isNotEmpty) instructionCoverImagePath = instructionImagePaths.first;
+                            });
+                          },
+                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                          label: Text(instructionImagePaths.isEmpty ? 'Add Images' : 'Add More Images'),
+                        ),
+                      ],
+                    ),
+                    if (instructionImagePaths.isEmpty)
+                      const Text('No instruction images added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                    else
+                      ...instructionImagePaths.map((path) => ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(path == instructionCoverImagePath ? Icons.star_rounded : Icons.image_outlined, color: path == instructionCoverImagePath ? Colors.amber : null),
+                            title: Text(path.split('/').last, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(path == instructionCoverImagePath ? 'Cover image' : 'Instruction image'),
+                            trailing: Wrap(
+                              spacing: 2,
+                              children: [
+                                IconButton(tooltip: 'View', icon: const Icon(Icons.visibility_outlined, size: 18), onPressed: () => _showImagePathDialog(path)),
+                                IconButton(tooltip: 'Change Cover', icon: const Icon(Icons.star_border_rounded, size: 18), onPressed: () => setDialogState(() => instructionCoverImagePath = path)),
+                                IconButton(
+                                  tooltip: 'Remove',
+                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  onPressed: () => setDialogState(() {
+                                    instructionImagePaths = instructionImagePaths.where((item) => item != path).toList();
+                                    if (instructionCoverImagePath == path) instructionCoverImagePath = instructionImagePaths.isEmpty ? '' : instructionImagePaths.first;
+                                  }),
+                                ),
+                              ],
+                            ),
+                          )),
+                    const SizedBox(height: 12),
+                    const ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.checklist_rounded),
+                      title: Text('Multiple Option Instruction'),
+                      subtitle: Text('How It Works: users can select one or many checkbox options; points and Points are added from all selected options.'),
                     ),
                     const SizedBox(height: 12),
                     const Text('Linked Task (Optional)', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black54)),
@@ -352,10 +541,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                           .toList(),
                       onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
                     ),
-                    if (instructionType == InstructionRule.typeSimple) ...[
-                      TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-                      TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
-                    ] else if (instructionType == InstructionRule.typeLevelBased) ...[
+                    if (false) ...[
                       TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
                       const SizedBox(height: 10),
                       Row(
@@ -382,7 +568,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                               children: [
                                 Text(level.displayLabel, style: const TextStyle(fontWeight: FontWeight.w900)),
                                 const SizedBox(height: 4),
-                                Text('+${level.bonusPoints} points • ${level.xpEarned} XP', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+                                Text('+${level.bonusPoints} points • ${level.pointsEarned} Points', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
                                 Align(
                                   alignment: Alignment.centerRight,
                                   child: Wrap(
@@ -435,7 +621,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                                           Text(option.name, style: const TextStyle(fontWeight: FontWeight.w900)),
                                           const SizedBox(height: 4),
                                           Text(
-                                            '+${option.bonusPoints} points • ${option.xpEarned} XP${option.description.isEmpty ? '' : ' • ${option.description}'}',
+                                            '+${option.bonusPoints} points • ${option.pointsEarned} Points${option.description.isEmpty ? '' : ' • ${option.description}'}',
                                             style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
                                           ),
                                         ],
@@ -489,20 +675,22 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     id: instruction?.id ?? 'instruction_${DateTime.now().microsecondsSinceEpoch}',
                     name: nameController.text.trim().isEmpty ? 'Instruction' : nameController.text.trim(),
                     description: descriptionController.text.trim(),
-                    linkedTask: '',
-                    linkedPhase: '',
+                    linkedTask: InstructionRule.encodeLinks(linkedTasks),
+                    linkedPhase: linkedPhase,
                     repeatType: repeatType,
-                    instructionType: instructionType,
-                    unit: instructionType == InstructionRule.typeLevelBased ? unitController.text.trim() : '',
-                    levels: instructionType == InstructionRule.typeLevelBased ? levels : const [],
-                    options: instructionType == InstructionRule.typeOptionBased ? options : const [],
+                    instructionType: InstructionRule.typeMultipleOption,
+                    unit: '',
+                    levels: const [],
+                    options: options,
                     bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
-                    xpEarned: int.tryParse(xpController.text.trim()) ?? 5,
+                    pointsEarned: int.tryParse(xpController.text.trim()) ?? 5,
                     colorValue: colorValue,
                     enabled: enabled,
                     streakTracking: streakTracking,
                     createdAt: instruction?.createdAt ?? DateTime.now(),
                     history: instruction?.history ?? const [],
+                    imagePaths: instructionImagePaths,
+                    coverImagePath: instructionCoverImagePath,
                   ),
                 ),
                 child: const Text('Save'),
@@ -524,52 +712,201 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   Future<InstructionOption?> _showInstructionOptionDialog({InstructionOption? existing, required int index}) async {
     final nameController = TextEditingController(text: existing?.name ?? 'Option ${index + 1}');
     final bonusController = TextEditingController(text: existing == null ? '10' : '${existing.bonusPoints}');
-    final xpController = TextEditingController(text: existing == null ? '2' : '${existing.xpEarned}');
+    final xpController = TextEditingController(text: existing == null ? '2' : '${existing.pointsEarned}');
     final emojiController = TextEditingController(text: existing?.emoji ?? '🥤');
+    final linkController = TextEditingController();
     final descriptionController = TextEditingController(text: existing?.description ?? '');
+    var imagePaths = [...(existing?.imagePaths ?? const <String>[])];
+    var linkUrls = [...(existing?.effectiveLinks ?? const <String>[])];
+    var coverImagePath = existing?.coverImagePath ?? '';
     return showDialog<InstructionOption>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(existing == null ? 'Add Option' : 'Edit Option'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Option Name')),
-              TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
-              TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
-              TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(
-              context,
-              InstructionOption(
-                id: existing?.id ?? 'option_${DateTime.now().microsecondsSinceEpoch}',
-                name: nameController.text.trim().isEmpty ? 'Option ${index + 1}' : nameController.text.trim(),
-                bonusPoints: int.tryParse(bonusController.text.trim()) ?? 0,
-                xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
-                emoji: emojiController.text.trim().isEmpty ? '🥤' : emojiController.text.trim(),
-                description: descriptionController.text.trim(),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(existing == null ? 'Add Option' : 'Edit Option'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 430,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Option Name')),
+                  TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
+                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Points')),
+                  TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
+                  const SizedBox(height: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Option Images (${imagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 4),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                        onPressed: () async {
+                          final picked = await ImagePicker().pickMultiImage();
+                          if (picked.isEmpty) return;
+                          setDialogState(() {
+                            imagePaths = [...imagePaths, ...picked.map((image) => image.path)];
+                            if (coverImagePath.isEmpty && imagePaths.isNotEmpty) coverImagePath = imagePaths.first;
+                          });
+                        },
+                        icon: const Icon(Icons.add_photo_alternate_outlined),
+                        label: Text(imagePaths.isEmpty ? 'Choose From Gallery' : 'Add More Images'),
+                      ),
+                    ],
+                  ),
+                  if (imagePaths.isEmpty)
+                    const Text('No images added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                  else
+                    ...imagePaths.map((path) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(path == coverImagePath ? Icons.star_rounded : Icons.image_outlined, color: path == coverImagePath ? Colors.amber : null),
+                          title: Text(path.split('/').last, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(path == coverImagePath ? 'Cover image' : 'Image'),
+                          trailing: Wrap(
+                            spacing: 2,
+                            children: [
+                              IconButton(tooltip: 'View', icon: const Icon(Icons.visibility_outlined, size: 18), onPressed: () => _showImagePathDialog(path)),
+                              IconButton(tooltip: 'Change Cover', icon: const Icon(Icons.star_border_rounded, size: 18), onPressed: () => setDialogState(() => coverImagePath = path)),
+                              IconButton(
+                                tooltip: 'Remove',
+                                icon: const Icon(Icons.delete_outline, size: 18),
+                                onPressed: () => setDialogState(() {
+                                  imagePaths = imagePaths.where((item) => item != path).toList();
+                                  if (coverImagePath == path) coverImagePath = imagePaths.isEmpty ? '' : imagePaths.first;
+                                }),
+                              ),
+                            ],
+                          ),
+                        )),
+                  const SizedBox(height: 10),
+                  const Text('Website / Video Links Optional', style: TextStyle(fontWeight: FontWeight.w900)),
+                  Row(
+                    children: [
+                      Expanded(child: TextField(controller: linkController, decoration: const InputDecoration(hintText: 'https://youtube.com/...'))),
+                      IconButton(
+                        tooltip: 'Add Link',
+                        icon: const Icon(Icons.add_link),
+                        onPressed: () => setDialogState(() {
+                          final link = linkController.text.trim();
+                          if (link.isEmpty || linkUrls.contains(link)) return;
+                          linkUrls = [...linkUrls, link];
+                          linkController.clear();
+                        }),
+                      ),
+                    ],
+                  ),
+                  if (linkUrls.isEmpty)
+                    const Text('No links added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                  else
+                    ...linkUrls.map((link) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.link),
+                          title: Text(link, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: Wrap(
+                            spacing: 2,
+                            children: [
+                              TextButton.icon(onPressed: () => _openOptionLink(link), icon: const Icon(Icons.open_in_new, size: 18), label: const Text('Open Link')),
+                              IconButton(
+                                tooltip: 'Remove Link',
+                                icon: const Icon(Icons.delete_outline, size: 18),
+                                onPressed: () => setDialogState(() => linkUrls = linkUrls.where((item) => item != link).toList()),
+                              ),
+                            ],
+                          ),
+                        )),
+                  TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+                ],
               ),
             ),
-            child: const Text('Save'),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(
+                context,
+                InstructionOption(
+                  id: existing?.id ?? 'option_${DateTime.now().microsecondsSinceEpoch}',
+                  name: nameController.text.trim().isEmpty ? 'Option ${index + 1}' : nameController.text.trim(),
+                  bonusPoints: int.tryParse(bonusController.text.trim()) ?? 0,
+                  pointsEarned: int.tryParse(xpController.text.trim()) ?? 0,
+                  emoji: emojiController.text.trim().isEmpty ? '🥤' : emojiController.text.trim(),
+                  description: descriptionController.text.trim(),
+                  imagePaths: imagePaths,
+                  coverImagePath: coverImagePath,
+                  linkUrl: linkUrls.isEmpty ? '' : linkUrls.first,
+                  linkUrls: linkUrls,
+                ),
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  void _showImagePathDialog(String path) {
+    final title = _imageTitleFromPath(path);
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Flexible(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Image.file(
+                    File(path),
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => SelectableText('Unable to preview image:\n$path'),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SelectableText(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 4),
+              SelectableText(path, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  String _imageTitleFromPath(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final parts = normalized.split('/').where((part) => part.trim().isNotEmpty).toList();
+    final fileName = parts.isEmpty ? 'Option Image' : parts.last;
+    final dotIndex = fileName.lastIndexOf('.');
+    return dotIndex <= 0 ? fileName : fileName.substring(0, dotIndex);
+  }
+
+
+  Future<void> _openOptionLink(String rawLink) async {
+    final link = rawLink.trim();
+    if (link.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: link));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Link copied: $link')));
+  }
+
 
   Future<InstructionLevel?> _showInstructionLevelDialog({InstructionLevel? existing, required String defaultUnit, required int index}) async {
     final nameController = TextEditingController(text: existing?.name ?? 'Level ${index + 1}');
     final targetController = TextEditingController(text: existing == null ? '' : (existing.target % 1 == 0 ? existing.target.toStringAsFixed(0) : existing.target.toStringAsFixed(1)));
     final unitController = TextEditingController(text: existing?.unit ?? (defaultUnit.isEmpty ? 'km' : defaultUnit));
     final bonusController = TextEditingController(text: existing == null ? '30' : '${existing.bonusPoints}');
-    final xpController = TextEditingController(text: existing == null ? '5' : '${existing.xpEarned}');
+    final xpController = TextEditingController(text: existing == null ? '5' : '${existing.pointsEarned}');
     return showDialog<InstructionLevel>(
       context: context,
       builder: (context) => AlertDialog(
@@ -582,7 +919,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
               TextField(controller: targetController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Target')),
               TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
               TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'XP')),
+              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Points')),
             ],
           ),
         ),
@@ -597,7 +934,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 target: double.tryParse(targetController.text.trim()) ?? 0,
                 unit: unitController.text.trim(),
                 bonusPoints: int.tryParse(bonusController.text.trim()) ?? 0,
-                xpEarned: int.tryParse(xpController.text.trim()) ?? 0,
+                pointsEarned: int.tryParse(xpController.text.trim()) ?? 0,
               ),
             ),
             child: const Text('Save'),
@@ -744,44 +1081,6 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     );
   }
 
-  void _showInstructionDetails(InstructionRule instruction) {
-    final followed = instruction.history.where((entry) => entry.followed).length;
-    final missed = instruction.history.where((entry) => entry.missed).length;
-    final total = followed + missed;
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(toTitleCase(instruction.name)),
-        content: SingleChildScrollView(
-          child: SizedBox(
-            width: 420,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(instruction.description.isEmpty ? 'No description.' : instruction.description),
-                const SizedBox(height: 12),
-                _detailLine('Current streak', '${widget.hiveService.instructionCurrentStreak(instruction, DateTime.now())}'),
-                _detailLine('Best streak', '${widget.hiveService.instructionBestStreak(instruction)}'),
-                _detailLine('Followed count', '$followed'),
-                _detailLine('Missed count', '$missed'),
-                _detailLine('Completion', total == 0 ? '0%' : '${((followed / total) * 100).round()}%'),
-                _detailLine('Bonus earned', '+${instruction.history.fold<int>(0, (sum, entry) => sum + entry.bonusPoints)} pts'),
-                const SizedBox(height: 12),
-                const Text('Timeline history', style: TextStyle(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 6),
-                if (instruction.history.isEmpty)
-                  const Text('No updates yet.')
-                else
-                  ...instruction.history.reversed.take(10).map((entry) => Text('• ${_formatDate(entry.date)} — ${entry.hasLevel || entry.hasOption ? entry.selectionSummary : entry.status}${entry.followed ? ' (+${entry.bonusPoints} pts)' : ''}')),
-              ],
-            ),
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-      ),
-    );
-  }
 }
 
 
@@ -803,50 +1102,208 @@ class _InstructionTaskOption {
   }
 }
 
+
+class _InstructionUpdateResult {
+  final String status;
+  final List<InstructionOption> selectedOptions;
+  final int bonusPoints;
+  final double percentage;
+  final String emojiStatus;
+
+  const _InstructionUpdateResult({
+    required this.status,
+    required this.selectedOptions,
+    required this.bonusPoints,
+    required this.percentage,
+    required this.emojiStatus,
+  });
+}
+
 class _InstructionSummaryPanel extends StatelessWidget {
   final HiveService hiveService;
   final List<InstructionRule> instructions;
   final DateTime today;
+  final String period;
+  final ValueChanged<String> onPeriodChanged;
+  final void Function(String title, List<InstructionRule> instructions) onOpenList;
 
-  const _InstructionSummaryPanel({required this.hiveService, required this.instructions, required this.today});
+  const _InstructionSummaryPanel({required this.hiveService, required this.instructions, required this.today, required this.period, required this.onPeriodChanged, required this.onOpenList});
 
   @override
   Widget build(BuildContext context) {
     final standalone = instructions.where((i) => i.isStandalone).toList();
-    final followedToday = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.followed ?? false).length;
-    final missedToday = standalone.where((i) => hiveService.instructionEntryForDate(i, today)?.missed ?? false).length;
-    final active = standalone.where((i) => i.enabled).length;
-    final pendingToday = standalone.where((i) => i.enabled && hiveService.instructionEntryForDate(i, today) == null).length;
-    final bonus = hiveService.instructionBonusForDate(today, standaloneOnly: true);
-    final bestStreak = standalone.fold<int>(0, (best, i) {
-      final streak = hiveService.instructionCurrentStreak(i, today);
-      return streak > best ? streak : best;
-    });
+    final metrics = _metricsForPeriod(standalone);
+    final periodLabel = _periodLabel(period);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(24), border: Border.all(color: AppColors.primary.withOpacity(0.14))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📘 Standalone Instruction Summary', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
-          const SizedBox(height: 12),
+          const Text('📘 Instruction Productivity', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          const SizedBox(height: 8),
           Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _InstructionStat(label: 'Standalone Instructions', value: '${standalone.length}'),
-              _InstructionStat(label: 'Followed Today', value: '$followedToday', color: Colors.green),
-              _InstructionStat(label: 'Missed Today', value: '$missedToday', color: Colors.red),
-              _InstructionStat(label: 'Pending Today', value: '$pendingToday'),
-              _InstructionStat(label: 'Active Instructions', value: '$active'),
-              _InstructionStat(label: 'Instruction Streak', value: '$bestStreak'),
-              _InstructionStat(label: 'Bonus Points Earned', value: '+$bonus'),
-            ],
+            spacing: 8,
+            runSpacing: 8,
+            children: const [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly].map((item) {
+              final selected = item == period;
+              return ChoiceChip(
+                selected: selected,
+                label: Text(item),
+                onSelected: (_) => onPeriodChanged(item),
+                selectedColor: AppColors.primary.withOpacity(0.18),
+                labelStyle: TextStyle(fontWeight: FontWeight.w900, color: selected ? AppColors.primary : AppColors.textPrimary),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final chart = _InstructionProductivityPie(
+                followed: metrics.followed,
+                missed: metrics.missed,
+                pending: metrics.pending,
+              );
+              final cards = Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _InstructionStat(label: '$period Instructions', value: '${metrics.total}', onTap: () => onOpenList('$period Standalone Instructions', standalone)),
+                  _InstructionStat(label: 'Followed $periodLabel', value: '${metrics.followed}', color: Colors.green, onTap: () => onOpenList('Followed $periodLabel Instructions', metrics.followedInstructions)),
+                  _InstructionStat(label: 'Missed $periodLabel', value: '${metrics.missed}', color: Colors.red, onTap: () => onOpenList('Missed $periodLabel Instructions', metrics.missedInstructions)),
+                  _InstructionStat(label: 'Pending $periodLabel', value: '${metrics.pending}', onTap: () => onOpenList('Pending $periodLabel Instructions', metrics.pendingInstructions)),
+                  _InstructionStat(label: 'Bonus Points $periodLabel', value: '+${metrics.bonusPoints}', color: AppColors.primary, onTap: () => onOpenList('Bonus Points $periodLabel', metrics.bonusInstructions)),
+                  if (period != InstructionRule.repeatDaily)
+                    _InstructionStat(label: '$period Completion', value: '${metrics.completionRate}%', color: Colors.green, onTap: () => onOpenList('$period Standalone Instructions', standalone)),
+                ],
+              );
+              if (constraints.maxWidth < 620) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Center(child: chart), const SizedBox(height: 12), cards]);
+              }
+              return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [chart, const SizedBox(width: 16), Expanded(child: cards)]);
+            },
           ),
         ],
       ),
     );
   }
+
+  _InstructionPeriodMetrics _metricsForPeriod(List<InstructionRule> standalone) {
+    final range = _periodRange(today, period);
+    var total = 0;
+    var followed = 0;
+    var missed = 0;
+    var pending = 0;
+    var bonusPoints = 0;
+    final followedSet = <InstructionRule>{};
+    final missedSet = <InstructionRule>{};
+    final pendingSet = <InstructionRule>{};
+    final bonusSet = <InstructionRule>{};
+
+    for (final instruction in standalone.where((instruction) => instruction.enabled)) {
+      final dates = _occurrenceDatesForInstruction(instruction, range.$1, range.$2);
+      for (final date in dates) {
+        total++;
+        final entry = hiveService.instructionEntryForDate(instruction, date);
+        if (entry?.followed == true) {
+          followed++;
+          bonusPoints += entry!.bonusPoints;
+          followedSet.add(instruction);
+          if (entry.bonusPoints > 0) bonusSet.add(instruction);
+        } else if (entry?.missed == true) {
+          missed++;
+          missedSet.add(instruction);
+        } else {
+          pending++;
+          pendingSet.add(instruction);
+        }
+      }
+    }
+
+    return _InstructionPeriodMetrics(
+      total: total,
+      followed: followed,
+      missed: missed,
+      pending: pending,
+      bonusPoints: bonusPoints,
+      completionRate: total == 0 ? 0 : ((followed / total) * 100).round(),
+      followedInstructions: followedSet.toList(),
+      missedInstructions: missedSet.toList(),
+      pendingInstructions: pendingSet.toList(),
+      bonusInstructions: bonusSet.toList(),
+    );
+  }
+
+  (DateTime, DateTime) _periodRange(DateTime date, String period) {
+    final day = DateTime(date.year, date.month, date.day);
+    return switch (period) {
+      InstructionRule.repeatWeekly => (day.subtract(Duration(days: day.weekday - 1)), day.subtract(Duration(days: day.weekday - 1)).add(const Duration(days: 6))),
+      InstructionRule.repeatMonthly => (DateTime(day.year, day.month), DateTime(day.year, day.month + 1, 0)),
+      InstructionRule.repeatYearly => (DateTime(day.year), DateTime(day.year, 12, 31)),
+      _ => (day, day),
+    };
+  }
+
+  List<DateTime> _occurrenceDatesForInstruction(InstructionRule instruction, DateTime start, DateTime end) {
+    final dates = <DateTime>[];
+    var cursor = DateTime(start.year, start.month, start.day);
+    while (!cursor.isAfter(end)) {
+      if (_instructionOccursOn(instruction, cursor)) dates.add(cursor);
+      cursor = cursor.add(const Duration(days: 1));
+    }
+    return dates;
+  }
+
+  bool _instructionOccursOn(InstructionRule instruction, DateTime date) {
+    return switch (instruction.repeatType) {
+      InstructionRule.repeatDaily => true,
+      InstructionRule.repeatWeekly => date.weekday == DateTime.monday,
+      InstructionRule.repeatMonthly => date.day == 1,
+      InstructionRule.repeatYearly => date.month == 1 && date.day == 1,
+      InstructionRule.repeatOneTime => _isSameDate(instruction.createdAt, date),
+      _ => true,
+    };
+  }
+
+  String _periodLabel(String period) {
+    return switch (period) {
+      InstructionRule.repeatDaily => 'Today',
+      InstructionRule.repeatWeekly => 'This Week',
+      InstructionRule.repeatMonthly => 'This Month',
+      InstructionRule.repeatYearly => 'This Year',
+      _ => period,
+    };
+  }
+
+  bool _isSameDate(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+}
+
+
+class _InstructionPeriodMetrics {
+  final int total;
+  final int followed;
+  final int missed;
+  final int pending;
+  final int bonusPoints;
+  final int completionRate;
+  final List<InstructionRule> followedInstructions;
+  final List<InstructionRule> missedInstructions;
+  final List<InstructionRule> pendingInstructions;
+  final List<InstructionRule> bonusInstructions;
+
+  const _InstructionPeriodMetrics({
+    required this.total,
+    required this.followed,
+    required this.missed,
+    required this.pending,
+    required this.bonusPoints,
+    required this.completionRate,
+    required this.followedInstructions,
+    required this.missedInstructions,
+    required this.pendingInstructions,
+    required this.bonusInstructions,
+  });
 }
 
 class _InstructionCard extends StatelessWidget {
@@ -878,7 +1335,7 @@ class _InstructionCard extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
-                Text((entry?.hasLevel == true || entry?.hasOption == true) ? 'Today: ${entry!.selectionSummary} • +${entry.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • ${instruction.isLevelBased ? '${instruction.levels.length} levels' : instruction.isOptionBased ? '${instruction.options.length} options' : '+${instruction.bonusPoints} points'} • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                Text((entry?.hasLevel == true || entry?.hasOption == true) ? 'Today: ${entry!.selectionSummary} • +${entry.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • ${instruction.options.length} options • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
                 if (instruction.linkedTasks.isNotEmpty) Text('Linked: ${_linkedTaskSummary(instruction)}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: const TextStyle(fontSize: 12, color: Colors.black45)),
               ]),
             ),
@@ -894,24 +1351,140 @@ class _InstructionCard extends StatelessWidget {
   }
 }
 
+
+class _InstructionProductivityPie extends StatelessWidget {
+  final int followed;
+  final int missed;
+  final int pending;
+
+  const _InstructionProductivityPie({required this.followed, required this.missed, required this.pending});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = followed + missed + pending;
+    final percent = total == 0 ? 0 : ((followed / total) * 100).round();
+    return SizedBox(
+      width: 164,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 132,
+            height: 132,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  size: const Size.square(132),
+                  painter: _InstructionProductivityPiePainter(followed: followed, missed: missed, pending: pending),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('$percent%', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: AppColors.textPrimary)),
+                    const Text('Followed', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: Colors.black54)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
+            children: const [
+              _PieLegendDot(color: Colors.green, label: 'Followed'),
+              _PieLegendDot(color: Colors.red, label: 'Missed'),
+              _PieLegendDot(color: Colors.grey, label: 'Pending'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InstructionProductivityPiePainter extends CustomPainter {
+  final int followed;
+  final int missed;
+  final int pending;
+
+  const _InstructionProductivityPiePainter({required this.followed, required this.missed, required this.pending});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = followed + missed + pending;
+    final rect = Offset.zero & size;
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 18
+      ..strokeCap = StrokeCap.round;
+    if (total == 0) {
+      canvas.drawArc(rect.deflate(12), -1.5708, 6.2832, false, strokePaint..color = Colors.grey.withOpacity(0.24));
+      return;
+    }
+    var start = -1.5708;
+    for (final segment in [
+      (count: followed, color: Colors.green),
+      (count: missed, color: Colors.red),
+      (count: pending, color: Colors.grey),
+    ]) {
+      if (segment.count <= 0) continue;
+      final sweep = (segment.count / total) * 6.2832;
+      canvas.drawArc(rect.deflate(12), start, sweep, false, strokePaint..color = segment.color);
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _InstructionProductivityPiePainter oldDelegate) {
+    return oldDelegate.followed != followed || oldDelegate.missed != missed || oldDelegate.pending != pending;
+  }
+}
+
+class _PieLegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _PieLegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black54)),
+      ],
+    );
+  }
+}
+
 class _InstructionStat extends StatelessWidget {
   final String label;
   final String value;
   final Color? color;
+  final VoidCallback? onTap;
 
-  const _InstructionStat({required this.label, required this.value, this.color});
+  const _InstructionStat({required this.label, required this.value, this.color, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 150,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.black12)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.black54)),
-        const SizedBox(height: 6),
-        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color ?? AppColors.textPrimary)),
-      ]),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: 150,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.black12)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.black54)),
+          const SizedBox(height: 6),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color ?? AppColors.textPrimary)),
+        ]),
+      ),
     );
   }
 }
@@ -927,13 +1500,6 @@ class _EmptyInstructionCard extends StatelessWidget {
       child: const Text('No instructions yet. Tap “Add Instruction” to create your first productivity rule.', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.black54)),
     );
   }
-}
-
-Widget _detailLine(String label, String value) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Row(children: [Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700))), Text(value, style: const TextStyle(fontWeight: FontWeight.w900))]),
-  );
 }
 
 String _linkedTaskSummary(InstructionRule instruction) {
