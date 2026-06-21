@@ -9,8 +9,11 @@ import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/rank_profile.dart';
 import '../models/task_model.dart';
+import '../models/user_profile.dart';
 import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
+import '../widgets/profile_avatar.dart';
+import 'journal_view.dart';
 import 'journey_timeline_view.dart';
 import '../utils/text_formatters.dart';
 import '../widgets/app_text.dart';
@@ -68,6 +71,11 @@ class StreakView extends StatelessWidget {
                   stats: stats,
                   style: style,
                   profile: rankProfile,
+                  userProfile: hiveService.getUserProfile(),
+                  onUsernameChanged: hiveService.setUsername,
+                  onProfileTap: () => Navigator.of(context).push(
+                    JournalView.route(hiveService: hiveService, onGoToDashboard: onGoToDashboard),
+                  ),
                   onJourneyTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => JourneyTimelineView(hiveService: hiveService),
@@ -529,9 +537,12 @@ class _HeroStreakCard extends StatelessWidget {
   final _JourneyStats stats;
   final DashboardThemeStyle style;
   final RankProfile profile;
+  final UserProfile userProfile;
+  final Future<void> Function(String username) onUsernameChanged;
+  final VoidCallback onProfileTap;
   final VoidCallback onJourneyTap;
 
-  const _HeroStreakCard({required this.stats, required this.style, required this.profile, required this.onJourneyTap});
+  const _HeroStreakCard({required this.stats, required this.style, required this.profile, required this.userProfile, required this.onUsernameChanged, required this.onProfileTap, required this.onJourneyTap});
 
   @override
   Widget build(BuildContext context) {
@@ -560,6 +571,76 @@ class _HeroStreakCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ProfileAvatar(profile: userProfile, accentColor: style.accent, badge: profile.currentRank.emoji, radius: 31, onTap: onProfileTap),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            profile.username,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: contentColor, fontSize: responsiveFont(context, 20), fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Edit username',
+                          icon: Icon(Icons.edit, color: contentColor, size: 20),
+                          onPressed: () => _showEditUsernameDialog(context),
+                        ),
+                      ],
+                    ),
+                    Text('Rank: ${profile.currentRank.name} ${profile.currentRank.emoji}', style: TextStyle(color: contentColor, fontWeight: FontWeight.w700)),
+                    Text('Level: ${profile.level}  •  Current Streak: ${profile.activeStreak} Days', style: TextStyle(color: contentColor.withOpacity(0.86), fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final pointsText = Text(
+                '${profile.currentLevelPoints}/${profile.pointsForNextLevel} Points to Level ${profile.level + 1}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: contentColor, fontWeight: FontWeight.w700),
+              );
+              final rankText = Text(
+                profile.nextRank == null ? 'Top Rank' : 'Next: ${profile.nextRank!.name}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: contentColor.withOpacity(0.88), fontWeight: FontWeight.w600),
+              );
+              if (constraints.maxWidth < 280) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [pointsText, const SizedBox(height: 2), rankText]);
+              }
+              return Row(children: [Expanded(child: pointsText), const SizedBox(width: 8), Flexible(child: Align(alignment: Alignment.centerRight, child: rankText))]);
+            },
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: profile.levelProgress.clamp(0.0, 1.0).toDouble(),
+              minHeight: 10,
+              color: contentColor,
+              backgroundColor: contentColor.withOpacity(0.25),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Tap your profile to reflect on your day and track your growth journey.',
+            style: TextStyle(color: contentColor.withOpacity(0.84), fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 14),
+          Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(12),
@@ -568,21 +649,9 @@ class _HeroStreakCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Consistency journey',
-                      style: TextStyle(color: contentColor, fontSize: responsiveFont(context, 16), fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${profile.username} • ${profile.currentRank.name} • Level ${profile.level}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: contentColor.withOpacity(0.86), fontWeight: FontWeight.w700),
-                    ),
-                  ],
+                child: Text(
+                  'Consistency journey',
+                  style: TextStyle(color: contentColor, fontSize: responsiveFont(context, 16), fontWeight: FontWeight.w700),
                 ),
               ),
             ],
@@ -611,14 +680,37 @@ class _HeroStreakCard extends StatelessWidget {
             children: [
               SizedBox(width: 126, child: _HeroMetric(label: 'Week', value: '${stats.currentWeeklyStreak} wk', contentColor: contentColor)),
               SizedBox(width: 126, child: _HeroMetric(label: 'Best', value: '${stats.longestStreak} d', contentColor: contentColor)),
-              SizedBox(width: 126, child: _HeroMetric(label: 'Score', value: '${(stats.productivityRatio * 100).round()}%', contentColor: contentColor)),
+              SizedBox(width: 126, child: _HeroMetric(label: 'Score', value: '${profile.productivityScore}%', contentColor: contentColor)),
               SizedBox(width: 126, child: _HeroMetric(label: 'Completed', value: '${profile.totalTasksCompleted}', contentColor: contentColor)),
-              SizedBox(width: 126, child: _HeroMetric(label: 'Points to Level', value: '${profile.currentLevelPoints}/${profile.pointsForNextLevel}', contentColor: contentColor)),
+              SizedBox(width: 126, child: _HeroMetric(label: 'Important', value: '${profile.importantTasksCompleted}', contentColor: contentColor)),
+              SizedBox(width: 126, child: _HeroMetric(label: 'Active days', value: '${profile.totalActiveDays}', contentColor: contentColor)),
+              SizedBox(width: 126, child: _HeroMetric(label: 'Journal', value: '${profile.journalEntries}', contentColor: contentColor)),
             ],
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _showEditUsernameDialog(BuildContext context) async {
+    final controller = TextEditingController(text: profile.username);
+    final username = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Update profile username'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Username', hintText: 'Rohan Singh'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (username != null && username.trim().isNotEmpty) await onUsernameChanged(username.trim());
   }
 }
 
