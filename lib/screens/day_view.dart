@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
@@ -20,14 +22,28 @@ class DayView extends StatefulWidget {
   State<DayView> createState() => _DayViewState();
 }
 
-class _DayViewState extends State<DayView> {
+class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   late DateTime _currentDay;
   bool _showTodayTasks = true;
+  late final AnimationController _schedulePulseController;
+  Timer? _scheduleClockTimer;
+  DateTime _scheduleNow = DateTime.now();
 
   @override
   void initState() {
     super.initState();
     _currentDay = DateTime.now();
+    _schedulePulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..repeat(reverse: true);
+    _scheduleClockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() => _scheduleNow = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _scheduleClockTimer?.cancel();
+    _schedulePulseController.dispose();
+    super.dispose();
   }
 
   String _formatHour(int hour) {
@@ -260,6 +276,123 @@ class _DayViewState extends State<DayView> {
     );
   }
 
+  List<_DayScheduleEntry> _buildDayScheduleEntries(List<Task> tasks) {
+    final taskEntries = <_DayScheduleEntry>[];
+    for (final task in tasks.where((task) => !task.repeatTask || task.routineEnabled)) {
+      final range = _scheduleRangeForTask(task);
+      if (range == null) continue;
+      taskEntries.add(_DayScheduleEntry(startMinutes: range.start, endMinutes: range.end, task: task));
+    }
+    taskEntries.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+
+    final entries = <_DayScheduleEntry>[];
+    var cursor = 8 * 60;
+    final dayEnd = taskEntries.isEmpty ? 18 * 60 : taskEntries.map((entry) => entry.endMinutes).reduce((a, b) => a > b ? a : b).clamp(18 * 60, 24 * 60).toInt();
+    for (final entry in taskEntries) {
+      if (entry.startMinutes > cursor) {
+        entries.add(_DayScheduleEntry(startMinutes: cursor, endMinutes: entry.startMinutes));
+      }
+      entries.add(entry);
+      if (entry.endMinutes > cursor) cursor = entry.endMinutes;
+    }
+    if (cursor < dayEnd) entries.add(_DayScheduleEntry(startMinutes: cursor, endMinutes: dayEnd));
+    return entries;
+  }
+
+  _DayScheduleRange? _scheduleRangeForTask(Task task) {
+    final descriptionRange = _scheduleRangeFromDescription(task.description);
+    if (descriptionRange != null) return descriptionRange;
+    final hasExplicitTime = task.dueDate.hour != 0 || task.dueDate.minute != 0 || task.hourSlot != null;
+    if (!hasExplicitTime) return null;
+    final start = (task.hourSlot ?? task.dueDate.hour) * 60 + (task.hourSlot == null ? task.dueDate.minute : 0);
+    final end = (start + taskPlannedMinutes(task)).clamp(start + 15, 24 * 60).toInt();
+    return _DayScheduleRange(start: start, end: end);
+  }
+
+  _DayScheduleRange? _scheduleRangeFromDescription(String description) {
+    int? start;
+    int? end;
+    int? legacy;
+    for (final line in description.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.startsWith('⏰ Schedule Start:')) {
+        start = _parseScheduleMinutes(trimmed.substring('⏰ Schedule Start:'.length).trim());
+      } else if (trimmed.startsWith('⏰ Schedule End:')) {
+        end = _parseScheduleMinutes(trimmed.substring('⏰ Schedule End:'.length).trim());
+      } else if (trimmed.startsWith('⏰ Scheduled:')) {
+        legacy = _parseScheduleMinutes(trimmed.substring('⏰ Scheduled:'.length).trim());
+      }
+    }
+    if (start == null && end == null && legacy != null) {
+      start = (legacy - 15).clamp(0, 24 * 60).toInt();
+      end = (legacy + 15).clamp(0, 24 * 60).toInt();
+    }
+    if (start == null || end == null) return null;
+    return _DayScheduleRange(start: start, end: end);
+  }
+
+  int? _parseScheduleMinutes(String raw) {
+    final parts = raw.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return hour * 60 + minute;
+  }
+
+  String _formatScheduleTime(int minutes) {
+    final normalized = minutes.clamp(0, 24 * 60).toInt();
+    final hour = (normalized ~/ 60) % 24;
+    final minute = normalized % 60;
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final period = hour >= 12 ? 'PM' : 'AM';
+    return minute == 0 ? '$displayHour $period' : '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+  }
+
+  _DayScheduleStatus _scheduleStatusFor(Task task, _DayScheduleEntry entry) {
+    final status = task.status.trim().toLowerCase();
+    if (task.done || status == 'completed') return _DayScheduleStatus.completed;
+    if (status == 'missed') return _DayScheduleStatus.missed;
+    final selectedDay = _dateOnly(_currentDay);
+    final today = _dateOnly(_scheduleNow);
+    if (selectedDay.isBefore(today)) return _DayScheduleStatus.overdue;
+    if (selectedDay.isAfter(today)) return _DayScheduleStatus.upcoming;
+    final nowMinutes = _scheduleNow.hour * 60 + _scheduleNow.minute;
+    if (nowMinutes >= entry.startMinutes && nowMinutes < entry.endMinutes) return _DayScheduleStatus.active;
+    if (nowMinutes >= entry.endMinutes) return _DayScheduleStatus.overdue;
+    return _DayScheduleStatus.upcoming;
+  }
+
+  Color _scheduleStatusColor(_DayScheduleStatus status, DashboardThemeStyle theme) {
+    final appTheme = AppThemeColors.fromDashboardStyle(theme);
+    switch (status) {
+      case _DayScheduleStatus.completed:
+        return appTheme.success;
+      case _DayScheduleStatus.active:
+        return appTheme.accent;
+      case _DayScheduleStatus.overdue:
+      case _DayScheduleStatus.missed:
+        return appTheme.danger;
+      case _DayScheduleStatus.upcoming:
+        return appTheme.cardTint;
+    }
+  }
+
+  String _scheduleStatusLabel(_DayScheduleStatus status) {
+    switch (status) {
+      case _DayScheduleStatus.completed:
+        return 'Completed';
+      case _DayScheduleStatus.active:
+        return 'Active';
+      case _DayScheduleStatus.overdue:
+        return 'Overdue';
+      case _DayScheduleStatus.upcoming:
+        return 'Upcoming';
+      case _DayScheduleStatus.missed:
+        return 'Missed';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -303,6 +436,8 @@ class _DayViewState extends State<DayView> {
                 _dayHourProgressMap(selectedDashboardTheme, now, isToday, isPastDay),
                 const SizedBox(height: 10),
                 _metricsPanel(matrix),
+                const SizedBox(height: 10),
+                _todaySchedulePanel(todayTasks, selectedDashboardTheme),
                 const SizedBox(height: 10),
                 _todayTasksPanel(todayTasks, selectedDashboardTheme),
                 const SizedBox(height: 10),
@@ -403,6 +538,120 @@ class _DayViewState extends State<DayView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _todaySchedulePanel(List<Task> tasks, DashboardThemeStyle theme) {
+    final entries = _buildDayScheduleEntries(tasks);
+    final visibleTasks = tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
+    final completed = visibleTasks.where((task) => task.done || task.status.trim().toLowerCase() == 'completed').length;
+    final completionRate = visibleTasks.isEmpty ? 0 : ((completed / visibleTasks.length) * 100).round();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.surface,
+        border: Border.all(color: theme.primary.withOpacity(0.18)),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [BoxShadow(color: theme.primary.withOpacity(theme.dark ? 0.16 : 0.08), blurRadius: 16, offset: const Offset(0, 8))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('Today Schedule', style: TextStyle(color: theme.textPrimary, fontSize: 18, fontWeight: FontWeight.w900))),
+              Text('${_currentDay.month}/${_currentDay.day}/${_currentDay.year}', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text('$completionRate% Complete', style: TextStyle(color: theme.primary, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 12),
+          if (entries.isEmpty)
+            _freeScheduleTile(theme, 8 * 60, 18 * 60)
+          else
+            ...entries.map((entry) {
+              if (entry.task == null) return Padding(padding: const EdgeInsets.only(bottom: 8), child: _freeScheduleTile(theme, entry.startMinutes, entry.endMinutes));
+              return Padding(padding: const EdgeInsets.only(bottom: 8), child: _taskScheduleTile(theme, entry));
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _taskScheduleTile(DashboardThemeStyle theme, _DayScheduleEntry entry) {
+    final task = entry.task!;
+    final status = _scheduleStatusFor(task, entry);
+    final color = _scheduleStatusColor(status, theme);
+    final active = status == _DayScheduleStatus.active;
+
+    return AnimatedBuilder(
+      animation: _schedulePulseController,
+      builder: (context, child) {
+        final pulse = active ? 0.35 + (_schedulePulseController.value * 0.35) : 0.20;
+        return InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _editTask(task),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(active ? 0.28 : status == _DayScheduleStatus.missed ? 0.10 : 0.15),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withOpacity(active ? pulse : 0.36), width: active ? 2 : 1),
+              boxShadow: active ? [BoxShadow(color: color.withOpacity(pulse), blurRadius: 18, spreadRadius: 1)] : null,
+            ),
+            child: child,
+          ),
+        );
+      },
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 72, child: Text(_formatScheduleTime(entry.startMinutes), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w900))),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (active)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(999)),
+                    child: Text('Active Now', style: TextStyle(color: AppThemeColors.readableTextOn(color, theme), fontWeight: FontWeight.w900, fontSize: 11)),
+                  ),
+                Text(toTitleCase(task.task), style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 3),
+                Text('${_formatScheduleTime(entry.startMinutes)} - ${_formatScheduleTime(entry.endMinutes)}', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 3),
+                Text(_scheduleStatusLabel(status), style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _freeScheduleTile(DashboardThemeStyle theme, int start, int end) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => showQuickAddTaskDialog(context, _currentDay, widget.hiveService),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.elevatedSurface.withOpacity(0.58),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.textMuted.withOpacity(0.16)),
+        ),
+        child: Row(
+          children: [
+            SizedBox(width: 72, child: Text(_formatScheduleTime(start), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800))),
+            Expanded(child: Text('${_formatScheduleTime(start)} - ${_formatScheduleTime(end)}\nFree Time', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800))),
+            Icon(Icons.add_circle_outline, color: theme.primary),
+          ],
+        ),
       ),
     );
   }
@@ -705,4 +954,31 @@ class _DayViewState extends State<DayView> {
       ),
     );
   }
+}
+
+enum _DayScheduleStatus {
+  completed,
+  active,
+  overdue,
+  upcoming,
+  missed;
+}
+
+class _DayScheduleRange {
+  final int start;
+  final int end;
+
+  const _DayScheduleRange({required this.start, required this.end});
+}
+
+class _DayScheduleEntry {
+  final int startMinutes;
+  final int endMinutes;
+  final Task? task;
+
+  const _DayScheduleEntry({
+    required this.startMinutes,
+    required this.endMinutes,
+    this.task,
+  });
 }
