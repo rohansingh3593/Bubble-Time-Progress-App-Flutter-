@@ -3804,7 +3804,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             ),
           ),
         ],
-        ),
+      ),
       ),
     );
   }
@@ -4157,7 +4157,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                           left: labelWidth + positioned.column * ((laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount + 6),
                           width: (laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount,
                           height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(36.0, timelineHeight),
-                          child: _scheduleTaskTile(positioned.entry, theme, style, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 30),
+                          child: _scheduleTaskTile(positioned.entry, theme, style, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 75),
                         ),
                     ],
                   ),
@@ -4213,9 +4213,12 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         children: [
           if (!compact) SizedBox(width: 76, child: Text(_formatScheduleTime(entry.startMinutes), style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w900))),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            child: ClipRect(
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                 if (active)
                   Container(
                     margin: const EdgeInsets.only(bottom: 6),
@@ -4230,7 +4233,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                   const SizedBox(height: 4),
                 ],
                 Text(_scheduleStateLabel(state), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: baseColor, fontWeight: FontWeight.w900)),
-              ],
+                  ],
+                ),
+              ),
             ),
           ),
         ],
