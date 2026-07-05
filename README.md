@@ -153,6 +153,7 @@ lib/
 ## 📚 Documentation
 
 - [Complete Task Management Guide](./COMPLETE_TASK_MANAGEMENT_GUIDE.md)
+- [Production Architecture Roadmap](./PRODUCTION_ARCHITECTURE.md)
 
 ---
 
