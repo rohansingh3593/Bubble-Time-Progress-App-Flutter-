@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -40,6 +41,8 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   String _selectedInsightType = 'Priority';
   String _selectedAnalyticsType = 'Status';
   late final AnimationController _pulseController;
+  Timer? _scheduleClockTimer;
+  DateTime _scheduleNow = DateTime.now();
   bool _showDetails = false;
   late DateTime _lastDashboardDate;
 
@@ -52,11 +55,15 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       vsync: this,
       duration: const Duration(milliseconds: 1800),
     )..repeat(reverse: true);
+    _scheduleClockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() => _scheduleNow = DateTime.now());
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _scheduleClockTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -165,8 +172,9 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
                             _buildProgressOverviewStrip(timeProgress),
                             _buildMottoHeroCard(),
                             _summaryHeader(summary),
-                            _todaysProductivitySection(todayProductivityStats, todayTaskRows),
+                            _todayScheduleSection(todayTaskRows, todayProductivityStats),
                             _todayTasksSection(todayTaskRows),
+                            _todaysProductivitySection(todayProductivityStats, todayTaskRows),
                             _instructionProductivitySection(today),
                           ]),
                           _dashboardTabList([
@@ -1285,6 +1293,107 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       pending: pending,
       overdue: overdue,
     );
+  }
+
+  List<_TodayScheduleEntry> _buildTodayScheduleEntries(List<_DashboardTodayTask> rows, DateTime now) {
+    final taskEntries = <_TodayScheduleEntry>[];
+    for (final row in rows) {
+      if (row.group == _TodayTaskGroup.overdue && !_isSameDay(_dateOnly(row.task.dueDate), _dateOnly(now))) continue;
+      final range = _scheduleRangeForTask(row.task);
+      if (range == null) continue;
+      taskEntries.add(_TodayScheduleEntry(startMinutes: range.start, endMinutes: range.end, taskRow: row));
+    }
+    taskEntries.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+
+    final entries = <_TodayScheduleEntry>[];
+    var cursor = 8 * 60;
+    final dayEnd = math.max(18 * 60, taskEntries.isEmpty ? 18 * 60 : taskEntries.map((entry) => entry.endMinutes).reduce(math.max));
+    for (final taskEntry in taskEntries) {
+      if (taskEntry.startMinutes > cursor) {
+        entries.add(_TodayScheduleEntry(startMinutes: cursor, endMinutes: taskEntry.startMinutes));
+      }
+      entries.add(taskEntry);
+      cursor = math.max(cursor, taskEntry.endMinutes);
+    }
+    if (cursor < dayEnd) entries.add(_TodayScheduleEntry(startMinutes: cursor, endMinutes: dayEnd));
+    return entries;
+  }
+
+  _ScheduleRange? _scheduleRangeForTask(Task task) {
+    final routineSchedule = _dashboardRoutineScheduleForTask(task);
+    if (routineSchedule == null) return null;
+    return _ScheduleRange(start: routineSchedule.startMinutes, end: routineSchedule.endMinutes);
+  }
+
+  _TodayScheduleState _scheduleStateFor(_DashboardTodayTask row, _TodayScheduleEntry entry, DateTime now) {
+    final status = row.task.status.trim().toLowerCase();
+    if (_isCompletedTask(row.task)) return _TodayScheduleState.completed;
+    if (status == 'missed') return _TodayScheduleState.missed;
+    final nowMinutes = now.hour * 60 + now.minute;
+    if (nowMinutes >= entry.startMinutes && nowMinutes < entry.endMinutes) return _TodayScheduleState.active;
+    if (nowMinutes >= entry.endMinutes || row.group == _TodayTaskGroup.overdue) return _TodayScheduleState.overdue;
+    if (nowMinutes < entry.startMinutes) return _TodayScheduleState.upcoming;
+    return _TodayScheduleState.pending;
+  }
+
+  Color _scheduleStateColor(_TodayScheduleState state, AppThemeColors theme) {
+    switch (state) {
+      case _TodayScheduleState.completed:
+        return theme.success;
+      case _TodayScheduleState.active:
+        return theme.accent;
+      case _TodayScheduleState.pending:
+        return theme.warning;
+      case _TodayScheduleState.overdue:
+      case _TodayScheduleState.missed:
+        return theme.danger;
+      case _TodayScheduleState.upcoming:
+        return theme.cardTint;
+    }
+  }
+
+  String _scheduleStateLabel(_TodayScheduleState state) {
+    switch (state) {
+      case _TodayScheduleState.completed:
+        return 'Completed';
+      case _TodayScheduleState.active:
+        return 'Active';
+      case _TodayScheduleState.pending:
+        return 'Pending';
+      case _TodayScheduleState.overdue:
+        return 'Overdue';
+      case _TodayScheduleState.upcoming:
+        return 'Upcoming';
+      case _TodayScheduleState.missed:
+        return 'Missed';
+    }
+  }
+
+  String _formatScheduleTime(int minutes) {
+    final normalized = minutes.clamp(0, 24 * 60).toInt();
+    final hour = (normalized ~/ 60) % 24;
+    final minute = normalized % 60;
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final period = hour >= 12 ? 'PM' : 'AM';
+    return minute == 0 ? '$displayHour $period' : '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+  }
+
+  List<_PositionedTodayScheduleEntry> _positionOverlappingTodayEntries(List<_TodayScheduleEntry> entries) {
+    final positioned = <_PositionedTodayScheduleEntry>[];
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final overlappingIndexes = <int>[];
+      for (var j = 0; j < entries.length; j++) {
+        final other = entries[j];
+        if (entry.startMinutes < other.endMinutes && other.startMinutes < entry.endMinutes) {
+          overlappingIndexes.add(j);
+        }
+      }
+      final columnCount = overlappingIndexes.length.clamp(1, 4).toInt();
+      final column = overlappingIndexes.indexOf(i).clamp(0, columnCount - 1).toInt();
+      positioned.add(_PositionedTodayScheduleEntry(entry: entry, column: column, columnCount: columnCount));
+    }
+    return positioned;
   }
 
   Map<String, int> _buildYearProgress(DateTime todayStart) {
@@ -3695,7 +3804,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
             ),
           ),
         ],
-        ),
+      ),
       ),
     );
   }
@@ -3967,6 +4076,200 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
         ),
       ),
     );
+  }
+
+  Widget _todayScheduleSection(List<_DashboardTodayTask> todayRows, _TodayProductivityStats stats) {
+    final style = _dashboardStyle();
+    final theme = AppThemeColors.fromDashboardStyle(style);
+    final now = _scheduleNow;
+    final entries = _buildTodayScheduleEntries(todayRows, now);
+    final positionedEntries = _positionOverlappingTodayEntries(entries.where((entry) => entry.taskRow != null).toList());
+    final dateLabel = '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+    const hourHeight = 72.0;
+    const labelWidth = 58.0;
+    const timelineHeight = hourHeight * 24;
+
+    return _panel(
+      title: 'TODAY SCHEDULE',
+      headerColor: style.primary,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Today Schedule', style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 4),
+                      Text(dateLabel, style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: theme.success.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: theme.success.withOpacity(0.34)),
+                  ),
+                  child: Text('${stats.completionRate}% Complete', style: TextStyle(color: theme.success, fontWeight: FontWeight.w900)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final laneAreaWidth = constraints.maxWidth - labelWidth;
+                return SizedBox(
+                  height: timelineHeight,
+                  child: Stack(
+                    children: [
+                      for (var hour = 0; hour < 24; hour++)
+                        Positioned(
+                          top: hour * hourHeight,
+                          left: 0,
+                          right: 0,
+                          height: hourHeight,
+                          child: InkWell(
+                            onTap: _openQuickAddForNow,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(width: labelWidth, child: Text(_formatScheduleTime(hour * 60), style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800))),
+                                Expanded(child: Container(decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.border.withOpacity(0.35)))))),
+                              ],
+                            ),
+                          ),
+                        ),
+                      Positioned(
+                        top: ((now.hour * 60 + now.minute) / 60) * hourHeight,
+                        left: labelWidth,
+                        right: 0,
+                        child: Container(height: 2, color: theme.accent),
+                      ),
+                      for (final positioned in positionedEntries)
+                        Positioned(
+                          top: (positioned.entry.startMinutes / 60) * hourHeight,
+                          left: labelWidth + positioned.column * ((laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount + 6),
+                          width: (laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount,
+                          height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(36.0, timelineHeight),
+                          child: _scheduleTaskTile(positioned.entry, theme, style, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 75),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _scheduleTaskTile(_TodayScheduleEntry entry, AppThemeColors theme, DashboardThemeStyle style, {bool compact = false}) {
+    final row = entry.taskRow!;
+    final state = _scheduleStateFor(row, entry, _scheduleNow);
+    final baseColor = _scheduleStateColor(state, theme);
+    final active = state == _TodayScheduleState.active;
+    final opacity = state == _TodayScheduleState.missed ? 0.12 : (active ? 0.28 : 0.16);
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, child) {
+        final pulse = active ? (0.45 + (_pulseController.value * 0.35)) : 0.22;
+        return InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _openTodayTaskQuickOccurrence(row),
+          child: Container(
+            padding: EdgeInsets.all(compact ? 4 : 12),
+            decoration: BoxDecoration(
+              color: baseColor.withOpacity(opacity),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: baseColor.withOpacity(active ? pulse : 0.38), width: active ? 2 : 1),
+              boxShadow: active ? [BoxShadow(color: theme.accent.withOpacity(pulse), blurRadius: 20, spreadRadius: 1)] : null,
+            ),
+            child: child,
+          ),
+        );
+      },
+      child: compact
+          ? Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${toTitleCase(row.task.task)} • ${_scheduleStateLabel(state)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 12),
+                  ),
+                ),
+              ],
+            )
+          : Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!compact) SizedBox(width: 76, child: Text(_formatScheduleTime(entry.startMinutes), style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w900))),
+          Expanded(
+            child: ClipRect(
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                if (active)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(color: theme.accent, borderRadius: BorderRadius.circular(999)),
+                    child: Text('Active Now', style: TextStyle(color: AppThemeColors.readableTextOn(theme.accent, style), fontWeight: FontWeight.w900, fontSize: 12)),
+                  ),
+                Text(toTitleCase(row.task.task), style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)),
+                if (!compact) ...[
+                  const SizedBox(height: 4),
+                  Text('${_formatScheduleTime(entry.startMinutes)} - ${_formatScheduleTime(entry.endMinutes)}', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                ],
+                Text(_scheduleStateLabel(state), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: baseColor, fontWeight: FontWeight.w900)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _freeTimeTile({required int start, required int end, VoidCallback? onTap}) {
+    final style = _dashboardStyle();
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: style.elevatedSurface.withOpacity(0.58),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: style.textMuted.withOpacity(0.16)),
+        ),
+        child: Row(
+          children: [
+            SizedBox(width: 76, child: Text(_formatScheduleTime(start), style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800))),
+            Expanded(child: Text('${_formatScheduleTime(start)} - ${_formatScheduleTime(end)}\nFree Time', style: TextStyle(color: style.textMuted, fontWeight: FontWeight.w800))),
+            Icon(Icons.add_circle_outline, color: style.primary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openQuickAddForNow() {
+    showTaskFormDialog(context, date: DateTime.now(), title: 'Add Task', actionLabel: 'Add Task').then((task) {
+      if (task != null) widget.hiveService.addTask(_dateOnly(task.dueDate), task);
+    });
   }
 
   Widget _todaysProductivitySection(_TodayProductivityStats stats, List<_DashboardTodayTask> todayRows) {
@@ -4740,6 +5043,46 @@ class _DashboardTodayTask {
   final String displayStatus;
 
   const _DashboardTodayTask({required this.task, required this.group, required this.displayStatus});
+}
+
+enum _TodayScheduleState {
+  completed,
+  active,
+  pending,
+  overdue,
+  upcoming,
+  missed;
+}
+
+class _ScheduleRange {
+  final int start;
+  final int end;
+
+  const _ScheduleRange({required this.start, required this.end});
+}
+
+class _TodayScheduleEntry {
+  final int startMinutes;
+  final int endMinutes;
+  final _DashboardTodayTask? taskRow;
+
+  const _TodayScheduleEntry({
+    required this.startMinutes,
+    required this.endMinutes,
+    this.taskRow,
+  });
+}
+
+class _PositionedTodayScheduleEntry {
+  final _TodayScheduleEntry entry;
+  final int column;
+  final int columnCount;
+
+  const _PositionedTodayScheduleEntry({
+    required this.entry,
+    required this.column,
+    required this.columnCount,
+  });
 }
 
 class _TodayProductivityStats {

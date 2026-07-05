@@ -184,14 +184,72 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   }
 
   Future<void> _showInstructionActions(InstructionRule instruction) async {
-    if (instruction.isTaskLinked) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Task-linked instructions are updated from the related task completion popup.')),
-      );
-      return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+              const SizedBox(height: 6),
+              Text(
+                instruction.isTaskLinked
+                    ? 'Task-linked instruction • Edit here, update completion from the related task popup.'
+                    : 'Standalone instruction • Edit details or update today’s status.',
+                style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54),
+              ),
+              const SizedBox(height: 10),
+              if (instruction.isStandalone)
+                ListTile(
+                  leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                  title: const Text('Update Today'),
+                  onTap: () => Navigator.pop(context, 'update'),
+                ),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit Instruction'),
+                onTap: () => Navigator.pop(context, 'edit'),
+              ),
+              ListTile(
+                leading: Icon(instruction.enabled ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                title: Text(instruction.enabled ? 'Disable Instruction' : 'Enable Instruction'),
+                onTap: () => Navigator.pop(context, 'toggle'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                title: const Text('Delete Instruction'),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: const Text('Close'),
+                onTap: () => Navigator.pop(context, 'close'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || action == null || action == 'close') return;
+
+    switch (action) {
+      case 'update':
+        await _showInstructionUpdateDialog(instruction);
+        return;
+      case 'edit':
+        await _showInstructionForm(instruction);
+        return;
+      case 'toggle':
+        await widget.hiveService.saveInstruction(instruction.copyWith(enabled: !instruction.enabled));
+        return;
+      case 'delete':
+        await widget.hiveService.deleteInstruction(instruction.id);
+        return;
     }
-    await _showInstructionUpdateDialog(instruction);
   }
 
   Future<void> _showInstructionUpdateDialog(InstructionRule instruction) async {
