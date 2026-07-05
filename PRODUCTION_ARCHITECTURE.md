@@ -52,6 +52,44 @@ This roadmap extends the current local-first Flutter app into a production-ready
                     └──────────────────────┘
 ```
 
+
+## Working Starter Implementation
+
+The repository includes a runnable starter backend in `backend/` and a Flutter WebSocket helper in `lib/services/sync_service.dart`. This makes the architecture executable instead of documentation-only.
+
+```text
+Flutter Windows App
+        ↕ WebSocket + REST API
+FastAPI Backend
+        ↕ MongoDB
+Flutter Mobile App
+```
+
+Backend files:
+
+```text
+backend/
+├── main.py
+├── database.py
+├── websocket_manager.py
+├── models.py
+└── requirements.txt
+```
+
+Install and run the backend from the `backend/` directory:
+
+```bash
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Use `http://localhost:8000` for the health check. Mobile devices should connect to the host machine IP, for example `ws://192.168.1.10:8000/ws`.
+
+The working synchronization rule is:
+
+- Windows task time update: Windows Flutter → WebSocket → FastAPI → MongoDB → broadcast → Mobile Flutter.
+- Mobile task completion: Mobile Flutter → WebSocket → FastAPI → MongoDB → broadcast → Windows Flutter.
+
 ## Recommended Repository Structure
 
 The existing Flutter application can remain the shared app shell while the backend and any split desktop/mobile clients are introduced incrementally.

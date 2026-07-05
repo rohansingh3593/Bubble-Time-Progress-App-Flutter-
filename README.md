@@ -168,6 +168,29 @@ flutter run
 
 ---
 
+
+## 🔄 Working Sync Starter
+
+This repository now includes a minimal FastAPI + MongoDB backend and a Flutter WebSocket client service for live task sync:
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+- Backend health check: `http://localhost:8000`
+- WebSocket endpoint: `ws://<your-windows-ip>:8000/ws`
+- Flutter sync helper: `lib/services/sync_service.dart`
+
+Working flow:
+
+```text
+Windows Flutter → WebSocket → FastAPI → MongoDB → Broadcast → Mobile Flutter
+Mobile Flutter → WebSocket → FastAPI → MongoDB → Broadcast → Windows Flutter
+```
+
+---
 ## 🐛 Troubleshooting
 
 ### Windows `LNK1168` / `momentum.exe` cannot be opened for writing?
