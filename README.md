@@ -179,6 +179,12 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+On Windows/PowerShell, run the repository checks with:
+
+```powershell
+.\run.ps1
+```
+
 - Backend health check: `http://localhost:8000`
 - WebSocket endpoint: `ws://<your-windows-ip>:8000/ws`
 - Flutter sync helper: `lib/services/sync_service.dart`
