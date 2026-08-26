@@ -18,6 +18,7 @@ import 'screens/goal_dashboard_view.dart';
 import 'screens/reward_money_history_view.dart';
 import 'screens/motivation_motto_dashboard_view.dart';
 import 'screens/productivity_timeline_view.dart';
+import 'screens/log_earn_view.dart';
 import 'models/rank_profile.dart';
 import 'constants/dashboard_themes.dart';
 import 'utils/text_formatters.dart';
@@ -265,6 +266,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       MotivationMottoDashboardView(hiveService: widget.hiveService),
       ProductivityTimelineView(hiveService: widget.hiveService),
       ProductivityTimelineView(hiveService: widget.hiveService),
+      LogEarnView(hiveService: widget.hiveService),
     ];
     _scheduleMottoReminder();
   }
@@ -396,6 +398,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _SidebarNavItem(icon: Icons.lightbulb_rounded, label: 'Motivation', selectedIndex: 10),
       _SidebarNavItem(icon: Icons.insert_chart_outlined_rounded, label: 'Progress', selectedIndex: 11),
       _SidebarNavItem(icon: Icons.analytics_rounded, label: 'Reports', selectedIndex: 12),
+      _SidebarNavItem(icon: Icons.stars_rounded, label: 'Log & Earn', selectedIndex: 13),
     ];
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600 || overlay;
