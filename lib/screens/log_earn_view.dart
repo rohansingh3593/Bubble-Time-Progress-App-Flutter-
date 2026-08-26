@@ -33,7 +33,10 @@ class _LogEarnViewState extends State<LogEarnView> {
         final reward = widget.hiveService.getRewardMoneySummary();
         final snapshot = widget.hiveService.calculateProductivitySnapshotForDate(_day);
         final milestone = LogRewardPolicy.nextMilestone(lifetime.currentStreak);
-        final milestoneProgress = (lifetime.currentStreak / milestone.qualifyingDays).clamp(0.0, 1.0);
+        final milestoneProgress = (lifetime.currentStreak /
+                milestone.qualifyingDays)
+            .clamp(0.0, 1.0)
+            .toDouble();
         return Scaffold(
           backgroundColor: style.background,
           body: SafeArea(
@@ -97,7 +100,64 @@ class _LogEarnViewState extends State<LogEarnView> {
     child: Row(children: [CircleAvatar(backgroundColor: style.accent.withOpacity(.18), foregroundColor: style.accent, child: const Icon(Icons.card_giftcard_rounded)), const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Log for ${(milestone.qualifyingDays - days).clamp(0, milestone.qualifyingDays)} more ${milestone.qualifyingDays - days == 1 ? 'day' : 'days'} to earn ${milestone.coins} coins.', style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)), const SizedBox(height: 12), TweenAnimationBuilder<double>(tween: Tween(begin: 0, end: progress), duration: const Duration(milliseconds: 650), builder: (_, value, __) => LinearProgressIndicator(value: value, minHeight: 8, borderRadius: BorderRadius.circular(99), color: style.accent)), const SizedBox(height: 8), Text('$days / ${milestone.qualifyingDays} qualifying days', style: TextStyle(color: style.textMuted))]))]),
   );
 
-  Widget _dateSelector(DashboardThemeStyle style) => Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), decoration: BoxDecoration(color: style.surface, borderRadius: BorderRadius.circular(16)), child: Row(children: [IconButton(tooltip: 'Previous day', onPressed: () => setState(() => _selectedDate = _day.subtract(const Duration(days: 1))), icon: const Icon(Icons.chevron_left_rounded)), Expanded(child: InkWell(onTap: _pickDate, borderRadius: BorderRadius.circular(12), child: Padding(padding: const EdgeInsets.all(12), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.calendar_month_rounded, color: style.primary), const SizedBox(width: 8), Flexible(child: Text(_dateLabel(), overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w800)))]))), IconButton(tooltip: 'Next day', onPressed: () => setState(() => _selectedDate = _day.add(const Duration(days: 1))), icon: const Icon(Icons.chevron_right_rounded)), if (!_sameDay(_day, DateTime.now())) TextButton(onPressed: () => setState(() => _selectedDate = DateTime.now()), child: const Text('Today'))]));
+  Widget _dateSelector(DashboardThemeStyle style) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: style.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Previous day',
+            onPressed: () => setState(
+              () => _selectedDate = _day.subtract(const Duration(days: 1)),
+            ),
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: _pickDate,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.calendar_month_rounded, color: style.primary),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        _dateLabel(),
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: style.textPrimary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Next day',
+            onPressed: () => setState(
+              () => _selectedDate = _day.add(const Duration(days: 1)),
+            ),
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+          if (!_sameDay(_day, DateTime.now()))
+            TextButton(
+              onPressed: () => setState(() => _selectedDate = DateTime.now()),
+              child: const Text('Today'),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _taskCard(DashboardThemeStyle style, Task task) {
     final complete = _isCompleted(task); final disabled = !task.routineEnabled || task.status.toLowerCase().contains('cancel'); final missed = task.status.toLowerCase().contains('miss') || task.status.toLowerCase().contains('overdue');
@@ -130,7 +190,124 @@ class _LogEarnViewState extends State<LogEarnView> {
 
   Future<bool> _reviewInstructions(Task task, List<InstructionRule> rules) async {
     final selected = <String, Set<InstructionOption>>{};
-    return await showDialog<bool>(context: context, builder: (context) => StatefulBuilder(builder: (context, setDialogState) => AlertDialog(title: Text(task.task), content: SizedBox(width: 480, child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [const Text('Select everything followed:', style: TextStyle(fontWeight: FontWeight.w800)), const SizedBox(height: 10), ...rules.expand((rule) => [Text(rule.name, style: const TextStyle(fontWeight: FontWeight.w700)), if (rule.options.isEmpty) CheckboxListTile(contentPadding: EdgeInsets.zero, title: const Text('Instruction followed'), value: selected[rule.id]?.isNotEmpty ?? false, onChanged: (v) => setDialogState(() => selected[rule.id] = v == true ? {const InstructionOption(id: '__followed__', name: 'Followed', bonusPoints: 0, pointsEarned: 0)} : {})) else ...rule.options.map((option) => CheckboxListTile(contentPadding: EdgeInsets.zero, title: Text(option.displayLabel), subtitle: Text('+${option.bonusPoints + option.pointsEarned}'), value: selected[rule.id]?.contains(option) ?? false, onChanged: (v) => setDialogState(() { final values = selected.putIfAbsent(rule.id, () => {}); v == true ? values.add(option) : values.remove(option); })))] )]))), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), ElevatedButton(onPressed: () async { for (final rule in rules) { final values = selected[rule.id] ?? {}; await widget.hiveService.updateInstructionStatus(rule, _day, values.isEmpty ? InstructionHistoryEntry.statusMissed : InstructionHistoryEntry.statusFollowed, options: values.where((o) => o.id != '__followed__').toList()); } if (context.mounted) Navigator.pop(context, true); }, child: const Text('Save & Finish'))])))) ?? false;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final instructionWidgets = <Widget>[];
+            for (final rule in rules) {
+              instructionWidgets.add(
+                Text(
+                  rule.name,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              );
+              if (rule.options.isEmpty) {
+                instructionWidgets.add(
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Instruction followed'),
+                    value: selected[rule.id]?.isNotEmpty ?? false,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selected[rule.id] = value == true
+                            ? {
+                                const InstructionOption(
+                                  id: '__followed__',
+                                  name: 'Followed',
+                                  bonusPoints: 0,
+                                  pointsEarned: 0,
+                                ),
+                              }
+                            : <InstructionOption>{};
+                      });
+                    },
+                  ),
+                );
+                continue;
+              }
+
+              for (final option in rule.options) {
+                instructionWidgets.add(
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(option.displayLabel),
+                    subtitle: Text(
+                      '+${option.bonusPoints + option.pointsEarned}',
+                    ),
+                    value: selected[rule.id]?.contains(option) ?? false,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        final values = selected.putIfAbsent(
+                          rule.id,
+                          () => <InstructionOption>{},
+                        );
+                        if (value == true) {
+                          values.add(option);
+                        } else {
+                          values.remove(option);
+                        }
+                      });
+                    },
+                  ),
+                );
+              }
+            }
+
+            return AlertDialog(
+              title: Text(task.task),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Select everything followed:',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 10),
+                      ...instructionWidgets,
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    for (final rule in rules) {
+                      final values =
+                          selected[rule.id] ?? <InstructionOption>{};
+                      await widget.hiveService.updateInstructionStatus(
+                        rule,
+                        _day,
+                        values.isEmpty
+                            ? InstructionHistoryEntry.statusMissed
+                            : InstructionHistoryEntry.statusFollowed,
+                        options: values
+                            .where((option) => option.id != '__followed__')
+                            .toList(),
+                      );
+                    }
+                    if (dialogContext.mounted) {
+                      Navigator.pop(dialogContext, true);
+                    }
+                  },
+                  child: const Text('Save & Finish'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    return result ?? false;
   }
 
   Future<void> _selectAll(List<Task> tasks) async { for (final task in tasks.where((t) => !_isCompleted(t) && t.routineEnabled && !widget.hiveService.isDailyJournalTask(t))) { await _complete(task, _linkedInstructions(task)); } }
