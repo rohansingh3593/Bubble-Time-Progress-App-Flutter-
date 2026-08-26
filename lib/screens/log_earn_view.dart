@@ -24,7 +24,6 @@ class _LogEarnViewState extends State<LogEarnView> {
     'Non-Routine',
     'Completed',
     'Pending',
-    'Disabled',
   ];
 
   DateTime _selectedDate = DateTime.now();
@@ -41,13 +40,7 @@ class _LogEarnViewState extends State<LogEarnView> {
         final style = DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
         final eligibleTasks = widget.hiveService
             .getMasterTaskOccurrencesForDate(_day);
-        final allTasks = _selectedFilter == 'Disabled'
-            ? widget.hiveService.getMasterTaskOccurrencesForDate(
-                _day,
-                includeDisabled: true,
-              )
-            : eligibleTasks;
-        final tasks = allTasks.where(_matchesFilter).toList();
+        final tasks = eligibleTasks.where(_matchesFilter).toList();
         final completed = eligibleTasks.where(_isCompleted).length;
         final progress = eligibleTasks.isEmpty
             ? 0.0
@@ -92,7 +85,10 @@ class _LogEarnViewState extends State<LogEarnView> {
                         ]),
                         _filterBar(style),
                         const SizedBox(height: 8),
-                        if (tasks.isEmpty) _empty(style) else ...tasks.map((task) => _taskCard(style, task)),
+                        if (tasks.isEmpty)
+                          _empty(style)
+                        else
+                          ..._taskList(style, tasks),
                         const SizedBox(height: 16),
                         _bottomSummary(
                           style,
@@ -148,10 +144,55 @@ class _LogEarnViewState extends State<LogEarnView> {
         return _isCompleted(task);
       case 'Pending':
         return !_isCompleted(task) && task.routineEnabled;
-      case 'Disabled':
-        return task.repeatTask && !task.routineEnabled;
       default:
         return task.routineEnabled || !task.repeatTask;
+    }
+  }
+
+  List<Widget> _taskList(DashboardThemeStyle style, List<Task> tasks) {
+    if (_selectedFilter != 'All') {
+      return tasks.map((task) => _taskCard(style, task)).toList();
+    }
+    const types = <String>[
+      'Daily',
+      'Weekly',
+      'Monthly',
+      'Yearly',
+      'Non-Routine',
+    ];
+    final widgets = <Widget>[];
+    for (final type in types) {
+      final group = tasks.where((task) => _taskType(task) == type).toList();
+      if (group.isEmpty) continue;
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(2, 8, 2, 10),
+          child: Text(
+            '$type Tasks',
+            style: TextStyle(
+              color: style.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      );
+      widgets.addAll(group.map((task) => _taskCard(style, task)));
+    }
+    return widgets;
+  }
+
+  String _taskType(Task task) {
+    if (!task.repeatTask) return 'Non-Routine';
+    switch (task.repeatFrequency?.trim().toLowerCase()) {
+      case 'weekly':
+        return 'Weekly';
+      case 'monthly':
+        return 'Monthly';
+      case 'yearly':
+        return 'Yearly';
+      default:
+        return 'Daily';
     }
   }
 
@@ -246,7 +287,7 @@ class _LogEarnViewState extends State<LogEarnView> {
     final schedule = _scheduleLabel(task);
     return Padding(padding: const EdgeInsets.only(bottom: 10), child: Material(color: complete ? stateColor.withOpacity(.10) : (style.cardTint ?? style.surface), borderRadius: BorderRadius.circular(16), child: InkWell(onTap: () => _showDetails(task, instructions), borderRadius: BorderRadius.circular(16), child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [
       CircleAvatar(backgroundColor: stateColor.withOpacity(.14), foregroundColor: stateColor, child: Icon(_categoryIcon(task.category))), const SizedBox(width: 13),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(task.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)), const SizedBox(height: 5), Text('${task.repeatTask ? task.repeatFrequency ?? 'Daily' : 'Non-Routine'} • ${task.category} • ${task.priority}${disabled ? ' • Paused' : ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 12, fontWeight: FontWeight.w700)), const SizedBox(height: 5), Wrap(spacing: 12, runSpacing: 4, children: [if (schedule != null) _meta(style, Icons.schedule_rounded, 'Scheduled: $schedule'), if (task.estimatedMinutes > 0) _meta(style, Icons.timelapse_rounded, 'Duration: ${task.estimatedMinutes} min'), _meta(style, Icons.rule_rounded, 'Instructions: ${instructions.length}'), _meta(style, Icons.flag_outlined, 'Goal: ${hasGoal ? 'Yes' : 'No'}')])])),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(task.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)), const SizedBox(height: 5), Text('${task.repeatTask ? task.repeatFrequency ?? 'Daily' : 'Non-Routine'} • ${task.category} • ${task.priority}${disabled ? ' • Paused' : ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 12, fontWeight: FontWeight.w700)), const SizedBox(height: 5), Wrap(spacing: 12, runSpacing: 4, children: [_meta(style, Icons.event_repeat_rounded, _occurrenceLabel(task)), if (schedule != null) _meta(style, Icons.schedule_rounded, 'Scheduled: $schedule'), if (task.estimatedMinutes > 0) _meta(style, Icons.timelapse_rounded, 'Duration: ${task.estimatedMinutes} min'), _meta(style, Icons.rule_rounded, 'Instructions: ${instructions.length}'), _meta(style, Icons.flag_outlined, 'Goal: ${hasGoal ? 'Yes' : 'No'}')])])),
       const SizedBox(width: 8), Column(crossAxisAlignment: CrossAxisAlignment.end, children: [Text(complete ? 'Reward: +${_taskEarned(task)}' : 'Reward on completion', style: TextStyle(color: complete ? style.accent : style.textMuted, fontSize: 12, fontWeight: FontWeight.w900)), if (complete) Text(_completionTime(task), style: TextStyle(color: style.textMuted, fontSize: 11))]), Checkbox(value: complete, onChanged: disabled || _isFuture || widget.hiveService.isDailyJournalTask(task) ? null : (_) => _complete(task, instructions), activeColor: style.success ?? style.primary),
     ])))));
   }
@@ -487,6 +528,51 @@ class _LogEarnViewState extends State<LogEarnView> {
     final startMinutes = task.hourSlot! * 60;
     final endMinutes = startMinutes + task.estimatedMinutes;
     return '${_minutesTime(startMinutes)} - ${_minutesTime(endMinutes)}';
+  }
+
+  String _occurrenceLabel(Task task) {
+    const weekdays = <String>[
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    const months = <String>[
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    switch (_taskType(task)) {
+      case 'Weekly':
+        return weekdays[_day.weekday - 1];
+      case 'Monthly':
+        return 'Day ${_day.day}';
+      case 'Yearly':
+        return '${_day.day} ${months[_day.month - 1]}';
+      case 'Non-Routine':
+        final due = DateTime(
+          task.dueDate.year,
+          task.dueDate.month,
+          task.dueDate.day,
+        );
+        return due.isBefore(_day) && !_isCompleted(task)
+            ? 'Overdue'
+            : 'Due this day';
+      default:
+        return 'Daily';
+    }
   }
 
   String _completionTime(Task task) {

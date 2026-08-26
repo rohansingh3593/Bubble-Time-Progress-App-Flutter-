@@ -233,6 +233,7 @@ class HiveService {
     final exact = allTasks[day] ?? const <Task>[];
     final result = <Task>[];
     final recurringKeys = <String>{};
+    final nonRoutineKeys = <String>{};
     final seriesStarts = <String, DateTime>{};
     for (final entry in allTasks.entries) {
       for (final task in entry.value.where((task) => task.repeatTask)) {
@@ -254,6 +255,25 @@ class HiveService {
       if (!includeDisabled && task.repeatTask && !task.routineEnabled) continue;
       result.add(task);
       if (task.repeatTask) recurringKeys.add(_recurringSeriesKey(task));
+      if (!task.repeatTask) nonRoutineKeys.add(_nonRoutineTaskKey(task));
+    }
+
+    // An unfinished non-routine task remains actionable after its due date.
+    // It is still the original Master Task object, not a generated copy.
+    for (final entry in allTasks.entries) {
+      for (final task in entry.value) {
+        if (task.repeatTask || _isDailyJournalTask(task)) continue;
+        final status = task.status.trim().toLowerCase();
+        if (_isCompletedTask(task) || status == 'cancelled') continue;
+        final due = DateTime(
+          task.dueDate.year,
+          task.dueDate.month,
+          task.dueDate.day,
+        );
+        if (!due.isBefore(day)) continue;
+        final taskKey = _nonRoutineTaskKey(task);
+        if (nonRoutineKeys.add(taskKey)) result.add(task);
+      }
     }
 
     for (final entry in allTasks.entries) {
@@ -292,6 +312,9 @@ class HiveService {
   String _recurringSeriesKey(Task task) =>
       '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${_normalizedRepeatFrequency(task.repeatFrequency)}';
 
+  String _nonRoutineTaskKey(Task task) =>
+      '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${task.dueDate.toIso8601String().split('T').first}';
+
   bool _recurrenceAppliesOn(Task task, DateTime start, DateTime day) {
     if (day.isBefore(start)) return false;
     switch (_normalizedRepeatFrequency(task.repeatFrequency)) {
@@ -321,6 +344,16 @@ class HiveService {
       occurrenceDate.month,
       occurrenceDate.day,
     );
+    final sourceDay = DateTime(
+      source.dueDate.year,
+      source.dueDate.month,
+      source.dueDate.day,
+    );
+    if (!source.repeatTask && !_isSameDate(sourceDay, day)) {
+      // Move an overdue/manual occurrence rather than copying it, preserving a
+      // single Master Task record while recording completion on the log date.
+      await deleteTaskByReference(source);
+    }
     final key = _formatKey(day);
     final tasks = _storedTasksForDate(day);
     final index = source.repeatTask
