@@ -221,6 +221,163 @@ class HiveService {
     ];
   }
 
+  /// Returns the Master Tasks occurrences applicable to [date]. Existing
+  /// occurrence records win over recurring templates, so completion state and
+  /// completion timestamps remain the same records used by every dashboard.
+  List<Task> getMasterTaskOccurrencesForDate(
+    DateTime date, {
+    bool includeDisabled = false,
+  }) {
+    final day = DateTime(date.year, date.month, date.day);
+    final allTasks = getAllTasksByDate();
+    final exact = allTasks[day] ?? const <Task>[];
+    final result = <Task>[];
+    final recurringKeys = <String>{};
+    final nonRoutineKeys = <String>{};
+    final seriesStarts = <String, DateTime>{};
+    for (final entry in allTasks.entries) {
+      for (final task in entry.value.where((task) => task.repeatTask)) {
+        final seriesKey = _recurringSeriesKey(task);
+        final taskDay = DateTime(
+          task.dueDate.year,
+          task.dueDate.month,
+          task.dueDate.day,
+        );
+        final current = seriesStarts[seriesKey];
+        if (current == null || taskDay.isBefore(current)) {
+          seriesStarts[seriesKey] = taskDay;
+        }
+      }
+    }
+
+    for (final task in exact) {
+      if (_isDailyJournalTask(task)) continue;
+      if (!includeDisabled && task.repeatTask && !task.routineEnabled) continue;
+      result.add(task);
+      if (task.repeatTask) recurringKeys.add(_recurringSeriesKey(task));
+      if (!task.repeatTask) nonRoutineKeys.add(_nonRoutineTaskKey(task));
+    }
+
+    // An unfinished non-routine task remains actionable after its due date.
+    // It is still the original Master Task object, not a generated copy.
+    for (final entry in allTasks.entries) {
+      for (final task in entry.value) {
+        if (task.repeatTask || _isDailyJournalTask(task)) continue;
+        final status = task.status.trim().toLowerCase();
+        if (_isCompletedTask(task) || status == 'cancelled') continue;
+        final due = DateTime(
+          task.dueDate.year,
+          task.dueDate.month,
+          task.dueDate.day,
+        );
+        if (!due.isBefore(day)) continue;
+        final taskKey = _nonRoutineTaskKey(task);
+        if (nonRoutineKeys.add(taskKey)) result.add(task);
+      }
+    }
+
+    for (final entry in allTasks.entries) {
+      for (final template in entry.value) {
+        if (!template.repeatTask || _isDailyJournalTask(template)) continue;
+        if (!includeDisabled && !template.routineEnabled) continue;
+        final seriesKey = _recurringSeriesKey(template);
+        if (recurringKeys.contains(seriesKey)) continue;
+        final start = seriesStarts[seriesKey] ?? DateTime(
+            template.dueDate.year,
+            template.dueDate.month,
+            template.dueDate.day,
+          );
+        if (!_recurrenceAppliesOn(template, start, day)) continue;
+        // This is a read-only occurrence projection of the Master Task. It is
+        // not persisted until the user completes it, and therefore cannot
+        // create a disconnected or duplicate task collection.
+        result.add(template.copyWith(
+          dueDate: day,
+          done: false,
+          status: 'Not Started',
+        ));
+        recurringKeys.add(seriesKey);
+      }
+    }
+
+    result.sort((a, b) {
+      final aSlot = a.hourSlot ?? 24;
+      final bSlot = b.hourSlot ?? 24;
+      final byTime = aSlot.compareTo(bSlot);
+      return byTime != 0 ? byTime : a.task.compareTo(b.task);
+    });
+    return result;
+  }
+
+  String _recurringSeriesKey(Task task) =>
+      '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${_normalizedRepeatFrequency(task.repeatFrequency)}';
+
+  String _nonRoutineTaskKey(Task task) =>
+      '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${task.dueDate.toIso8601String().split('T').first}';
+
+  bool _recurrenceAppliesOn(Task task, DateTime start, DateTime day) {
+    if (day.isBefore(start)) return false;
+    switch (_normalizedRepeatFrequency(task.repeatFrequency)) {
+      case 'daily':
+        return true;
+      case 'weekly':
+        return day.difference(start).inDays % 7 == 0;
+      case 'monthly':
+        return day.day == start.day;
+      case 'yearly':
+        return day.month == start.month && day.day == start.day;
+      default:
+        return _isSameDate(start, day);
+    }
+  }
+
+  /// Completes or reopens one selected occurrence without mutating a separate
+  /// Log & Earn model. The saved record is the same Hive task occurrence read
+  /// by Master Tasks, Schedule, Streak, Productivity, and Reports.
+  Future<void> setTaskOccurrenceCompleted(
+    Task source,
+    DateTime occurrenceDate,
+    bool completed,
+  ) async {
+    final day = DateTime(
+      occurrenceDate.year,
+      occurrenceDate.month,
+      occurrenceDate.day,
+    );
+    final sourceDay = DateTime(
+      source.dueDate.year,
+      source.dueDate.month,
+      source.dueDate.day,
+    );
+    if (!source.repeatTask && !_isSameDate(sourceDay, day)) {
+      // Move an overdue/manual occurrence rather than copying it, preserving a
+      // single Master Task record while recording completion on the log date.
+      await deleteTaskByReference(source);
+    }
+    final key = _formatKey(day);
+    final tasks = _storedTasksForDate(day);
+    final index = source.repeatTask
+        ? tasks.indexWhere((task) => _isSameRecurringSeriesIdentity(task, source))
+        : tasks.indexWhere((task) => _matchesTaskIdentity(task, source));
+    final now = DateTime.now();
+    final dueDate = completed
+        ? DateTime(day.year, day.month, day.day, now.hour, now.minute, now.second)
+        : day;
+    final updated = _withNormalizedTaskName(source.copyWith(
+      done: completed,
+      status: completed ? 'Completed' : 'In Progress',
+      dueDate: dueDate,
+    ));
+    if (index >= 0) {
+      tasks[index] = updated;
+    } else {
+      tasks.add(updated);
+    }
+    await _putTasksForKey(key, tasks);
+    await recalculateProductivitySnapshotForDate(day);
+    if (completed) await _handleRecurringIfNeeded(updated: updated);
+  }
+
   Task _dailyJournalTaskForDate(DateTime date) {
     final day = DateTime(date.year, date.month, date.day);
     final today = DateTime.now();
