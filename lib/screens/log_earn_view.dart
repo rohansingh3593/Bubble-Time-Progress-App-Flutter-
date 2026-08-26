@@ -15,7 +15,20 @@ class LogEarnView extends StatefulWidget {
 }
 
 class _LogEarnViewState extends State<LogEarnView> {
+  static const _filters = <String>[
+    'All',
+    'Daily',
+    'Weekly',
+    'Monthly',
+    'Yearly',
+    'Non-Routine',
+    'Completed',
+    'Pending',
+    'Disabled',
+  ];
+
   DateTime _selectedDate = DateTime.now();
+  String _selectedFilter = 'All';
 
   DateTime get _day => DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
   bool get _isFuture => _day.isAfter(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day));
@@ -26,9 +39,19 @@ class _LogEarnViewState extends State<LogEarnView> {
       animation: widget.hiveService.getBoxListenable(),
       builder: (context, _) {
         final style = DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
-        final tasks = widget.hiveService.getTasksForDate(_day);
-        final completed = tasks.where(_isCompleted).length;
-        final progress = tasks.isEmpty ? 0.0 : completed / tasks.length;
+        final eligibleTasks = widget.hiveService
+            .getMasterTaskOccurrencesForDate(_day);
+        final allTasks = _selectedFilter == 'Disabled'
+            ? widget.hiveService.getMasterTaskOccurrencesForDate(
+                _day,
+                includeDisabled: true,
+              )
+            : eligibleTasks;
+        final tasks = allTasks.where(_matchesFilter).toList();
+        final completed = eligibleTasks.where(_isCompleted).length;
+        final progress = eligibleTasks.isEmpty
+            ? 0.0
+            : completed / eligibleTasks.length;
         final lifetime = widget.hiveService.getLifetimeProductivityStats();
         final reward = widget.hiveService.getRewardMoneySummary();
         final snapshot = widget.hiveService.calculateProductivitySnapshotForDate(_day);
@@ -67,10 +90,16 @@ class _LogEarnViewState extends State<LogEarnView> {
                           Expanded(child: Text('All Tasks', style: TextStyle(color: style.textPrimary, fontSize: 22, fontWeight: FontWeight.w900))),
                           TextButton.icon(onPressed: _isFuture ? null : () => _selectAll(tasks), icon: const Icon(Icons.done_all_rounded), label: const Text('Select All')),
                         ]),
+                        _filterBar(style),
                         const SizedBox(height: 8),
                         if (tasks.isEmpty) _empty(style) else ...tasks.map((task) => _taskCard(style, task)),
                         const SizedBox(height: 16),
-                        _bottomSummary(style, snapshot.totalPoints, completed, tasks.length),
+                        _bottomSummary(
+                          style,
+                          snapshot.totalPoints,
+                          completed,
+                          eligibleTasks.length,
+                        ),
                       ]),
                     ),
                   ],
@@ -81,6 +110,49 @@ class _LogEarnViewState extends State<LogEarnView> {
         );
       },
     );
+  }
+
+  Widget _filterBar(DashboardThemeStyle style) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: _filters.map((filter) {
+          final selected = filter == _selectedFilter;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(filter),
+              selected: selected,
+              onSelected: (_) => setState(() => _selectedFilter = filter),
+              selectedColor: style.primary.withOpacity(.18),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  bool _matchesFilter(Task task) {
+    final frequency = (task.repeatFrequency ?? 'Daily').trim().toLowerCase();
+    switch (_selectedFilter) {
+      case 'Daily':
+      case 'Weekly':
+      case 'Monthly':
+      case 'Yearly':
+        return task.repeatTask &&
+            frequency == _selectedFilter.toLowerCase();
+      case 'Non-Routine':
+        return !task.repeatTask;
+      case 'Completed':
+        return _isCompleted(task);
+      case 'Pending':
+        return !_isCompleted(task) && task.routineEnabled;
+      case 'Disabled':
+        return task.repeatTask && !task.routineEnabled;
+      default:
+        return task.routineEnabled || !task.repeatTask;
+    }
   }
 
   Widget _header(DashboardThemeStyle style) => Row(children: [
@@ -169,10 +241,13 @@ class _LogEarnViewState extends State<LogEarnView> {
                 ? style.textMuted
                 : (style.warning ?? style.accent);
     final instructions = _linkedInstructions(task);
+    final hasGoal = task.category.toLowerCase().contains('goal') ||
+        task.description.toLowerCase().contains('goal');
+    final schedule = _scheduleLabel(task);
     return Padding(padding: const EdgeInsets.only(bottom: 10), child: Material(color: complete ? stateColor.withOpacity(.10) : (style.cardTint ?? style.surface), borderRadius: BorderRadius.circular(16), child: InkWell(onTap: () => _showDetails(task, instructions), borderRadius: BorderRadius.circular(16), child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [
       CircleAvatar(backgroundColor: stateColor.withOpacity(.14), foregroundColor: stateColor, child: Icon(_categoryIcon(task.category))), const SizedBox(width: 13),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(task.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)), const SizedBox(height: 5), Wrap(spacing: 12, runSpacing: 4, children: [if (task.hourSlot != null) _meta(style, Icons.schedule_rounded, _hour(task.hourSlot!)), if (task.estimatedMinutes > 0) _meta(style, Icons.timelapse_rounded, '${task.estimatedMinutes} min'), _meta(style, Icons.repeat_rounded, task.repeatTask ? (task.repeatFrequency ?? 'Daily') : 'One time'), if (instructions.isNotEmpty) _meta(style, Icons.rule_rounded, '${instructions.length} instruction${instructions.length == 1 ? '' : 's'}')])])),
-      const SizedBox(width: 8), if (complete) Text('+${_taskEarned(task)}', style: TextStyle(color: style.accent, fontWeight: FontWeight.w900)), Checkbox(value: complete, onChanged: disabled || _isFuture || widget.hiveService.isDailyJournalTask(task) ? null : (_) => _complete(task, instructions), activeColor: style.success ?? style.primary),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(task.task, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textPrimary, fontWeight: FontWeight.w900, fontSize: 16)), const SizedBox(height: 5), Text('${task.repeatTask ? task.repeatFrequency ?? 'Daily' : 'Non-Routine'} • ${task.category} • ${task.priority}${disabled ? ' • Paused' : ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: style.textMuted, fontSize: 12, fontWeight: FontWeight.w700)), const SizedBox(height: 5), Wrap(spacing: 12, runSpacing: 4, children: [if (schedule != null) _meta(style, Icons.schedule_rounded, 'Scheduled: $schedule'), if (task.estimatedMinutes > 0) _meta(style, Icons.timelapse_rounded, 'Duration: ${task.estimatedMinutes} min'), _meta(style, Icons.rule_rounded, 'Instructions: ${instructions.length}'), _meta(style, Icons.flag_outlined, 'Goal: ${hasGoal ? 'Yes' : 'No'}')])])),
+      const SizedBox(width: 8), Column(crossAxisAlignment: CrossAxisAlignment.end, children: [Text(complete ? 'Reward: +${_taskEarned(task)}' : 'Reward on completion', style: TextStyle(color: complete ? style.accent : style.textMuted, fontSize: 12, fontWeight: FontWeight.w900)), if (complete) Text(_completionTime(task), style: TextStyle(color: style.textMuted, fontSize: 11))]), Checkbox(value: complete, onChanged: disabled || _isFuture || widget.hiveService.isDailyJournalTask(task) ? null : (_) => _complete(task, instructions), activeColor: style.success ?? style.primary),
     ])))));
   }
 
@@ -182,9 +257,12 @@ class _LogEarnViewState extends State<LogEarnView> {
   Widget _summaryValue(DashboardThemeStyle style, String label, String value) => Column(children: [Text(label, style: TextStyle(color: style.textMuted)), const SizedBox(height: 5), Text(value, style: TextStyle(color: style.textPrimary, fontSize: 20, fontWeight: FontWeight.w900))]);
 
   Future<void> _complete(Task task, List<InstructionRule> instructions) async {
-    if (_isCompleted(task)) { await widget.hiveService.updateTaskByReference(task, task.copyWith(done: false, status: 'In Progress')); return; }
+    if (_isCompleted(task)) {
+      await widget.hiveService.setTaskOccurrenceCompleted(task, _day, false);
+      return;
+    }
     if (instructions.isNotEmpty && !await _reviewInstructions(task, instructions)) return;
-    await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed', dueDate: DateTime.now()));
+    await widget.hiveService.setTaskOccurrenceCompleted(task, _day, true);
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✓ Completed  •  +${_taskEarned(task)} coins'), duration: const Duration(seconds: 2)));
   }
 
@@ -312,7 +390,89 @@ class _LogEarnViewState extends State<LogEarnView> {
 
   Future<void> _selectAll(List<Task> tasks) async { for (final task in tasks.where((t) => !_isCompleted(t) && t.routineEnabled && !widget.hiveService.isDailyJournalTask(t))) { await _complete(task, _linkedInstructions(task)); } }
   List<InstructionRule> _linkedInstructions(Task task) => widget.hiveService.getTaskLinkedInstructions().where((i) => i.enabled && i.isLinkedToTask(task.task)).toList();
-  void _showDetails(Task task, List<InstructionRule> instructions) { final snapshot = widget.hiveService.calculateProductivitySnapshotForDate(_day); showDialog<void>(context: context, builder: (_) => AlertDialog(title: Text(task.task), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [Text(_isCompleted(task) ? '✓ Completed' : task.status), const SizedBox(height: 12), Text('Category: ${task.category}'), Text('Scheduled: ${task.hourSlot == null ? 'Not scheduled' : _hour(task.hourSlot!)}'), Text('Duration: ${task.estimatedMinutes} minutes'), Text('Frequency: ${task.repeatTask ? task.repeatFrequency ?? 'Daily' : 'One time'}'), Text('Instructions: ${instructions.length}'), if (_isCompleted(task)) ...[Text('Completed at: ${_hour(task.dueDate.hour)}'), Text('Total day earned: +${snapshot.totalPoints}')], if (task.description.trim().isNotEmpty) ...[const SizedBox(height: 10), Text(task.description)]])), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))])); }
+  void _showDetails(Task task, List<InstructionRule> instructions) {
+    final snapshot =
+        widget.hiveService.calculateProductivitySnapshotForDate(_day);
+    final taskEvents = snapshot.pointEvents.where(
+      (event) => event.title
+          .trim()
+          .toLowerCase()
+          .startsWith(task.task.trim().toLowerCase()),
+    );
+    final taskPoints = taskEvents.fold<int>(
+      0,
+      (total, event) => total + event.basePoints,
+    );
+    final timingBonus = taskEvents.fold<int>(
+      0,
+      (total, event) => total + event.timingBonusPoints,
+    );
+    final streakBonus = taskEvents.fold<int>(
+      0,
+      (total, event) => total + event.streakBonusPoints,
+    );
+    var followed = 0;
+    var instructionOptions = 0;
+    var instructionBonus = 0;
+    for (final instruction in instructions) {
+      final entry =
+          widget.hiveService.instructionEntryForDate(instruction, _day);
+      instructionOptions += instruction.options.length;
+      if (entry != null && entry.followed) {
+        followed += entry.selectedOptionCount;
+        instructionBonus += entry.bonusPoints;
+      }
+    }
+    final total = taskPoints + timingBonus + streakBonus + instructionBonus;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(task.task),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_isCompleted(task) ? '✓ Completed' : task.status),
+              const SizedBox(height: 12),
+              Text('Category: ${task.category}'),
+              Text('Priority: ${task.priority}'),
+              Text('Scheduled: ${_scheduleLabel(task) ?? 'Not scheduled'}'),
+              Text('Duration: ${task.estimatedMinutes} minutes'),
+              Text(
+                'Frequency: ${task.repeatTask ? task.repeatFrequency ?? 'Daily' : 'Non-Routine'}',
+              ),
+              Text('Instructions: ${instructions.length}'),
+              if (_isCompleted(task)) ...[
+                const SizedBox(height: 12),
+                Text('Completed at: ${_completionTime(task)}'),
+                Text('Instructions followed: $followed / $instructionOptions'),
+                Text('Task points: +$taskPoints'),
+                Text('Instruction bonus: +$instructionBonus'),
+                Text('Timing bonus: +$timingBonus'),
+                Text('Streak bonus: +$streakBonus'),
+                Text(
+                  'Total reward: +$total',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ],
+              if (task.description.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(task.description),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
   Future<void> _pickDate() async { final picked = await showDatePicker(context: context, initialDate: _day, firstDate: DateTime(2000), lastDate: DateTime.now().add(const Duration(days: 3650))); if (picked != null) setState(() => _selectedDate = picked); }
   bool _isCompleted(Task task) => task.done || task.status.toLowerCase() == 'completed';
   int _taskEarned(Task task) {
@@ -321,6 +481,27 @@ class _LogEarnViewState extends State<LogEarnView> {
     return events
         .where((event) => event.title.trim().toLowerCase().startsWith(normalized))
         .fold<int>(0, (total, event) => total + event.totalPoints);
+  }
+  String? _scheduleLabel(Task task) {
+    if (task.hourSlot == null) return null;
+    final startMinutes = task.hourSlot! * 60;
+    final endMinutes = startMinutes + task.estimatedMinutes;
+    return '${_minutesTime(startMinutes)} - ${_minutesTime(endMinutes)}';
+  }
+
+  String _completionTime(Task task) {
+    final hour = task.dueDate.hour;
+    final minute = task.dueDate.minute;
+    final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+    return '$displayHour:${minute.toString().padLeft(2, '0')} ${hour < 12 ? 'AM' : 'PM'}';
+  }
+
+  String _minutesTime(int totalMinutes) {
+    final normalized = totalMinutes % (24 * 60);
+    final hour = normalized ~/ 60;
+    final minute = normalized % 60;
+    final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+    return '$displayHour:${minute.toString().padLeft(2, '0')} ${hour < 12 ? 'AM' : 'PM'}';
   }
   bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
   String _dateLabel() { const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return '${_sameDay(_day, DateTime.now()) ? 'Today, ' : ''}${_day.day} ${months[_day.month - 1]} ${_day.year}'; }
