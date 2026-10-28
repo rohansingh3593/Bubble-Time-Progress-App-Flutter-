@@ -7,6 +7,7 @@ import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/app_text.dart';
 import '../utils/task_time_utils.dart';
 import 'journal_view.dart';
+import 'voice_tasks_screen.dart';
 
 class TaskScreen extends StatefulWidget {
   final DateTime date;
@@ -92,7 +93,7 @@ class _TaskScreenState extends State<TaskScreen> {
       initialTask: currentTask,
       title: 'Update Task',
       actionLabel: 'Save Task',
-      onDelete: () => widget.hiveService.deleteTask(widget.date, index),
+      onDelete: () => widget.hiveService.deleteTaskByReference(currentTask),
     );
 
     if (updated != null) {
@@ -124,7 +125,7 @@ class _TaskScreenState extends State<TaskScreen> {
     );
 
     if (confirmed == true) {
-      await widget.hiveService.deleteTask(widget.date, index);
+      await widget.hiveService.deleteTaskByReference(tasks[index]);
     }
   }
 
@@ -209,7 +210,7 @@ class _TaskScreenState extends State<TaskScreen> {
     return widget.hiveService.getTaskLinkedInstructions().where((instruction) => instruction.enabled && instruction.isLinkedToTask(task.task)).length;
   }
 
-  bool _hasProjectPhases(Task task) => parseTaskPhases(task.description).isNotEmpty;
+  bool _hasProjectPhases(Task task) => taskSteps(task).isNotEmpty;
 
   bool _matchesTaskFilter(Task task) {
     final repeatType = _repeatTypeFor(task);
@@ -434,11 +435,19 @@ class _TaskScreenState extends State<TaskScreen> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: ElevatedButton.icon(
+          child: Row(children: [
+            Expanded(child: OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => VoiceTasksScreen(hiveService: widget.hiveService))),
+              icon: const Icon(Icons.mic), label: const Text('Add by voice'),
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: ElevatedButton.icon(
             onPressed: _addTaskWithDialog,
             icon: const Icon(Icons.add),
             label: const Text('+ Add Task'),
-          ),
+          )),
+          ]),
         ),
       ),
     );

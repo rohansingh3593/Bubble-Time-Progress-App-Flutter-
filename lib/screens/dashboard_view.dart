@@ -1962,19 +1962,10 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
   }
 
   List<_TaskInsightPhase> _extractInsightPhases(Task task, int groupSize) {
-    const marker = '---PHASES---';
-    final markerIndex = task.description.indexOf(marker);
-    if (markerIndex != -1) {
-      final phaseChunk = task.description.substring(markerIndex + marker.length).trim();
-      final lines = phaseChunk.split('\n').where((line) => line.trim().isNotEmpty).toList();
-      return [
-        for (var index = 0; index < lines.length; index++)
-          if (lines[index].split('|').length >= 3)
-            _TaskInsightPhase(
-              title: lines[index].split('|')[0].trim().isEmpty ? 'Phase ${index + 1}' : lines[index].split('|')[0].trim(),
-              status: lines[index].split('|')[2].trim().isEmpty ? 'Not Started' : lines[index].split('|')[2].trim(),
-            ),
-      ];
+    final steps = taskSteps(task);
+    if (steps.isNotEmpty) {
+      return [for (var i = 0; i < steps.length; i++)
+        _TaskInsightPhase(title: steps[i].name.isEmpty ? 'Phase ${i + 1}' : steps[i].name, status: steps[i].status)];
     }
 
     final phaseMatch = RegExp(r'^(.*?)\s*[-:|]\s*phase\s*(\d+)\s*[-:|]?\s*(.*)$', caseSensitive: false).firstMatch(task.task.trim());
@@ -3441,7 +3432,7 @@ class _DashboardViewState extends State<DashboardView> with WidgetsBindingObserv
       'Projects / Phases',
       Column(
         children: projects.map((project) {
-          final phases = parseTaskPhases(project.description);
+          final phases = taskSteps(project);
           final completedPhases = phases.where((phase) => phase.isCompleted).length;
           final totalPhases = phases.isEmpty ? 1 : phases.length;
           final progress = phases.isEmpty ? (project.done || project.status == 'Completed' ? 1.0 : 0.0) : completedPhases / totalPhases;

@@ -13,6 +13,7 @@ import 'screens/week_view.dart';
 import 'screens/day_view.dart';
 import 'screens/streak_view.dart';
 import 'screens/task_screen.dart';
+import 'screens/voice_tasks_screen.dart';
 import 'screens/instruction_dashboard_view.dart';
 import 'screens/goal_dashboard_view.dart';
 import 'screens/reward_money_history_view.dart';
@@ -385,6 +386,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   Widget _buildAnimatedSidebar(DashboardThemeStyle style, RankProfile profile, {bool overlay = false, bool forceExpanded = false}) {
     final items = <_SidebarNavItem>[
+      _SidebarNavItem(icon: Icons.mic_rounded, label: 'Add by voice', onTap: () {
+        setState(() => _sidebarOverlayVisible = false);
+        Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => VoiceTasksScreen(hiveService: widget.hiveService),
+        ));
+      }),
       _SidebarNavItem(icon: Icons.dashboard_rounded, label: 'Dashboard', selectedIndex: 0),
       _SidebarNavItem(icon: Icons.calendar_today_rounded, label: 'Year', selectedIndex: 1),
       _SidebarNavItem(icon: Icons.calendar_view_month_rounded, label: 'Month', selectedIndex: 2),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'voice_tasks_screen.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/period_progress_bubble_map.dart';
@@ -117,20 +118,12 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
       title: 'Update Task',
       actionLabel: 'Save Task',
       onDelete: () async {
-        if (index != null) {
-          await widget.hiveService.deleteTask(_currentDay, index);
-        } else {
-          await widget.hiveService.deleteTaskByReference(task);
-        }
+        await widget.hiveService.deleteTaskByReference(task);
       },
     );
 
     if (updated == null) return;
-    if (index != null) {
-      await widget.hiveService.updateTask(_currentDay, index, updated);
-    } else {
-      await widget.hiveService.updateTaskByReference(task, updated);
-    }
+    await widget.hiveService.updateTaskByReference(task, updated);
   }
 
   Map<String, double> _calculateMatrix(List<Task> tasks) {
@@ -500,6 +493,9 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
 
     return Scaffold(
       appBar: AppBar(
+        actions: [IconButton(tooltip: 'Add by voice', icon: const Icon(Icons.mic),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => VoiceTasksScreen(hiveService: widget.hiveService))))],
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1174,7 +1170,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   }
 
   String _taskSubtitle(Task task) {
-    final phases = parseTaskPhases(task.description);
+    final phases = taskSteps(task);
     if (!task.repeatTask && phases.isNotEmpty) {
       final completed = phases.where((phase) => phase.isCompleted).length;
       TaskPhaseInfo? nextPhase;

@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/instruction.dart';
 import '../models/task_model.dart';
+import '../models/task_step.dart';
+import '../utils/entity_id.dart';
 import '../services/hive_service.dart';
 import '../utils/task_time_utils.dart';
 import '../utils/text_formatters.dart';
@@ -50,10 +52,11 @@ Future<Task?> showTaskFormDialog(
   int? initialHourSlot,
   String title = 'Add Task',
   String actionLabel = 'Add Task',
+  List<String> reviewNotes = const [],
   Future<void> Function()? onDelete,
 }) async {
   final isEditing = initialTask != null;
-  final initialDescription = initialTask?.description ?? '';
+  final initialDescription = initialTask == null ? '' : taskDescriptionForEditing(initialTask);
   final initialSchedule = _parseSchedule(initialDescription);
   final nameController = TextEditingController(text: initialTask?.task ?? '');
   final descriptionController = TextEditingController(
@@ -81,7 +84,7 @@ Future<Task?> showTaskFormDialog(
   bool routineEnabled = initialTask?.routineEnabled ?? true;
   int selectedColorValue = initialTask?.colorValue ?? _taskColorOptions['Blue']!;
   int selectedRoutineMinutes = normalizeTaskDuration(initialTask?.estimatedMinutes);
-  final projectPhases = _ProjectPhaseDraft.parseFromDescription(initialTask?.description ?? '');
+  final projectPhases = _ProjectPhaseDraft.fromTask(initialTask);
   final draftInstructions = <InstructionRule>[];
   void syncStatusForTaskType() {
     if (repeatTask) {
@@ -106,6 +109,11 @@ Future<Task?> showTaskFormDialog(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                for (final note in reviewNotes)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(note, style: Theme.of(context).textTheme.bodyMedium),
+                  ),
                 TextField(
                   controller: nameController,
                   decoration: InputDecoration(labelText: 'Task Name *', border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFFF8F4FF)),
@@ -178,7 +186,7 @@ Future<Task?> showTaskFormDialog(
                         DropdownButtonFormField<int>(
                           value: selectedRoutineMinutes,
                           decoration: InputDecoration(labelText: 'Routine Time', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                          items: taskDurationOptions.map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
+                          items: taskDurationChoices(selectedRoutineMinutes).map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
                           onChanged: (value) {
                             if (value != null) setDialogState(() => selectedRoutineMinutes = value);
                           },
@@ -341,6 +349,7 @@ Future<Task?> showTaskFormDialog(
                           final index = entry.key;
                           final phase = entry.value;
                           return Container(
+                            key: ValueKey(phase.id),
                             margin: const EdgeInsets.only(bottom: 10),
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
@@ -389,7 +398,7 @@ Future<Task?> showTaskFormDialog(
                               DropdownButtonFormField<int>(
                                 value: phase.durationMinutes,
                                 decoration: InputDecoration(labelText: 'Estimated Time', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                                items: taskDurationOptions.map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
+                                items: taskDurationChoices(phase.durationMinutes).map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
                                 onChanged: (value) {
                                   if (value != null) setDialogState(() => phase.durationMinutes = value);
                                 },
@@ -399,7 +408,7 @@ Future<Task?> showTaskFormDialog(
                                 DropdownButtonFormField<int>(
                                   value: phase.actualMinutes ?? phase.durationMinutes,
                                   decoration: InputDecoration(labelText: 'Actual Time Taken', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                                  items: taskDurationOptions.map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
+                                  items: taskDurationChoices(phase.actualMinutes ?? phase.durationMinutes).map((minutes) => DropdownMenuItem<int>(value: minutes, child: Text('$minutes min'))).toList(),
                                   onChanged: (value) {
                                     if (value != null) setDialogState(() => phase.actualMinutes = value);
                                   },
@@ -590,7 +599,7 @@ Future<Task?> showTaskFormDialog(
                   return;
                 }
                 final mergedDescription = !repeatTask
-                    ? _ProjectPhaseDraft.mergeIntoDescription(descriptionController.text.trim(), projectPhases)
+                    ? descriptionController.text.trim()
                     : _mergeSchedule(
                         descriptionController.text.trim(),
                         enabled: scheduleEnabled,
@@ -610,7 +619,9 @@ Future<Task?> showTaskFormDialog(
                         scheduleStart!.hour,
                         scheduleStart!.minute,
                       )
-                    : dueDate;
+                    : DateTime(dueDate.year, dueDate.month, dueDate.day,
+                        hourSlot ?? initialTask?.dueDate.hour ?? 0,
+                        initialTask?.dueDate.minute ?? 0);
 
                 for (final instruction in draftInstructions) {
                   await hiveService.saveInstruction(
@@ -619,6 +630,9 @@ Future<Task?> showTaskFormDialog(
                 }
                 if (!context.mounted) return;
                 Navigator.of(context).pop(Task(
+                  id: initialTask?.id,
+                  legacyCloudId: initialTask?.legacyCloudId,
+                  steps: _ProjectPhaseDraft.toSteps(projectPhases),
                   task: name,
                   description: mergedDescription,
                   dueDate: taskDueDate,
@@ -1508,6 +1522,7 @@ String _formatPhaseCompletedAt(DateTime? completedAt) {
 }
 
 class _ProjectPhaseDraft {
+  final String id;
   String status;
   int durationMinutes;
   bool urgent;
@@ -1518,6 +1533,7 @@ class _ProjectPhaseDraft {
   final TextEditingController descriptionController;
 
   _ProjectPhaseDraft({
+    String? id,
     required this.status,
     required this.durationMinutes,
     required this.nameController,
@@ -1526,104 +1542,65 @@ class _ProjectPhaseDraft {
     this.important = false,
     this.actualMinutes,
     this.completedAt,
-  });
+  }) : id = id ?? newEntityId();
 
   void dispose() {
     nameController.dispose();
     descriptionController.dispose();
   }
 
-  factory _ProjectPhaseDraft.empty() => _ProjectPhaseDraft(
+  factory _ProjectPhaseDraft.empty({int minutes = defaultTaskDurationMinutes}) => _ProjectPhaseDraft(
         status: 'Not Started',
-        durationMinutes: defaultTaskDurationMinutes,
+        durationMinutes: minutes,
         nameController: TextEditingController(),
         descriptionController: TextEditingController(),
       );
 
-  static List<_ProjectPhaseDraft> parseFromDescription(String description) {
-    final markerIndex = description.indexOf(taskPhaseMarker);
-    if (markerIndex == -1) return [_ProjectPhaseDraft.empty()];
-    final phaseChunk = description.substring(markerIndex + taskPhaseMarker.length).trim();
-    final lines = phaseChunk.split('\n').where((line) => line.trim().isNotEmpty);
-    final phases = <_ProjectPhaseDraft>[];
-    for (final line in lines) {
-      final parts = line.split('|');
-      if (parts.length < 3) continue;
-      phases.add(
-        _ProjectPhaseDraft(
-          status: parts[2].trim().isEmpty ? 'Not Started' : parts[2].trim(),
-          durationMinutes: _parseDuration(parts.length > 3 ? parts[3] : null),
-          urgent: _parseBool(parts.length > 4 ? parts[4] : null),
-          important: _parseBool(parts.length > 5 ? parts[5] : null),
-          actualMinutes: parts.length > 6 ? _parseOptionalDuration(parts[6]) : null,
-          completedAt: parts.length > 7 ? DateTime.tryParse(parts[7].trim()) : null,
-          nameController: TextEditingController(text: parts[0].trim()),
-          descriptionController: TextEditingController(text: parts[1].trim()),
-        ),
-      );
+  static List<_ProjectPhaseDraft> fromTask(Task? task) {
+    final steps = task == null ? <TaskStep>[] : taskSteps(task);
+    if (steps.isEmpty) {
+      return [_ProjectPhaseDraft.empty(minutes: normalizeTaskDuration(task?.estimatedMinutes))];
     }
-    return phases.isEmpty ? [_ProjectPhaseDraft.empty()] : phases;
+    return steps.map((step) => _ProjectPhaseDraft(
+      id: step.id,
+      status: step.status,
+      durationMinutes: step.minutes,
+      urgent: step.urgent,
+      important: step.important,
+      actualMinutes: step.actualMinutes,
+      completedAt: step.completedAt,
+      nameController: TextEditingController(text: step.name),
+      descriptionController: TextEditingController(text: step.description),
+    )).toList();
   }
 
-  static String mergeIntoDescription(String baseDescription, List<_ProjectPhaseDraft> phases) {
-    final cleanBase = baseDescription.split(taskPhaseMarker).first.trim();
-    final serializedPhases = phases
-        .where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty)
-        .map((phase) {
-          final completedAt = phase.status == 'Completed' ? (phase.completedAt ?? DateTime.now()) : null;
-          return serializeTaskPhase(
-            name: phase.nameController.text,
-            description: phase.descriptionController.text,
-            status: phase.status,
-            minutes: phase.durationMinutes,
-            urgent: phase.urgent,
-            important: phase.important,
-            actualMinutes: phase.status == 'Completed' ? (phase.actualMinutes ?? phase.durationMinutes) : null,
-            completedAt: completedAt,
-          );
-        })
-        .join('\n');
-    if (serializedPhases.isEmpty) return cleanBase;
-    return '$cleanBase\n\n$taskPhaseMarker\n$serializedPhases'.trim();
-  }
+  static List<TaskStep> toSteps(List<_ProjectPhaseDraft> phases) => phases
+      .where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty)
+      .map((phase) => TaskStep(
+        id: phase.id,
+        name: phase.nameController.text.trim(),
+        description: phase.descriptionController.text.trim(),
+        status: phase.status,
+        minutes: phase.durationMinutes,
+        urgent: phase.urgent,
+        important: phase.important,
+        actualMinutes: phase.status == 'Completed' ? (phase.actualMinutes ?? phase.durationMinutes) : null,
+        completedAt: phase.status == 'Completed' ? (phase.completedAt ?? DateTime.now()) : null,
+      )).toList();
 
   static String inferTaskStatus(List<_ProjectPhaseDraft> phases, String fallbackStatus) {
-    final active = phases
-        .where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty)
-        .toList();
+    final active = toSteps(phases);
     if (active.isEmpty) return fallbackStatus;
-
     final statuses = active.map((phase) => phase.status.trim().toLowerCase()).toList();
     if (statuses.every((status) => status == 'completed')) return 'Completed';
     if (statuses.every((status) => status == 'cancelled')) return 'Cancelled';
-    if (statuses.any((status) => status == 'completed' || status == 'in progress')) {
-      return 'In Progress';
-    }
+    if (statuses.any((status) => status == 'completed' || status == 'in progress')) return 'In Progress';
     return fallbackStatus;
   }
 
   static int totalMinutes(List<_ProjectPhaseDraft> phases) {
-    final activePhases = phases.where((phase) => phase.nameController.text.trim().isNotEmpty || phase.descriptionController.text.trim().isNotEmpty).toList();
-    final source = activePhases.isEmpty ? phases : activePhases;
-    return source.fold<int>(0, (sum, phase) => sum + normalizeTaskDuration(phase.durationMinutes));
+    final active = toSteps(phases);
+    if (active.isEmpty) return phases.isEmpty ? defaultTaskDurationMinutes : phases.first.durationMinutes;
+    return active.fold<int>(0, (sum, step) => sum + step.minutes);
   }
-
-  static bool _parseBool(String? rawValue) {
-    final normalized = (rawValue ?? '').trim().toLowerCase();
-    return normalized == 'true' || normalized == 'yes' || normalized == '1';
-  }
-
-  static int _parseDuration(String? rawValue) {
-    final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
-    return normalizeTaskDuration(parsed);
-  }
-
-  static int? _parseOptionalDuration(String? rawValue) {
-    final parsed = int.tryParse((rawValue ?? '').replaceAll('min', '').trim());
-    if (parsed == null) return null;
-    return normalizeTaskDuration(parsed);
-  }
-
-
-
 }
