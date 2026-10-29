@@ -33,6 +33,10 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Local screenshot captures and generated galleries/reports.
+/screenshots/phone/
+/screenshots/manual/
+
 # Recreated and verified by tool/prepare_voice_model.py before packaging.
 /assets/offline_voice/*.onnx
 /assets/offline_voice/tokens.txt
