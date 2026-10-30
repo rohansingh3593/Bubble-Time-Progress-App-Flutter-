@@ -83,12 +83,17 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Use `http://localhost:8000` for the health check. Mobile devices should connect to the host machine IP, for example `ws://192.168.1.10:8000/ws`.
+Use `http://localhost:8000` for the health check. Mobile devices should call the REST API on the host machine IP, for example `http://192.168.1.10:8000/tasks`, and subscribe to live updates at `ws://192.168.1.10:8000/ws?user_id=dev-user`.
+
+For production, point clients at `https://api.momentum.com` for REST and `wss://api.momentum.com/ws` for live synchronization.
 
 The working synchronization rule is:
 
-- Windows task time update: Windows Flutter → WebSocket → FastAPI → MongoDB → broadcast → Mobile Flutter.
-- Mobile task completion: Mobile Flutter → WebSocket → FastAPI → MongoDB → broadcast → Windows Flutter.
+- Windows task time update: Windows Flutter -> REST `PUT /tasks/{id}` -> FastAPI validation -> MongoDB -> WebSocket broadcast -> Mobile/Web.
+- Mobile task completion: Mobile Flutter -> REST `PUT /tasks/{id}` -> FastAPI validation -> MongoDB -> WebSocket broadcast -> Windows/Web.
+- Web dashboard change: Flutter Web -> REST create/update/delete -> FastAPI validation -> MongoDB -> WebSocket broadcast -> Windows/Mobile.
+
+The starter implementation uses `X-User-Id: dev-user` as a development owner boundary. Replace that with real access-token verification before production, but keep the same invariant: every MongoDB record carries `user_id`, every query filters by that `user_id`, and every broadcast is scoped to that user.
 
 ## Recommended Repository Structure
 
@@ -140,7 +145,7 @@ task_app/
 
 ## API Boundaries
 
-Use REST for durable CRUD operations and WebSockets for real-time synchronization.
+Use REST for durable CRUD operations and WebSockets for real-time synchronization. Do not let Flutter Web, Mobile, or Windows write directly to MongoDB, and do not use WebSocket as the database mutation path.
 
 ### REST Endpoints
 

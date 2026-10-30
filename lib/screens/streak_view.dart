@@ -9,6 +9,7 @@ import '../models/journal_entry.dart';
 import '../models/journey_entry.dart';
 import '../models/rank_profile.dart';
 import '../models/task_model.dart';
+import '../utils/task_time_utils.dart';
 import '../models/user_profile.dart';
 import '../services/hive_service.dart';
 import '../widgets/quick_add_task_dialog.dart';
@@ -1162,7 +1163,7 @@ class _ProjectProgressItem {
 
     for (final task in tasks) {
       final title = task.task.trim();
-      final phaseRowsFromDescription = _parsePhasesFromDescription(task.description);
+      final phaseRowsFromDescription = _phasesForTask(task);
       if (phaseRowsFromDescription.isNotEmpty) {
         grouped.putIfAbsent(title, () => <_ProjectPhaseItem>[]).addAll(phaseRowsFromDescription);
         continue;
@@ -1192,23 +1193,13 @@ class _ProjectProgressItem {
     return items;
   }
 
-  static List<_ProjectPhaseItem> _parsePhasesFromDescription(String description) {
-    const marker = '---PHASES---';
-    final markerIndex = description.indexOf(marker);
-    if (markerIndex == -1) return const <_ProjectPhaseItem>[];
-    final phaseChunk = description.substring(markerIndex + marker.length).trim();
-    final lines = phaseChunk.split('\n').where((line) => line.trim().isNotEmpty).toList();
-    final phases = <_ProjectPhaseItem>[];
-    for (var index = 0; index < lines.length; index++) {
-      final parts = lines[index].split('|');
-      if (parts.length < 3) continue;
-      final phaseName = parts[0].trim().isEmpty ? 'Phase ${index + 1}' : parts[0].trim();
-      final phaseDescription = parts[1].trim();
-      final phaseStatus = parts[2].trim().isEmpty ? 'Not Started' : parts[2].trim();
-      phases.add(_ProjectPhaseItem(title: phaseName, description: phaseDescription, status: phaseStatus, phaseOrder: index + 1));
-    }
-    return phases;
+  static List<_ProjectPhaseItem> _phasesForTask(Task task) {
+    final steps = taskSteps(task);
+    return [for (var i = 0; i < steps.length; i++)
+      _ProjectPhaseItem(title: steps[i].name.isEmpty ? 'Phase ${i + 1}' : steps[i].name,
+        description: steps[i].description, status: steps[i].status, phaseOrder: i + 1)];
   }
+
 }
 
 class _ProjectPhaseItem {

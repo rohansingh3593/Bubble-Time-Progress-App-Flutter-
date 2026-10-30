@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/instruction.dart';
@@ -7,8 +9,12 @@ import '../models/motivation_motto.dart';
 import '../models/productivity_snapshot.dart';
 import '../models/reward_money.dart';
 import '../models/task_model.dart';
+import '../models/task_step.dart';
+import '../utils/entity_id.dart';
 import '../models/user_profile.dart';
 import '../constants/dashboard_themes.dart';
+import '../services/api_client.dart';
+import '../services/sync_service.dart';
 import '../utils/task_time_utils.dart';
 
 class HiveService {
@@ -42,6 +48,7 @@ class HiveService {
   static const _mottoSettingsKey = '__motivation_motto_settings__';
   static const _autoJourneyPrefix = 'auto_journey_';
   static const _schemaVersionKey = '__meta_schema_version__';
+  static const _pendingTaskMoveKey = '__pending_task_move__';
   static const _dashboardThemeKey = '__meta_dashboard_theme__';
   static const _dashboardPaletteKey = '__meta_dashboard_palette__';
   static const _appFontFamilyKey = '__meta_app_font_family__';
@@ -49,13 +56,30 @@ class HiveService {
   static const _appFontWeightKey = '__meta_app_font_weight__';
   static const _dashboardLayoutStyleKey = '__meta_dashboard_layout_style__';
   static const _dashboardCardAnimationKey = '__meta_dashboard_card_animation__';
-  static const _dashboardAnimationSpeedKey = '__meta_dashboard_animation_speed__';
+  static const _dashboardAnimationSpeedKey =
+      '__meta_dashboard_animation_speed__';
   static const _dashboardChartStyleKey = '__meta_dashboard_chart_style__';
   static const _dashboardIconPackKey = '__meta_dashboard_icon_pack__';
   static const _followSystemThemeKey = '__meta_follow_system_theme__';
   static const _autoDayNightKey = '__meta_auto_day_night__';
   static const _adaptiveColorsKey = '__meta_adaptive_colors__';
-  static const int _currentSchemaVersion = 1;
+  static const int _currentSchemaVersion = 3;
+  static const bool _cloudSyncEnabled = bool.fromEnvironment(
+    'MOMENTUM_CLOUD_SYNC_ENABLED',
+    defaultValue: false,
+  );
+  static const String _cloudApiBaseUrl = String.fromEnvironment(
+    'MOMENTUM_API_BASE_URL',
+    defaultValue: 'https://api.momentum.com',
+  );
+  static const String _cloudWebSocketUrl = String.fromEnvironment(
+    'MOMENTUM_WS_URL',
+    defaultValue: 'wss://api.momentum.com/ws',
+  );
+  static const String _cloudUserId = String.fromEnvironment(
+    'MOMENTUM_USER_ID',
+    defaultValue: 'dev-user',
+  );
 
   static const List<String> _defaultCategories = [
     'Work',
@@ -66,20 +90,193 @@ class HiveService {
     _dailyJournalCategory,
   ];
   late Box<List> _box;
+  ApiClient? _cloudApiClient;
+  SyncService? _cloudSyncService;
+  Timer? _cloudPullDebounce;
+  bool _applyingCloudTasks = false;
+  Future<void> _taskMoveQueue = Future<void>.value();
 
   Future<void> init() async {
+    if (!Hive.isAdapterRegistered(1)) {
+      Hive.registerAdapter(TaskStepAdapter());
+    }
     if (!Hive.isAdapterRegistered(0)) {
       Hive.registerAdapter(TaskAdapter());
     }
 
     _box = await Hive.openBox<List>(_boxName);
     await _runMigrationsIfNeeded();
+    await _recoverPendingTaskMove();
     await _normalizeTaskNamesOnStartup();
     await _dedupeRecurringTasksOnStartup();
     await refreshProductivitySnapshotsFromTasks();
+    await _startCloudSyncIfEnabled();
   }
 
+  Future<void> _startCloudSyncIfEnabled() async {
+    if (!_cloudSyncEnabled) return;
 
+    final apiClient =
+        ApiClient(baseUrl: _cloudApiBaseUrl, userId: _cloudUserId);
+    _cloudApiClient = apiClient;
+    _cloudSyncService = SyncService(
+      websocketUrl: _cloudWebSocketUrl,
+      userId: _cloudUserId,
+      apiClient: apiClient,
+    );
+
+    try {
+      _cloudSyncService!.connect(onEvent: _handleCloudEvent);
+    } catch (error) {
+      debugPrint('Cloud sync websocket unavailable: $error');
+    }
+
+    await pullCloudTasks();
+  }
+
+  Future<void> pullCloudTasks() async {
+    final apiClient = _cloudApiClient;
+    if (!_cloudSyncEnabled || apiClient == null) return;
+
+    try {
+      final payloads =
+          await apiClient.fetchTasks().timeout(const Duration(seconds: 8));
+      _applyingCloudTasks = true;
+      final touchedDates = <DateTime>{};
+
+      for (final payload in payloads) {
+        final task = ApiClient.taskFromPayload(payload);
+        await _upsertCloudTaskLocally(task,
+            cloudTaskId: payload['task_id']?.toString());
+        touchedDates.add(
+            DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day));
+      }
+
+      for (final date in touchedDates) {
+        await recalculateProductivitySnapshotForDate(date);
+      }
+    } catch (error) {
+      debugPrint('Cloud task pull failed: $error');
+    } finally {
+      _applyingCloudTasks = false;
+    }
+  }
+
+  void _handleCloudEvent(String event, Map<String, dynamic> data) {
+    if (!_cloudSyncEnabled) return;
+
+    if (event == 'task_deleted') {
+      unawaited(_deleteCloudTaskLocally(data['task_id']?.toString()));
+      return;
+    }
+
+    if (event == 'task_created' ||
+        event == 'task_updated' ||
+        event == 'task_completed' ||
+        event == 'schedule_changed') {
+      unawaited(_applyCloudTaskEvent(data));
+    }
+  }
+
+  Future<void> _applyCloudTaskEvent(Map<String, dynamic> data) async {
+    try {
+      _applyingCloudTasks = true;
+      final task = ApiClient.taskFromPayload(data);
+      await _upsertCloudTaskLocally(task,
+          cloudTaskId: data['task_id']?.toString());
+      await recalculateProductivitySnapshotForDate(task.dueDate);
+    } catch (error) {
+      debugPrint('Cloud task event apply failed: $error');
+      _scheduleCloudPull();
+    } finally {
+      _applyingCloudTasks = false;
+    }
+  }
+
+  void _scheduleCloudPull() {
+    _cloudPullDebounce?.cancel();
+    _cloudPullDebounce = Timer(const Duration(milliseconds: 500), () {
+      unawaited(pullCloudTasks());
+    });
+  }
+
+  Future<void> _upsertCloudTaskLocally(Task task, {String? cloudTaskId}) async {
+    final key = _formatKey(task.dueDate);
+    final tasks = _storedTasksForDate(task.dueDate);
+    final index = tasks.indexWhere((candidate) {
+      return _cloudTaskId(candidate) == cloudTaskId ||
+          _matchesTaskIdentity(candidate, task);
+    });
+
+    if (index >= 0) {
+      final existing = tasks[index];
+      tasks[index] = _withNormalizedTaskName(task.copyWith(
+        id: existing.id,
+        legacyCloudId: existing.legacyCloudId,
+        steps: task.steps ?? existing.steps,
+      ));
+    } else {
+      tasks.add(_withNormalizedTaskName(task));
+    }
+
+    await _putTasksForKey(key, tasks);
+  }
+
+  Future<void> _deleteCloudTaskLocally(String? cloudTaskId) async {
+    if (cloudTaskId == null || cloudTaskId.trim().isEmpty) return;
+
+    try {
+      _applyingCloudTasks = true;
+      for (final key in _box.keys) {
+        if (key is! String || DateTime.tryParse(key) == null) continue;
+        final rawList = _box.get(key);
+        if (rawList == null) continue;
+        final tasks = rawList.cast<Task>().toList();
+        final nextTasks =
+            tasks.where((task) => _cloudTaskId(task) != cloudTaskId).toList();
+        if (nextTasks.length == tasks.length) continue;
+
+        await _putTasksForKey(key, nextTasks, dedupeRecurring: false);
+        await recalculateProductivitySnapshotForDate(DateTime.parse(key));
+      }
+    } finally {
+      _applyingCloudTasks = false;
+    }
+  }
+
+  void _syncCloudUpsert(Task task) {
+    final apiClient = _cloudApiClient;
+    if (!_cloudSyncEnabled ||
+        _applyingCloudTasks ||
+        apiClient == null ||
+        _isDailyJournalTask(task)) return;
+
+    unawaited(() async {
+      try {
+        await apiClient.createTask(task).timeout(const Duration(seconds: 8));
+      } catch (error) {
+        debugPrint('Cloud task upsert failed: $error');
+      }
+    }());
+  }
+
+  void _syncCloudDelete(Task task) {
+    final apiClient = _cloudApiClient;
+    if (!_cloudSyncEnabled ||
+        _applyingCloudTasks ||
+        apiClient == null ||
+        _isDailyJournalTask(task)) return;
+
+    unawaited(() async {
+      try {
+        await apiClient.deleteTask(task).timeout(const Duration(seconds: 8));
+      } catch (error) {
+        debugPrint('Cloud task delete failed: $error');
+      }
+    }());
+  }
+
+  String _cloudTaskId(Task task) => ApiClient.taskCloudId(task);
 
   Future<void> _normalizeTaskNamesOnStartup() async {
     for (final key in _box.keys) {
@@ -107,17 +304,15 @@ class HiveService {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return trimmed;
     final words = trimmed.split(RegExp(r'\s+'));
-    return words
-        .map((word) {
-          if (word.isEmpty) return word;
-          final lower = word.toLowerCase();
-          return lower[0].toUpperCase() + lower.substring(1);
-        })
-        .join(' ');
+    return words.map((word) {
+      if (word.isEmpty) return word;
+      final lower = word.toLowerCase();
+      return lower[0].toUpperCase() + lower.substring(1);
+    }).join(' ');
   }
 
   Task _withNormalizedTaskName(Task task) {
-    return task.copyWith(task: _toTitleCase(task.task));
+    return task.copyWith(task: _toTitleCase(task.task), steps: taskSteps(task));
   }
 
   Future<void> _dedupeRecurringTasksOnStartup() async {
@@ -153,7 +348,8 @@ class HiveService {
 
       final existingPos = recurringIndex[recurringKey]!;
       final existing = result[existingPos];
-      final existingTerminal = _isTerminalStatus(existing.status) || existing.done;
+      final existingTerminal =
+          _isTerminalStatus(existing.status) || existing.done;
       final incomingTerminal = _isTerminalStatus(task.status) || task.done;
 
       // Prefer finalized occurrence records over not-started duplicates.
@@ -166,9 +362,11 @@ class HiveService {
   }
 
   String _recurringIdentityKey(Task task) {
-    final due = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+    final due =
+        DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
     return '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${_normalizedRepeatFrequency(task.repeatFrequency)}|${_formatKey(due)}';
   }
+
   Future<void> _runMigrationsIfNeeded() async {
     final storedVersion = _readStoredSchemaVersion();
     if (storedVersion >= _currentSchemaVersion) return;
@@ -177,14 +375,47 @@ class HiveService {
       await _migrateToV1();
     }
 
+    if (storedVersion < 3) {
+      await _migrateTaskIdentityAndSteps();
+    }
+
     await _box.put(_schemaVersionKey, <int>[_currentSchemaVersion]);
+  }
+
+  /// Writes every legacy date list before the version marker. A retry preserves
+  /// IDs already written, and the original descriptions are never discarded.
+  Future<void> _migrateTaskIdentityAndSteps() async {
+    final taskIds = <String>{};
+    final stepIds = <String>{};
+    for (final key in _box.keys.toList()) {
+      if (key is! String || DateTime.tryParse(key) == null) continue;
+      final records = (_box.get(key) ?? <Task>[]).cast<Task>();
+      final migrated = <Task>[];
+      for (final task in records) {
+        var id = task.id;
+        while (!taskIds.add(id)) { id = newEntityId(); }
+        final steps = <TaskStep>[];
+        for (final step in taskSteps(task)) {
+          var stepId = step.id;
+          while (!stepIds.add(stepId)) { stepId = newEntityId(); }
+          steps.add(step.copyWith(id: stepId));
+        }
+        migrated.add(task.copyWith(
+          id: id,
+          steps: steps,
+          legacyCloudId: task.legacyCloudId ?? ApiClient.legacyTaskCloudId(task),
+        ));
+      }
+      await _box.put(key, migrated);
+    }
+    await _box.flush();
   }
 
   int _readStoredSchemaVersion() {
     final raw = _box.get(_schemaVersionKey);
     if (raw == null) return 0;
 
-    if (raw is List && raw.isNotEmpty) {
+    if (raw.isNotEmpty) {
       final value = raw.first;
       if (value is int) return value;
       if (value is num) return value.toInt();
@@ -210,7 +441,10 @@ class HiveService {
     final key = _formatKey(date);
     final rawList = _box.get(key);
     if (rawList == null) return <Task>[];
-    return rawList.cast<Task>().where((task) => !_isDailyJournalTask(task)).toList();
+    return rawList
+        .cast<Task>()
+        .where((task) => !_isDailyJournalTask(task))
+        .toList();
   }
 
   List<Task> getTasksForDate(DateTime date) {
@@ -282,16 +516,19 @@ class HiveService {
         if (!includeDisabled && !template.routineEnabled) continue;
         final seriesKey = _recurringSeriesKey(template);
         if (recurringKeys.contains(seriesKey)) continue;
-        final start = seriesStarts[seriesKey] ?? DateTime(
-            template.dueDate.year,
-            template.dueDate.month,
-            template.dueDate.day,
-          );
+        final start = seriesStarts[seriesKey] ??
+            DateTime(
+              template.dueDate.year,
+              template.dueDate.month,
+              template.dueDate.day,
+            );
         if (!_recurrenceAppliesOn(template, start, day)) continue;
         // This is a read-only occurrence projection of the Master Task. It is
         // not persisted until the user completes it, and therefore cannot
         // create a disconnected or duplicate task collection.
         result.add(template.copyWith(
+          id: '${template.id}:occ:${_formatKey(day)}',
+          newOccurrence: true,
           dueDate: day,
           done: false,
           status: 'Not Started',
@@ -313,7 +550,7 @@ class HiveService {
       '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${_normalizedRepeatFrequency(task.repeatFrequency)}';
 
   String _nonRoutineTaskKey(Task task) =>
-      '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${task.dueDate.toIso8601String().split('T').first}';
+      task.id;
 
   bool _recurrenceAppliesOn(Task task, DateTime start, DateTime day) {
     if (day.isBefore(start)) return false;
@@ -357,13 +594,25 @@ class HiveService {
     final key = _formatKey(day);
     final tasks = _storedTasksForDate(day);
     final index = source.repeatTask
-        ? tasks.indexWhere((task) => _isSameRecurringSeriesIdentity(task, source))
+        ? tasks
+            .indexWhere((task) => _isSameRecurringSeriesIdentity(task, source))
         : tasks.indexWhere((task) => _matchesTaskIdentity(task, source));
     final now = DateTime.now();
     final dueDate = completed
-        ? DateTime(day.year, day.month, day.day, now.hour, now.minute, now.second)
+        ? DateTime(
+            day.year, day.month, day.day, now.hour, now.minute, now.second)
         : day;
-    final updated = _withNormalizedTaskName(source.copyWith(
+    final occurrence = source.repeatTask
+        ? (index >= 0
+            ? _withOccurrenceIdentity(source, tasks[index])
+            : source.copyWith(
+                newOccurrence: true,
+                id: _isSameDate(sourceDay, day)
+                    ? source.id
+                    : '${source.id}:occ:${_formatKey(day)}',
+              ))
+        : source;
+    final updated = _withNormalizedTaskName(occurrence.copyWith(
       done: completed,
       status: completed ? 'Completed' : 'In Progress',
       dueDate: dueDate,
@@ -376,6 +625,7 @@ class HiveService {
     await _putTasksForKey(key, tasks);
     await recalculateProductivitySnapshotForDate(day);
     if (completed) await _handleRecurringIfNeeded(updated: updated);
+    _syncCloudUpsert(updated);
   }
 
   Task _dailyJournalTaskForDate(DateTime date) {
@@ -385,9 +635,11 @@ class HiveService {
     final journal = getJournalEntryForDate(day);
     final completed = journal?.hasReflection ?? false;
     final missed = !completed && day.isBefore(todayOnly);
-    final journalWordCount = journal == null ? 0 : _journalWordCount(journal.reflection);
+    final journalWordCount =
+        journal == null ? 0 : _journalWordCount(journal.reflection);
 
     return Task(
+      id: 'journal:${_formatKey(day)}',
       task: _dailyJournalTaskName,
       done: completed,
       description: completed
@@ -399,21 +651,28 @@ class HiveService {
           : _dailyJournalDescription,
       dueDate: completed ? journal!.date : day,
       priority: 'Important',
-      status: completed ? 'Completed' : missed ? 'Missed' : 'Not Completed',
+      status: completed
+          ? 'Completed'
+          : missed
+              ? 'Missed'
+              : 'Not Completed',
       category: _dailyJournalCategory,
       repeatTask: true,
       repeatFrequency: 'Daily',
       urgent: false,
       important: true,
-      estimatedMinutes: completed ? _journalEstimatedMinutes(journal!.reflection) : 15,
+      estimatedMinutes:
+          completed ? _journalEstimatedMinutes(journal!.reflection) : 15,
       colorValue: 0xFF7E57C2,
       routineEnabled: true,
     );
   }
 
   bool _isDailyJournalTask(Task task) {
-    return task.task.trim().toLowerCase() == _dailyJournalTaskName.toLowerCase() &&
-        task.category.trim().toLowerCase() == _dailyJournalCategory.toLowerCase();
+    return task.task.trim().toLowerCase() ==
+            _dailyJournalTaskName.toLowerCase() &&
+        task.category.trim().toLowerCase() ==
+            _dailyJournalCategory.toLowerCase();
   }
 
   int _journalWordCount(String reflection) {
@@ -440,7 +699,6 @@ class HiveService {
     );
   }
 
-
   List<String> getCategories() {
     final saved = (_box.get(_categoriesKey) ?? <String>[]).cast<String>();
     final merged = <String>[..._defaultCategories];
@@ -456,9 +714,11 @@ class HiveService {
     final trimmed = category.trim();
     if (trimmed.isEmpty) return;
 
-    final saved = (_box.get(_categoriesKey) ?? <String>[]).cast<String>().toList();
+    final saved =
+        (_box.get(_categoriesKey) ?? <String>[]).cast<String>().toList();
     if (!saved.any((item) => item.toLowerCase() == trimmed.toLowerCase()) &&
-        !_defaultCategories.any((item) => item.toLowerCase() == trimmed.toLowerCase())) {
+        !_defaultCategories
+            .any((item) => item.toLowerCase() == trimmed.toLowerCase())) {
       saved.add(trimmed);
       await _box.put(_categoriesKey, saved);
     }
@@ -473,29 +733,42 @@ class HiveService {
   }
 
   UserProfile getUserProfile() {
-    final legacyName = (_box.get(_usernameKey) ?? <String>['Productivity Hero']).cast<String>();
-    final fallbackName = legacyName.isNotEmpty && legacyName.first.trim().isNotEmpty ? legacyName.first.trim() : 'Productivity Hero';
+    final legacyName = (_box.get(_usernameKey) ?? <String>['Productivity Hero'])
+        .cast<String>();
+    final fallbackName =
+        legacyName.isNotEmpty && legacyName.first.trim().isNotEmpty
+            ? legacyName.first.trim()
+            : 'Productivity Hero';
     final raw = _box.get(_userProfileKey);
     if (raw == null) return UserProfile.defaults(fullName: fallbackName);
-    return UserProfile.fromStorageList(raw.cast<dynamic>(), fallbackName: fallbackName);
+    return UserProfile.fromStorageList(raw.cast<dynamic>(),
+        fallbackName: fallbackName);
   }
 
   Future<void> saveUserProfile(UserProfile profile) async {
     final previous = getUserProfile();
     final trimmed = profile.copyWith(
-      fullName: profile.fullName.trim().isEmpty ? previous.displayName : profile.fullName.trim(),
+      fullName: profile.fullName.trim().isEmpty
+          ? previous.displayName
+          : profile.fullName.trim(),
       nickname: profile.nickname.trim(),
       bio: profile.bio.trim(),
       occupation: profile.occupation.trim(),
       birthday: profile.birthday.trim(),
-      favoriteTheme: profile.favoriteTheme.trim().isEmpty ? 'Calm' : profile.favoriteTheme.trim(),
-      avatarBorderStyle: profile.avatarBorderStyle.trim().isEmpty ? _avatarFrameForAchievement(getLifetimeProductivityStats().totalPoints) : profile.avatarBorderStyle.trim(),
+      favoriteTheme: profile.favoriteTheme.trim().isEmpty
+          ? 'Calm'
+          : profile.favoriteTheme.trim(),
+      avatarBorderStyle: profile.avatarBorderStyle.trim().isEmpty
+          ? _avatarFrameForAchievement(
+              getLifetimeProductivityStats().totalPoints)
+          : profile.avatarBorderStyle.trim(),
       profilePhotoPath: profile.profilePhotoPath.trim(),
       photoHistory: _mergedPhotoHistory(previous, profile),
     );
     await _box.put(_userProfileKey, trimmed.toStorageList());
     await _box.put(_usernameKey, <String>[trimmed.displayName]);
-    await _box.put(_dashboardThemeKey, <String>[_themeStorageKeyForLabel(trimmed.favoriteTheme)]);
+    await _box.put(_dashboardThemeKey,
+        <String>[_themeStorageKeyForLabel(trimmed.favoriteTheme)]);
     await _logProfileUpdate(previous, trimmed);
     await _syncAutoJourneyForDate(DateTime.now());
   }
@@ -508,7 +781,9 @@ class HiveService {
   List<String> _mergedPhotoHistory(UserProfile previous, UserProfile next) {
     final history = <String>[...previous.photoHistory];
     final previousPhoto = previous.profilePhotoPath.trim();
-    if (previousPhoto.isNotEmpty && previousPhoto != next.profilePhotoPath.trim() && !history.contains(previousPhoto)) {
+    if (previousPhoto.isNotEmpty &&
+        previousPhoto != next.profilePhotoPath.trim() &&
+        !history.contains(previousPhoto)) {
       history.insert(0, previousPhoto);
     }
     return history.take(12).toList();
@@ -517,12 +792,19 @@ class HiveService {
   Future<void> _logProfileUpdate(UserProfile previous, UserProfile next) async {
     final changes = <String>[];
     if (previous.profilePhotoPath.trim() != next.profilePhotoPath.trim()) {
-      changes.add(next.profilePhotoPath.trim().isEmpty ? '🗑️ Removed profile picture' : '📸 Updated profile picture');
+      changes.add(next.profilePhotoPath.trim().isEmpty
+          ? '🗑️ Removed profile picture'
+          : '📸 Updated profile picture');
     }
-    if (previous.displayName != next.displayName || previous.nickname != next.nickname) changes.add('👤 Updated profile identity');
+    if (previous.displayName != next.displayName ||
+        previous.nickname != next.nickname)
+      changes.add('👤 Updated profile identity');
     if (previous.bio != next.bio) changes.add('😊 Changed bio');
-    if (previous.occupation != next.occupation) changes.add('💼 Updated occupation');
-    if (previous.favoriteTheme != next.favoriteTheme || previous.avatarBorderStyle != next.avatarBorderStyle) changes.add('🎨 Updated profile style');
+    if (previous.occupation != next.occupation)
+      changes.add('💼 Updated occupation');
+    if (previous.favoriteTheme != next.favoriteTheme ||
+        previous.avatarBorderStyle != next.avatarBorderStyle)
+      changes.add('🎨 Updated profile style');
     if (changes.isEmpty) return;
 
     final now = DateTime.now();
@@ -533,7 +815,9 @@ class HiveService {
       title: 'Profile updated',
       description: changes.join('\n'),
       colorValue: 0xFF8E24AA,
-      imageUrl: next.profilePhotoPath.trim().isEmpty ? null : next.profilePhotoPath.trim(),
+      imageUrl: next.profilePhotoPath.trim().isEmpty
+          ? null
+          : next.profilePhotoPath.trim(),
     );
     await saveJourneyEntry(entry);
   }
@@ -550,13 +834,13 @@ class HiveService {
   String _themeStorageKeyForLabel(String label) {
     final normalized = label.trim().toLowerCase();
     for (final theme in DashboardThemeType.values) {
-      if (theme.label.toLowerCase() == normalized || theme.storageKey.toLowerCase() == normalized) {
+      if (theme.label.toLowerCase() == normalized ||
+          theme.storageKey.toLowerCase() == normalized) {
         return theme.storageKey;
       }
     }
     return DashboardThemeType.calm.storageKey;
   }
-
 
   String _journalKey(DateTime date) {
     return '$_journalPrefix${_formatKey(date)}';
@@ -565,7 +849,8 @@ class HiveService {
   JournalEntry? getJournalEntryForDate(DateTime date) {
     final raw = _box.get(_journalKey(date));
     if (raw == null) return null;
-    return JournalEntry.fromStorageList(raw.cast<dynamic>(), DateTime(date.year, date.month, date.day));
+    return JournalEntry.fromStorageList(
+        raw.cast<dynamic>(), DateTime(date.year, date.month, date.day));
   }
 
   Future<void> saveJournalEntry(JournalEntry entry) async {
@@ -589,13 +874,13 @@ class HiveService {
       final parsedDate = DateTime.tryParse(dateText);
       final raw = _box.get(key);
       if (parsedDate == null || raw == null) continue;
-      entries.add(JournalEntry.fromStorageList(raw.cast<dynamic>(), parsedDate));
+      entries
+          .add(JournalEntry.fromStorageList(raw.cast<dynamic>(), parsedDate));
     }
 
     entries.sort((a, b) => b.date.compareTo(a.date));
     return entries;
   }
-
 
   String _journeyKey(String id) {
     return '$_journeyPrefix$id';
@@ -611,7 +896,9 @@ class HiveService {
   Future<void> deleteJourneyEntry(String id) async {
     final key = _journeyKey(id);
     final raw = _box.get(key);
-    final entry = raw == null ? null : JourneyEntry.fromStorageList(raw.cast<dynamic>(), DateTime.now());
+    final entry = raw == null
+        ? null
+        : JourneyEntry.fromStorageList(raw.cast<dynamic>(), DateTime.now());
     await _box.delete(key);
     if (entry != null && !entry.isAutoDailySummary) {
       await _syncAutoJourneyForDate(entry.date);
@@ -625,18 +912,19 @@ class HiveService {
       if (key is! String || !key.startsWith(_journeyPrefix)) continue;
       final raw = _box.get(key);
       if (raw == null) continue;
-      entries.add(JourneyEntry.fromStorageList(raw.cast<dynamic>(), DateTime.now()));
+      entries.add(
+          JourneyEntry.fromStorageList(raw.cast<dynamic>(), DateTime.now()));
     }
 
     entries.sort((a, b) => b.date.compareTo(a.date));
     return entries;
   }
 
-
   DashboardThemeType getDashboardTheme() {
     final stored = _box.get(_dashboardThemeKey);
     final firstValue = stored == null || stored.isEmpty ? null : stored.first;
-    return dashboardThemeTypeFromStorage(firstValue is String ? firstValue : null);
+    return dashboardThemeTypeFromStorage(
+        firstValue is String ? firstValue : null);
   }
 
   Future<void> setDashboardTheme(DashboardThemeType theme) async {
@@ -646,7 +934,8 @@ class HiveService {
   DashboardPaletteType getDashboardPalette() {
     final stored = _box.get(_dashboardPaletteKey);
     final firstValue = stored == null || stored.isEmpty ? null : stored.first;
-    return dashboardPaletteTypeFromStorage(firstValue is String ? firstValue : null);
+    return dashboardPaletteTypeFromStorage(
+        firstValue is String ? firstValue : null);
   }
 
   Future<void> setDashboardPalette(DashboardPaletteType palette) async {
@@ -686,7 +975,8 @@ class HiveService {
   DashboardLayoutStyle getDashboardLayoutStyle() {
     final stored = _box.get(_dashboardLayoutStyleKey);
     final firstValue = stored == null || stored.isEmpty ? null : stored.first;
-    return dashboardLayoutStyleFromStorage(firstValue is String ? firstValue : null);
+    return dashboardLayoutStyleFromStorage(
+        firstValue is String ? firstValue : null);
   }
 
   Future<void> setDashboardLayoutStyle(DashboardLayoutStyle layout) async {
@@ -696,17 +986,20 @@ class HiveService {
   DashboardCardAnimationStyle getDashboardCardAnimationStyle() {
     final stored = _box.get(_dashboardCardAnimationKey);
     final firstValue = stored == null || stored.isEmpty ? null : stored.first;
-    return dashboardCardAnimationStyleFromStorage(firstValue is String ? firstValue : null);
+    return dashboardCardAnimationStyleFromStorage(
+        firstValue is String ? firstValue : null);
   }
 
-  Future<void> setDashboardCardAnimationStyle(DashboardCardAnimationStyle animation) async {
+  Future<void> setDashboardCardAnimationStyle(
+      DashboardCardAnimationStyle animation) async {
     await _box.put(_dashboardCardAnimationKey, <String>[animation.storageKey]);
   }
 
   DashboardAnimationSpeed getDashboardAnimationSpeed() {
     final stored = _box.get(_dashboardAnimationSpeedKey);
     final firstValue = stored == null || stored.isEmpty ? null : stored.first;
-    return dashboardAnimationSpeedFromStorage(firstValue is String ? firstValue : null);
+    return dashboardAnimationSpeedFromStorage(
+        firstValue is String ? firstValue : null);
   }
 
   Future<void> setDashboardAnimationSpeed(DashboardAnimationSpeed speed) async {
@@ -716,7 +1009,8 @@ class HiveService {
   DashboardChartStyle getDashboardChartStyle() {
     final stored = _box.get(_dashboardChartStyleKey);
     final firstValue = stored == null || stored.isEmpty ? null : stored.first;
-    return dashboardChartStyleFromStorage(firstValue is String ? firstValue : null);
+    return dashboardChartStyleFromStorage(
+        firstValue is String ? firstValue : null);
   }
 
   Future<void> setDashboardChartStyle(DashboardChartStyle chartStyle) async {
@@ -726,7 +1020,8 @@ class HiveService {
   DashboardIconPack getDashboardIconPack() {
     final stored = _box.get(_dashboardIconPackKey);
     final firstValue = stored == null || stored.isEmpty ? null : stored.first;
-    return dashboardIconPackFromStorage(firstValue is String ? firstValue : null);
+    return dashboardIconPackFromStorage(
+        firstValue is String ? firstValue : null);
   }
 
   Future<void> setDashboardIconPack(DashboardIconPack iconPack) async {
@@ -765,7 +1060,8 @@ class HiveService {
     final trimmed = delegate.trim();
     if (trimmed.isEmpty) return;
 
-    final saved = (_box.get(_delegatesKey) ?? <String>[]).cast<String>().toList();
+    final saved =
+        (_box.get(_delegatesKey) ?? <String>[]).cast<String>().toList();
     if (!saved.any((item) => item.toLowerCase() == trimmed.toLowerCase())) {
       saved.add(trimmed);
       await _box.put(_delegatesKey, saved);
@@ -776,9 +1072,15 @@ class HiveService {
     final key = _formatKey(date);
     final tasks = _storedTasksForDate(date);
     final normalizedTask = _withNormalizedTaskName(task);
-    tasks.add(normalizedTask);
+    final index = tasks.indexWhere((existing) => existing.id == normalizedTask.id);
+    if (index >= 0) {
+      tasks[index] = normalizedTask;
+    } else {
+      tasks.add(normalizedTask);
+    }
     await _putTasksForKey(key, tasks);
     await recalculateProductivitySnapshotForDate(date);
+    _syncCloudUpsert(normalizedTask);
   }
 
   Future<void> updateTask(DateTime date, int index, Task task) async {
@@ -791,22 +1093,26 @@ class HiveService {
 
     final key = _formatKey(date);
     final tasks = _storedTasksForDate(date);
-    if (index < 0 || index >= tasks.length) return;
+    // The caller's list position can become stale while an editor is open.
+    final targetIndex = tasks.indexWhere((item) => item.id == normalizedTask.id);
+    if (targetIndex < 0) return;
 
-    tasks[index] = normalizedTask;
+    tasks[targetIndex] = normalizedTask;
     await _putTasksForKey(key, tasks);
     await recalculateProductivitySnapshotForDate(date);
 
     await _handleRecurringIfNeeded(updated: normalizedTask);
+    _syncCloudUpsert(normalizedTask);
   }
 
   Future<void> deleteTask(DateTime date, int index) async {
     final key = _formatKey(date);
     final tasks = _storedTasksForDate(date);
     if (index < 0 || index >= tasks.length) return;
-    tasks.removeAt(index);
+    final deletedTask = tasks.removeAt(index);
     await _putTasksForKey(key, tasks, dedupeRecurring: false);
     await recalculateProductivitySnapshotForDate(date);
+    _syncCloudDelete(deletedTask);
   }
 
   Future<void> toggleTaskStatus(DateTime date, int index) async {
@@ -826,6 +1132,7 @@ class HiveService {
     await recalculateProductivitySnapshotForDate(date);
 
     await _handleRecurringIfNeeded(updated: updatedTask);
+    _syncCloudUpsert(updatedTask);
   }
 
   Future<void> _handleRecurringIfNeeded({
@@ -835,13 +1142,15 @@ class HiveService {
 
     if (!_isTerminalStatus(updated.status)) return;
 
-    final nextDueDate = _computeNextDueDate(updated.dueDate, updated.repeatFrequency);
+    final nextDueDate =
+        _computeNextDueDate(updated.dueDate, updated.repeatFrequency);
     if (nextDueDate == null) return;
 
     final nextKey = _formatKey(nextDueDate);
     final nextDateTasks = _storedTasksForDate(nextDueDate);
 
-    final nextOccurrence = updated.copyWith(
+    var nextOccurrence = updated.copyWith(
+      newOccurrence: true,
       dueDate: nextDueDate,
       done: false,
       status: 'Not Updated',
@@ -852,6 +1161,7 @@ class HiveService {
     );
 
     if (existingIndex >= 0) {
+      nextOccurrence = _withOccurrenceIdentity(nextOccurrence, nextDateTasks[existingIndex]);
       nextDateTasks[existingIndex] = nextOccurrence;
     } else {
       nextDateTasks.add(nextOccurrence);
@@ -892,7 +1202,6 @@ class HiveService {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-
   DateTime _currentOccurrenceDate(String? repeatFrequency, DateTime now) {
     final day = DateTime(now.year, now.month, now.day);
     switch (_normalizedRepeatFrequency(repeatFrequency)) {
@@ -912,7 +1221,8 @@ class HiveService {
   Future<bool> _updateRecurringTaskForCurrentOccurrence(Task updated) async {
     final now = DateTime.now();
     final normalizedTask = _withNormalizedTaskName(updated);
-    final occurrenceDate = _currentOccurrenceDate(normalizedTask.repeatFrequency, now);
+    final occurrenceDate =
+        _currentOccurrenceDate(normalizedTask.repeatFrequency, now);
     final completionTimestamp = DateTime(
       occurrenceDate.year,
       occurrenceDate.month,
@@ -923,14 +1233,19 @@ class HiveService {
       now.millisecond,
       now.microsecond,
     );
-    final normalizedUpdated = normalizedTask.copyWith(
-      dueDate: _isCompletedTask(normalizedTask) ? completionTimestamp : occurrenceDate,
+    var normalizedUpdated = normalizedTask.copyWith(
+      dueDate: _isCompletedTask(normalizedTask)
+          ? completionTimestamp
+          : occurrenceDate,
       repeatTask: true,
     );
     final key = _formatKey(occurrenceDate);
     final tasks = _storedTasksForDate(occurrenceDate);
 
-    final existingIndex = tasks.indexWhere((task) => _isSameRecurringTaskIdentity(task, normalizedUpdated));
+    final existingIndex = tasks.indexWhere(
+        (task) => _isSameRecurringTaskIdentity(task, normalizedUpdated));
+    normalizedUpdated = _withOccurrenceIdentity(
+        normalizedUpdated, existingIndex >= 0 ? tasks[existingIndex] : null);
     if (existingIndex >= 0) {
       tasks[existingIndex] = normalizedUpdated;
     } else {
@@ -940,6 +1255,7 @@ class HiveService {
     await _putTasksForKey(key, tasks);
     await recalculateProductivitySnapshotForDate(occurrenceDate);
     await _handleRecurringIfNeeded(updated: normalizedUpdated);
+    _syncCloudUpsert(normalizedUpdated);
     return true;
   }
 
@@ -958,12 +1274,20 @@ class HiveService {
 
       for (int i = 0; i < tasks.length; i++) {
         final candidate = tasks[i];
-        if (identical(candidate, original) || _matchesTaskIdentity(candidate, original)) {
-          tasks[i] = normalizedUpdated;
+        if (identical(candidate, original) ||
+            _matchesTaskIdentity(candidate, original)) {
+          if (_formatKey(normalizedUpdated.dueDate) != key) {
+            final moved = normalizedUpdated.copyWith(id: candidate.id, legacyCloudId: candidate.legacyCloudId);
+            await _moveTaskWithRecovery(key, moved);
+            _syncCloudUpsert(moved);
+            return true;
+          }
+          tasks[i] = normalizedUpdated.copyWith(id: candidate.id, legacyCloudId: candidate.legacyCloudId);
           await _putTasksForKey(key, tasks);
           final changedDate = DateTime.parse(key);
           await recalculateProductivitySnapshotForDate(changedDate);
-          await _handleRecurringIfNeeded(updated: normalizedUpdated);
+          await _handleRecurringIfNeeded(updated: tasks[i]);
+          _syncCloudUpsert(tasks[i]);
           return true;
         }
       }
@@ -972,6 +1296,39 @@ class HiveService {
     return false;
   }
 
+  /// Persist intent first so an interrupted date edit can be replayed at startup.
+  Future<void> _moveTaskWithRecovery(String sourceKey, Task updated) {
+    final operation = _taskMoveQueue.then((_) async {
+      await _recoverPendingTaskMove();
+      await _box.put(_pendingTaskMoveKey, [sourceKey, _formatKey(updated.dueDate), updated]);
+      await _box.flush();
+      await _recoverPendingTaskMove();
+    });
+    _taskMoveQueue = operation.catchError((Object _) {});
+    return operation;
+  }
+
+  Future<void> _recoverPendingTaskMove() async {
+    final intent = _box.get(_pendingTaskMoveKey);
+    if (intent == null) return;
+    final sourceKey = intent[0] as String;
+    final targetKey = intent[1] as String;
+    final updated = intent[2] as Task;
+    final destination = (_box.get(targetKey) ?? []).cast<Task>().toList();
+    final index = destination.indexWhere((task) => task.id == updated.id);
+    if (index < 0) { destination.add(updated); } else { destination[index] = updated; }
+    await _box.put(targetKey, destination);
+    await _box.flush();
+    if (sourceKey != targetKey) {
+      final source = (_box.get(sourceKey) ?? []).cast<Task>()
+          .where((task) => task.id != updated.id).toList();
+      await _box.put(sourceKey, source);
+    }
+    await _box.flush();
+    await recalculateProductivitySnapshotForDate(DateTime.parse(sourceKey));
+    await recalculateProductivitySnapshotForDate(DateTime.parse(targetKey));
+    await _box.delete(_pendingTaskMoveKey);
+  }
 
   Future<bool> deleteTaskByReference(Task original) async {
     for (final key in _box.keys) {
@@ -983,11 +1340,13 @@ class HiveService {
 
       for (int i = 0; i < tasks.length; i++) {
         final candidate = tasks[i];
-        if (identical(candidate, original) || _matchesTaskIdentity(candidate, original)) {
+        if (identical(candidate, original) ||
+            _matchesTaskIdentity(candidate, original)) {
           tasks.removeAt(i);
           await _putTasksForKey(key, tasks);
           final changedDate = DateTime.parse(key);
           await recalculateProductivitySnapshotForDate(changedDate);
+          _syncCloudDelete(candidate);
           return true;
         }
       }
@@ -996,10 +1355,12 @@ class HiveService {
     return false;
   }
 
-  Future<bool> updateRecurringTaskSeriesByReference(Task original, Task updated) async {
+  Future<bool> updateRecurringTaskSeriesByReference(
+      Task original, Task updated) async {
     if (!original.repeatTask || !updated.repeatTask) return false;
 
-    final normalizedUpdated = _withNormalizedTaskName(updated.copyWith(repeatTask: true));
+    final normalizedUpdated =
+        _withNormalizedTaskName(updated.copyWith(repeatTask: true));
     var changed = false;
     final changedDates = <DateTime>[];
 
@@ -1014,7 +1375,7 @@ class HiveService {
       for (int i = 0; i < tasks.length; i++) {
         final candidate = tasks[i];
         if (_isSameRecurringSeriesIdentity(candidate, original)) {
-          tasks[i] = normalizedUpdated.copyWith(
+          tasks[i] = _withOccurrenceIdentity(normalizedUpdated, candidate).copyWith(
             dueDate: candidate.dueDate,
             done: candidate.done,
             status: candidate.status,
@@ -1040,10 +1401,12 @@ class HiveService {
       await _ensureCurrentRecurringOccurrenceEnabled(normalizedUpdated);
     }
 
+    if (changed) _syncCloudUpsert(normalizedUpdated);
     return changed;
   }
 
-  Future<bool> setRecurringTaskEnabledByReference(Task original, bool enabled) async {
+  Future<bool> setRecurringTaskEnabledByReference(
+      Task original, bool enabled) async {
     if (!original.repeatTask) return false;
 
     var changed = false;
@@ -1079,15 +1442,18 @@ class HiveService {
       await _ensureCurrentRecurringOccurrenceEnabled(original);
     }
 
+    if (changed) _syncCloudUpsert(original.copyWith(routineEnabled: enabled));
     return changed;
   }
 
   Future<void> _ensureCurrentRecurringOccurrenceEnabled(Task original) async {
-    final occurrenceDate = _currentOccurrenceDate(original.repeatFrequency, DateTime.now());
+    final occurrenceDate =
+        _currentOccurrenceDate(original.repeatFrequency, DateTime.now());
     final key = _formatKey(occurrenceDate);
     final tasks = _storedTasksForDate(occurrenceDate);
     final occurrence = _withNormalizedTaskName(
       original.copyWith(
+        newOccurrence: true,
         dueDate: occurrenceDate,
         done: false,
         status: 'Not Updated',
@@ -1096,9 +1462,11 @@ class HiveService {
       ),
     );
 
-    final existingIndex = tasks.indexWhere((task) => _isSameRecurringTaskIdentity(task, occurrence));
+    final existingIndex = tasks
+        .indexWhere((task) => _isSameRecurringTaskIdentity(task, occurrence));
     if (existingIndex >= 0) {
-      tasks[existingIndex] = tasks[existingIndex].copyWith(routineEnabled: true);
+      tasks[existingIndex] =
+          tasks[existingIndex].copyWith(routineEnabled: true);
     } else {
       tasks.add(occurrence);
     }
@@ -1108,21 +1476,22 @@ class HiveService {
   }
 
   bool _matchesTaskIdentity(Task a, Task b) {
-    return a.task == b.task &&
-        a.dueDate.year == b.dueDate.year &&
-        a.dueDate.month == b.dueDate.month &&
-        a.dueDate.day == b.dueDate.day &&
-        a.priority == b.priority &&
-        a.category == b.category;
+    return a.id == b.id;
   }
 
+  Task _withOccurrenceIdentity(Task task, Task? existing) => task.copyWith(
+        newOccurrence: true,
+        id: existing?.id,
+        legacyCloudId: existing?.legacyCloudId,
+      );
 
   bool _isSameRecurringSeriesIdentity(Task a, Task b) {
     return a.repeatTask &&
         b.repeatTask &&
         a.task.trim().toLowerCase() == b.task.trim().toLowerCase() &&
         a.category.trim().toLowerCase() == b.category.trim().toLowerCase() &&
-        _normalizedRepeatFrequency(a.repeatFrequency) == _normalizedRepeatFrequency(b.repeatFrequency);
+        _normalizedRepeatFrequency(a.repeatFrequency) ==
+            _normalizedRepeatFrequency(b.repeatFrequency);
   }
 
   bool _isSameRecurringTaskIdentity(Task a, Task b) {
@@ -1130,10 +1499,10 @@ class HiveService {
         b.repeatTask &&
         a.task.trim().toLowerCase() == b.task.trim().toLowerCase() &&
         a.category.trim().toLowerCase() == b.category.trim().toLowerCase() &&
-        _normalizedRepeatFrequency(a.repeatFrequency) == _normalizedRepeatFrequency(b.repeatFrequency) &&
+        _normalizedRepeatFrequency(a.repeatFrequency) ==
+            _normalizedRepeatFrequency(b.repeatFrequency) &&
         _isSameDate(a.dueDate, b.dueDate);
   }
-
 
   String _productivityKey(DateTime date) {
     return '$_productivityPrefix${_formatKey(date)}';
@@ -1161,8 +1530,6 @@ class HiveService {
     return LifetimeProductivityStats.fromSnapshots(getProductivitySnapshots());
   }
 
-
-
   String _instructionKey(String id) => '$_instructionPrefix$id';
 
   List<InstructionRule> getInstructions() {
@@ -1182,15 +1549,20 @@ class HiveService {
   }
 
   List<InstructionRule> getStandaloneInstructions() {
-    return getInstructions().where((instruction) => instruction.isStandalone).toList();
+    return getInstructions()
+        .where((instruction) => instruction.isStandalone)
+        .toList();
   }
 
   List<InstructionRule> getTaskLinkedInstructions() {
-    return getInstructions().where((instruction) => instruction.isTaskLinked).toList();
+    return getInstructions()
+        .where((instruction) => instruction.isTaskLinked)
+        .toList();
   }
 
   Future<void> saveInstruction(InstructionRule instruction) async {
-    await _box.put(_instructionKey(instruction.id), instruction.toStorageList());
+    await _box.put(
+        _instructionKey(instruction.id), instruction.toStorageList());
   }
 
   Future<void> deleteInstruction(String id) async {
@@ -1200,33 +1572,54 @@ class HiveService {
     await saveInstruction(instruction.copyWith(archived: true, enabled: false));
   }
 
-  Future<void> setInstructionEnabled(InstructionRule instruction, bool enabled) async {
+  Future<void> setInstructionEnabled(
+      InstructionRule instruction, bool enabled) async {
     await saveInstruction(instruction.copyWith(enabled: enabled));
   }
 
-  InstructionHistoryEntry? instructionEntryForDate(InstructionRule instruction, DateTime date) {
+  InstructionHistoryEntry? instructionEntryForDate(
+      InstructionRule instruction, DateTime date) {
     final occurrence = _instructionOccurrenceDate(instruction, date);
     for (final entry in instruction.history) {
-      if (_isSameDate(_instructionOccurrenceDate(instruction, entry.date), occurrence)) return entry;
+      if (_isSameDate(
+          _instructionOccurrenceDate(instruction, entry.date), occurrence))
+        return entry;
     }
     return null;
   }
 
-  Future<void> updateInstructionStatus(InstructionRule instruction, DateTime date, String status, {String note = '', InstructionLevel? level, InstructionOption? option, List<InstructionOption> options = const []}) async {
+  Future<void> updateInstructionStatus(
+      InstructionRule instruction, DateTime date, String status,
+      {String note = '',
+      InstructionLevel? level,
+      InstructionOption? option,
+      List<InstructionOption> options = const []}) async {
     final occurrence = _instructionOccurrenceDate(instruction, date);
     final updatedHistory = instruction.history
-        .where((entry) => !_isSameDate(_instructionOccurrenceDate(instruction, entry.date), occurrence))
+        .where((entry) => !_isSameDate(
+            _instructionOccurrenceDate(instruction, entry.date), occurrence))
         .toList();
     final followed = status == InstructionHistoryEntry.statusFollowed;
     final selectedLevel = followed ? level : null;
-    final selectedOptions = followed ? (options.isNotEmpty ? options : [if (option != null) option]) : <InstructionOption>[];
-    final selectedOption = selectedOptions.isNotEmpty ? selectedOptions.first : null;
+    final selectedOptions = followed
+        ? (options.isNotEmpty ? options : [if (option != null) option])
+        : <InstructionOption>[];
+    final selectedOption =
+        selectedOptions.isNotEmpty ? selectedOptions.first : null;
     updatedHistory.add(
       InstructionHistoryEntry(
         date: occurrence,
         status: status,
-        bonusPoints: followed ? (selectedLevel?.bonusPoints ?? selectedOptions.fold<int>(0, (sum, item) => sum + item.bonusPoints)) : 0,
-        pointsEarned: followed ? (selectedLevel?.pointsEarned ?? selectedOptions.fold<int>(0, (sum, item) => sum + item.pointsEarned)) : 0,
+        bonusPoints: followed
+            ? (selectedLevel?.bonusPoints ??
+                selectedOptions.fold<int>(
+                    0, (sum, item) => sum + item.bonusPoints))
+            : 0,
+        pointsEarned: followed
+            ? (selectedLevel?.pointsEarned ??
+                selectedOptions.fold<int>(
+                    0, (sum, item) => sum + item.pointsEarned))
+            : 0,
         note: note.trim(),
         levelId: selectedLevel?.id ?? '',
         levelName: selectedLevel?.name ?? '',
@@ -1242,7 +1635,8 @@ class HiveService {
     await recalculateProductivitySnapshotForDate(occurrence);
   }
 
-  DateTime _instructionOccurrenceDate(InstructionRule instruction, DateTime date) {
+  DateTime _instructionOccurrenceDate(
+      InstructionRule instruction, DateTime date) {
     final day = DateTime(date.year, date.month, date.day);
     switch (instruction.repeatType.trim().toLowerCase()) {
       case 'weekly':
@@ -1252,14 +1646,16 @@ class HiveService {
       case 'yearly':
         return DateTime(day.year, 1, 1);
       case 'one-time':
-        return DateTime(instruction.createdAt.year, instruction.createdAt.month, instruction.createdAt.day);
+        return DateTime(instruction.createdAt.year, instruction.createdAt.month,
+            instruction.createdAt.day);
       case 'daily':
       default:
         return day;
     }
   }
 
-  DateTime? _previousInstructionOccurrence(InstructionRule instruction, DateTime occurrence) {
+  DateTime? _previousInstructionOccurrence(
+      InstructionRule instruction, DateTime occurrence) {
     switch (instruction.repeatType.trim().toLowerCase()) {
       case 'daily':
         return occurrence.subtract(const Duration(days: 1));
@@ -1302,8 +1698,14 @@ class HiveService {
     var current = 0;
     DateTime? previous;
     for (final occurrence in followed) {
-      final expected = previous == null ? null : _previousInstructionOccurrence(instruction, occurrence);
-      current = previous != null && expected != null && _isSameDate(expected, previous) ? current + 1 : 1;
+      final expected = previous == null
+          ? null
+          : _previousInstructionOccurrence(instruction, occurrence);
+      current = previous != null &&
+              expected != null &&
+              _isSameDate(expected, previous)
+          ? current + 1
+          : 1;
       if (current > best) best = current;
       previous = occurrence;
     }
@@ -1312,10 +1714,12 @@ class HiveService {
 
   int instructionBonusForDate(DateTime date, {bool standaloneOnly = false}) {
     var total = 0;
-    final instructions = standaloneOnly ? getStandaloneInstructions() : getInstructions();
+    final instructions =
+        standaloneOnly ? getStandaloneInstructions() : getInstructions();
     for (final instruction in instructions) {
       final entry = instructionEntryForDate(instruction, date);
-      if (instruction.enabled && entry != null && entry.followed) total += entry.bonusPoints;
+      if (instruction.enabled && entry != null && entry.followed)
+        total += entry.bonusPoints;
     }
     return total;
   }
@@ -1372,20 +1776,31 @@ class HiveService {
 
   Future<void> saveRewardGoal(RewardGoal goal) async {
     final existingRaw = _box.get(_rewardGoalKey(goal.id));
-    final existing = existingRaw == null ? null : RewardGoal.fromStorageList(existingRaw.cast<dynamic>());
+    final existing = existingRaw == null
+        ? null
+        : RewardGoal.fromStorageList(existingRaw.cast<dynamic>());
     var updated = _normalizeRewardGoal(goal);
     final history = [...updated.history];
     if (existing == null) {
-      history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Goal created', note: updated.name));
+      history.add(RewardGoalHistoryEntry(
+          date: DateTime.now(), title: 'Goal created', note: updated.name));
     } else {
-      if (existing.imagePath != updated.imagePath || existing.galleryImages.length != updated.galleryImages.length) {
-        history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Goal image updated'));
+      if (existing.imagePath != updated.imagePath ||
+          existing.galleryImages.length != updated.galleryImages.length) {
+        history.add(RewardGoalHistoryEntry(
+            date: DateTime.now(), title: 'Goal image updated'));
       }
       if (existing.effectiveStatus != updated.effectiveStatus) {
-        history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: 'Status changed', note: updated.effectiveStatus));
+        history.add(RewardGoalHistoryEntry(
+            date: DateTime.now(),
+            title: 'Status changed',
+            note: updated.effectiveStatus));
       }
       if (!existing.isAchieved && updated.isAchieved) {
-        history.add(RewardGoalHistoryEntry(date: DateTime.now(), title: '🎉 Goal achieved', note: updated.name));
+        history.add(RewardGoalHistoryEntry(
+            date: DateTime.now(),
+            title: '🎉 Goal achieved',
+            note: updated.name));
       }
     }
     updated = updated.copyWith(history: history);
@@ -1397,8 +1812,11 @@ class HiveService {
   }
 
   RewardGoal _normalizeRewardGoal(RewardGoal goal) {
-    if (goal.targetAmountRupees > 0 && goal.savedAmountRupees >= goal.targetAmountRupees) {
-      return goal.copyWith(status: RewardGoal.statusAchieved, completedAt: goal.completedAt ?? DateTime.now());
+    if (goal.targetAmountRupees > 0 &&
+        goal.savedAmountRupees >= goal.targetAmountRupees) {
+      return goal.copyWith(
+          status: RewardGoal.statusAchieved,
+          completedAt: goal.completedAt ?? DateTime.now());
     }
     return goal;
   }
@@ -1442,7 +1860,8 @@ class HiveService {
     if (cleanAmount > summary.availableRupees) {
       throw ArgumentError('Not enough reward balance available.');
     }
-    final amountToApply = cleanAmount.clamp(0, goal.remainingAmountRupees).toInt();
+    final amountToApply =
+        cleanAmount.clamp(0, goal.remainingAmountRupees).toInt();
     if (amountToApply <= 0) return;
     final newSavedAmount = goal.savedAmountRupees + amountToApply;
     final history = [
@@ -1453,14 +1872,23 @@ class HiveService {
         amountRupees: amountToApply,
         note: note.trim(),
       ),
-      if (goal.targetAmountRupees > 0 && newSavedAmount >= goal.targetAmountRupees && !goal.isAchieved)
-        RewardGoalHistoryEntry(date: DateTime.now(), title: '🎉 Goal achieved', note: goal.name),
+      if (goal.targetAmountRupees > 0 &&
+          newSavedAmount >= goal.targetAmountRupees &&
+          !goal.isAchieved)
+        RewardGoalHistoryEntry(
+            date: DateTime.now(), title: '🎉 Goal achieved', note: goal.name),
     ];
     final updatedGoal = _normalizeRewardGoal(
       goal.copyWith(
         savedAmountRupees: newSavedAmount,
-        status: goal.targetAmountRupees > 0 && newSavedAmount >= goal.targetAmountRupees ? RewardGoal.statusAchieved : goal.status,
-        completedAt: goal.targetAmountRupees > 0 && newSavedAmount >= goal.targetAmountRupees ? (goal.completedAt ?? DateTime.now()) : goal.completedAt,
+        status: goal.targetAmountRupees > 0 &&
+                newSavedAmount >= goal.targetAmountRupees
+            ? RewardGoal.statusAchieved
+            : goal.status,
+        completedAt: goal.targetAmountRupees > 0 &&
+                newSavedAmount >= goal.targetAmountRupees
+            ? (goal.completedAt ?? DateTime.now())
+            : goal.completedAt,
         history: history,
       ),
     );
@@ -1485,7 +1913,8 @@ class HiveService {
     }
   }
 
-  Future<ProductivitySnapshot> recalculateProductivitySnapshotForDate(DateTime date) async {
+  Future<ProductivitySnapshot> recalculateProductivitySnapshotForDate(
+      DateTime date) async {
     final snapshot = calculateProductivitySnapshotForDate(date);
     await _box.put(_productivityKey(date), snapshot.toStorageList());
     await _syncAutoJourneyForDate(date);
@@ -1509,9 +1938,12 @@ class HiveService {
     final pointEvents = <ProductivityPointEvent>[];
 
     for (final task in tasks) {
-      final phases = task.repeatTask ? const <TaskPhaseInfo>[] : parseTaskPhases(task.description);
+      final phases = task.repeatTask
+          ? const <TaskPhaseInfo>[]
+          : taskSteps(task);
       if (phases.isNotEmpty) {
-        final completedPhases = phases.where((phase) => phase.isCompleted).toList();
+        final completedPhases =
+            phases.where((phase) => phase.isCompleted).toList();
         if (completedPhases.isEmpty) continue;
 
         var taskBasePoints = 0;
@@ -1539,7 +1971,8 @@ class HiveService {
         final completedPhaseCount = completedPhases.length;
         projectPhasesCompleted += completedPhaseCount;
         if (_isCompletedTask(task)) completedTasks++;
-        completedTaskNames.add('${task.task} ($completedPhaseCount/${phases.length} phases)');
+        completedTaskNames
+            .add('${task.task} ($completedPhaseCount/${phases.length} phases)');
 
         basePoints += taskBasePoints;
         pointEvents.add(
@@ -1550,7 +1983,8 @@ class HiveService {
             timingBonusPoints: 0,
             pointsBonus: 0,
             totalPoints: taskBasePoints,
-            reason: '$completedPhaseCount project phase${completedPhaseCount == 1 ? '' : 's'} completed • ${taskRecordedMinutes} min recorded',
+            reason:
+                '$completedPhaseCount project phase${completedPhaseCount == 1 ? '' : 's'} completed • ${taskRecordedMinutes} min recorded',
           ),
         );
         continue;
@@ -1602,7 +2036,9 @@ class HiveService {
       timingBonusPoints += taskTimingBonusPoints;
       pointEvents.add(
         ProductivityPointEvent(
-          title: task.repeatTask ? '${task.task} Completed' : '${task.task} Completed',
+          title: task.repeatTask
+              ? '${task.task} Completed'
+              : '${task.task} Completed',
           basePoints: taskBasePoints,
           streakBonusPoints: taskBonusPoints,
           timingBonusPoints: taskTimingBonusPoints,
@@ -1626,7 +2062,9 @@ class HiveService {
           timingBonusPoints: entry.bonusPoints,
           pointsBonus: entry.pointsEarned,
           totalPoints: entry.bonusPoints,
-          reason: instruction.description.isEmpty ? 'Instruction bonus' : instruction.description,
+          reason: instruction.description.isEmpty
+              ? 'Instruction bonus'
+              : instruction.description,
         ),
       );
     }
@@ -1637,7 +2075,9 @@ class HiveService {
     final neitherHours = neitherMinutes / 60.0;
     final totalHours = bothHours + importantHours + urgentHours + neitherHours;
     final totalPoints = basePoints + streakBonusPoints + timingBonusPoints;
-    final score = (totalPoints / ProductivitySnapshot.maximumPoints * 100).clamp(0.0, 100.0).toDouble();
+    final score = (totalPoints / ProductivitySnapshot.maximumPoints * 100)
+        .clamp(0.0, 100.0)
+        .toDouble();
 
     return ProductivitySnapshot(
       date: day,
@@ -1664,7 +2104,6 @@ class HiveService {
     return task.done || task.status.trim().toLowerCase() == 'completed';
   }
 
-
   int _productivityPointsForTask(Task task, int recordedMinutes) {
     return (recordedMinutes / 60 * _productivityPointRate(task)).round();
   }
@@ -1674,10 +2113,15 @@ class HiveService {
     required bool important,
     required int recordedMinutes,
   }) {
-    return (recordedMinutes / 60 * _productivityPointRateForFlags(urgent: urgent, important: important)).round();
+    return (recordedMinutes /
+            60 *
+            _productivityPointRateForFlags(
+                urgent: urgent, important: important))
+        .round();
   }
 
-  int _productivityPointRateForFlags({required bool urgent, required bool important}) {
+  int _productivityPointRateForFlags(
+      {required bool urgent, required bool important}) {
     if (urgent && important) return 100;
     if (important) return 80;
     if (urgent) return 50;
@@ -1691,10 +2135,10 @@ class HiveService {
     return 10;
   }
 
-
   _RoutineTimingBonus _routineTimingBonusForTask(Task task) {
     final schedule = _routineScheduleForTask(task);
-    if (schedule == null || !_isCompletedTask(task)) return const _RoutineTimingBonus.none();
+    if (schedule == null || !_isCompletedTask(task))
+      return const _RoutineTimingBonus.none();
 
     var completed = (task.dueDate.hour * 60) + task.dueDate.minute;
     final start = schedule.startMinutes;
@@ -1711,7 +2155,8 @@ class HiveService {
     return _RoutineTimingBonus(
       points: schedule.bonusPoints,
       xp: (schedule.bonusPoints / 4).round(),
-      reason: 'On time within ${_formatScheduleMinutes(schedule.startMinutes)}–${_formatScheduleMinutes(schedule.endMinutes)} window',
+      reason:
+          'On time within ${_formatScheduleMinutes(schedule.startMinutes)}–${_formatScheduleMinutes(schedule.endMinutes)} window',
     );
   }
 
@@ -1724,15 +2169,21 @@ class HiveService {
     for (final line in task.description.split('\n')) {
       final trimmed = line.trim();
       if (trimmed.startsWith(_scheduleStartMarker)) {
-        start = _parseScheduleMinutes(trimmed.substring(_scheduleStartMarker.length).trim());
+        start = _parseScheduleMinutes(
+            trimmed.substring(_scheduleStartMarker.length).trim());
       } else if (trimmed.startsWith(_scheduleEndMarker)) {
-        end = _parseScheduleMinutes(trimmed.substring(_scheduleEndMarker.length).trim());
+        end = _parseScheduleMinutes(
+            trimmed.substring(_scheduleEndMarker.length).trim());
       } else if (trimmed.startsWith(_scheduleBonusMarker)) {
         bonus = int.tryParse(
-          trimmed.substring(_scheduleBonusMarker.length).replaceAll('points', '').trim(),
+          trimmed
+              .substring(_scheduleBonusMarker.length)
+              .replaceAll('points', '')
+              .trim(),
         );
       } else if (trimmed.startsWith(_legacyScheduledTimeMarker)) {
-        legacy = _parseScheduleMinutes(trimmed.substring(_legacyScheduledTimeMarker.length).trim());
+        legacy = _parseScheduleMinutes(
+            trimmed.substring(_legacyScheduledTimeMarker.length).trim());
       }
     }
 
@@ -1755,7 +2206,12 @@ class HiveService {
     if (parts.length != 2) return null;
     final hour = int.tryParse(parts[0]);
     final minute = int.tryParse(parts[1]);
-    if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    if (hour == null ||
+        minute == null ||
+        hour < 0 ||
+        hour > 23 ||
+        minute < 0 ||
+        minute > 59) {
       return null;
     }
     return (hour * 60) + minute;
@@ -1770,22 +2226,29 @@ class HiveService {
     return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
   }
 
-
   String? _routineMoodTimelineLine(Task task, DateTime day) {
-    if (!task.repeatTask || _isDailyJournalTask(task) || !_isCompletedTask(task)) return null;
+    if (!task.repeatTask ||
+        _isDailyJournalTask(task) ||
+        !_isCompletedTask(task)) return null;
     final linkedInstructions = getTaskLinkedInstructions()
-        .where((instruction) => instruction.enabled && instruction.isLinkedToTask(task.task))
+        .where((instruction) =>
+            instruction.enabled && instruction.isLinkedToTask(task.task))
         .toList();
-    if (linkedInstructions.isEmpty) return '😐 ${task.task} steady at Neutral Mood';
+    if (linkedInstructions.isEmpty)
+      return '😐 ${task.task} steady at Neutral Mood';
 
     final followed = linkedInstructions.where((instruction) {
       return instructionEntryForDate(instruction, day)?.followed ?? false;
     }).length;
     final ratio = followed / linkedInstructions.length;
-    if (ratio >= 1) return '🤩 ${task.task} reached Excellent Mood • all instructions followed';
-    if (ratio >= 0.75) return '😄 ${task.task} recovered to Happy Mood • $followed/${linkedInstructions.length} instructions followed';
-    if (ratio >= 0.5) return '🙂 ${task.task} reached Good Mood • $followed/${linkedInstructions.length} instructions followed';
-    if (followed > 0) return '😐 ${task.task} stayed Neutral • $followed/${linkedInstructions.length} instructions followed';
+    if (ratio >= 1)
+      return '🤩 ${task.task} reached Excellent Mood • all instructions followed';
+    if (ratio >= 0.75)
+      return '😄 ${task.task} recovered to Happy Mood • $followed/${linkedInstructions.length} instructions followed';
+    if (ratio >= 0.5)
+      return '🙂 ${task.task} reached Good Mood • $followed/${linkedInstructions.length} instructions followed';
+    if (followed > 0)
+      return '😐 ${task.task} stayed Neutral • $followed/${linkedInstructions.length} instructions followed';
     return '😕 ${task.task} completed but skipped linked instructions';
   }
 
@@ -1814,9 +2277,12 @@ class HiveService {
     final completedOccurrences = <DateTime>{};
     for (final entry in getAllTasksByDate().entries) {
       for (final candidate in entry.value) {
-        if (_isSameRecurringSeriesIdentity(candidate, task) && _isCompletedTask(candidate)) {
-          final occurrence = _currentOccurrenceDate(candidate.repeatFrequency, candidate.dueDate);
-          completedOccurrences.add(DateTime(occurrence.year, occurrence.month, occurrence.day));
+        if (_isSameRecurringSeriesIdentity(candidate, task) &&
+            _isCompletedTask(candidate)) {
+          final occurrence = _currentOccurrenceDate(
+              candidate.repeatFrequency, candidate.dueDate);
+          completedOccurrences
+              .add(DateTime(occurrence.year, occurrence.month, occurrence.day));
         }
       }
     }
@@ -1831,7 +2297,6 @@ class HiveService {
     return streak;
   }
 
-
   String _autoJourneyId(DateTime date) {
     return '$_autoJourneyPrefix${_formatKey(date)}';
   }
@@ -1842,7 +2307,8 @@ class HiveService {
     final tasks = getTasksForDate(day);
     final journal = getJournalEntryForDate(day);
     final manualEntries = getAllJourneyEntries()
-        .where((entry) => !entry.isAutoDailySummary && _isSameDate(entry.date, day))
+        .where((entry) =>
+            !entry.isAutoDailySummary && _isSameDate(entry.date, day))
         .toList();
     final photoCount = manualEntries.where((entry) => entry.hasImage).length;
     final lifetime = getLifetimeProductivityStats();
@@ -1855,7 +2321,8 @@ class HiveService {
       final minutes = taskRecordedMinutesForDay(task);
       if (_isCompletedTask(task) && minutes > 0) {
         if (_isDailyJournalTask(task)) {
-          lines.add('📔 Daily Journal completed • Reflection saved successfully • +$minutes min');
+          lines.add(
+              '📔 Daily Journal completed • Reflection saved successfully • +$minutes min');
         } else {
           lines.add(
             '${task.repeatTask ? '✅ Routine' : '✅ Task'} ${task.task} completed • +$minutes min',
@@ -1865,50 +2332,78 @@ class HiveService {
         }
       } else if (task.repeatTask &&
           !_isDailyJournalTask(task) &&
-          (status == 'missed' || status == 'overdue' || status == 'cancelled')) {
-        lines.add("❌ ${task.task} ${status == 'cancelled' ? 'cancelled' : status}");
+          (status == 'missed' ||
+              status == 'overdue' ||
+              status == 'cancelled')) {
+        lines.add(
+            "❌ ${task.task} ${status == 'cancelled' ? 'cancelled' : status}");
         lines.add('😞 ${task.task} missed today');
       }
 
-      for (final phase in parseTaskPhases(task.description).where((phase) => phase.isCompleted)) {
-        lines.add('🧩 ${task.task} phase completed: ${phase.name} • +${phase.minutes} min');
+      for (final phase in taskSteps(task)
+          .where((phase) => phase.isCompleted)) {
+        lines.add(
+            '🧩 ${task.task} phase completed: ${phase.name} • +${phase.minutes} min');
       }
     }
 
     final disabledRoutines = tasks
-        .where((task) => task.repeatTask && !_isDailyJournalTask(task) && !task.routineEnabled)
+        .where((task) =>
+            task.repeatTask &&
+            !_isDailyJournalTask(task) &&
+            !task.routineEnabled)
         .length;
     final enabledRoutines = tasks
-        .where((task) => task.repeatTask && !_isDailyJournalTask(task) && task.routineEnabled)
+        .where((task) =>
+            task.repeatTask &&
+            !_isDailyJournalTask(task) &&
+            task.routineEnabled)
         .length;
-    if (disabledRoutines > 0) lines.add('⏸️ $disabledRoutines routine${disabledRoutines == 1 ? '' : 's'} disabled');
-    if (enabledRoutines > 0) lines.add('🔁 $enabledRoutines routine${enabledRoutines == 1 ? '' : 's'} enabled');
+    if (disabledRoutines > 0)
+      lines.add(
+          '⏸️ $disabledRoutines routine${disabledRoutines == 1 ? '' : 's'} disabled');
+    if (enabledRoutines > 0)
+      lines.add(
+          '🔁 $enabledRoutines routine${enabledRoutines == 1 ? '' : 's'} enabled');
 
-    lines.add('📊 Productivity score: ${snapshot.productivityScore.toStringAsFixed(1)}%');
+    lines.add(
+        '📊 Productivity score: ${snapshot.productivityScore.toStringAsFixed(1)}%');
     lines.add('⭐ Points earned today: +${snapshot.totalPoints}');
-    if (snapshot.streakBonusPoints > 0) lines.add('🏆 Streak bonus earned: +${snapshot.streakBonusPoints}');
-    if (snapshot.timingBonusPoints > 0) lines.add('⏰ Timing bonus earned: +${snapshot.timingBonusPoints}');
-    for (final event in snapshot.pointEvents.where((event) => event.streakBonusPoints > 0 || event.timingBonusPoints > 0)) {
+    if (snapshot.streakBonusPoints > 0)
+      lines.add('🏆 Streak bonus earned: +${snapshot.streakBonusPoints}');
+    if (snapshot.timingBonusPoints > 0)
+      lines.add('⏰ Timing bonus earned: +${snapshot.timingBonusPoints}');
+    for (final event in snapshot.pointEvents.where((event) =>
+        event.streakBonusPoints > 0 || event.timingBonusPoints > 0)) {
       if (event.streakBonusPoints > 0) {
-        lines.add('🔥 ${event.title} • ${event.reason} • +${event.streakBonusPoints} streak bonus points');
+        lines.add(
+            '🔥 ${event.title} • ${event.reason} • +${event.streakBonusPoints} streak bonus points');
       }
       if (event.timingBonusPoints > 0) {
-        lines.add('⏰ ${event.title} • ${event.reason} • +${event.timingBonusPoints} timing bonus points • +${event.pointsBonus} Points');
+        lines.add(
+            '⏰ ${event.title} • ${event.reason} • +${event.timingBonusPoints} timing bonus points • +${event.pointsBonus} Points');
       }
     }
     lines.add('💎 Lifetime points: ${lifetime.totalPoints}');
-    lines.add('🔥 Streak: ${lifetime.currentStreak} day${lifetime.currentStreak == 1 ? '' : 's'}');
-    lines.add('🏅 Lifetime Points: ${lifetime.points} • Level ${lifetime.level}');
+    lines.add(
+        '🔥 Streak: ${lifetime.currentStreak} day${lifetime.currentStreak == 1 ? '' : 's'}');
+    lines.add(
+        '🏅 Lifetime Points: ${lifetime.points} • Level ${lifetime.level}');
 
     if (journal != null) {
       lines.add('😊 Mood: ${journal.mood}');
-      if (journal.reflection.trim().isNotEmpty) lines.add('📝 Reflection added');
+      if (journal.reflection.trim().isNotEmpty)
+        lines.add('📝 Reflection added');
     }
-    if (photoCount > 0) lines.add('📷 $photoCount photo${photoCount == 1 ? '' : 's'} attached');
+    if (photoCount > 0)
+      lines.add('📷 $photoCount photo${photoCount == 1 ? '' : 's'} attached');
 
-    final hasTaskActivity = tasks.any((task) => !_isDailyJournalTask(task) || _isCompletedTask(task));
-    final hasActivity =
-        snapshot.totalPoints > 0 || hasTaskActivity || journal != null || manualEntries.isNotEmpty;
+    final hasTaskActivity = tasks
+        .any((task) => !_isDailyJournalTask(task) || _isCompletedTask(task));
+    final hasActivity = snapshot.totalPoints > 0 ||
+        hasTaskActivity ||
+        journal != null ||
+        manualEntries.isNotEmpty;
     final key = _journeyKey(_autoJourneyId(day));
     if (!hasActivity) {
       await _box.delete(key);
@@ -1925,7 +2420,9 @@ class HiveService {
       id: _autoJourneyId(day),
       date: day,
       type: 'Daily auto update',
-      title: _isSameDate(day, DateTime.now()) ? 'Today’s activity' : 'Daily activity',
+      title: _isSameDate(day, DateTime.now())
+          ? 'Today’s activity'
+          : 'Daily activity',
       description: lines.join('\n'),
       colorValue: accent,
     );
@@ -1933,7 +2430,20 @@ class HiveService {
   }
 
   String _humanDate(DateTime date) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
     return '${date.day} ${months[(date.month - 1).clamp(0, 11)]} ${date.year}';
   }
 
@@ -1978,7 +2488,10 @@ class HiveService {
       final day = DateTime(parsedDate.year, parsedDate.month, parsedDate.day);
       result[day] = [
         ..._dedupeRecurringTasksForDate(
-          tasks.cast<Task>().where((task) => !_isDailyJournalTask(task)).toList(),
+          tasks
+              .cast<Task>()
+              .where((task) => !_isDailyJournalTask(task))
+              .toList(),
         ),
         _dailyJournalTaskForDate(day),
       ];
@@ -1988,13 +2501,13 @@ class HiveService {
     final today = DateTime(now.year, now.month, now.day);
     result.putIfAbsent(today, () => <Task>[_dailyJournalTaskForDate(today)]);
     for (final journal in getAllJournalEntries()) {
-      final day = DateTime(journal.date.year, journal.date.month, journal.date.day);
+      final day =
+          DateTime(journal.date.year, journal.date.month, journal.date.day);
       result.putIfAbsent(day, () => <Task>[_dailyJournalTaskForDate(day)]);
     }
 
     return result;
   }
-
 
   List<MotivationMotto> getMotivationMottos() {
     final raw = (_box.get(_mottoListKey) ?? <Map<String, dynamic>>[]);
@@ -2022,20 +2535,31 @@ class HiveService {
     await _saveMotivationMottos(mottos);
   }
 
-  Future<void> setMotivationMottoFlag(String id, {bool? favorite, bool? pinned, bool? todaysMotto, bool? enabled}) async {
+  Future<void> setMotivationMottoFlag(String id,
+      {bool? favorite, bool? pinned, bool? todaysMotto, bool? enabled}) async {
     final mottos = getMotivationMottos()
         .map((motto) => motto.copyWith(
-              favorite: motto.id == id ? (favorite ?? motto.favorite) : motto.favorite,
-              pinned: pinned == true ? motto.id == id : (motto.id == id ? (pinned ?? motto.pinned) : motto.pinned),
-              todaysMotto: todaysMotto == true ? motto.id == id : (motto.id == id ? (todaysMotto ?? motto.todaysMotto) : motto.todaysMotto),
-              enabled: motto.id == id ? (enabled ?? motto.enabled) : motto.enabled,
+              favorite: motto.id == id
+                  ? (favorite ?? motto.favorite)
+                  : motto.favorite,
+              pinned: pinned == true
+                  ? motto.id == id
+                  : (motto.id == id ? (pinned ?? motto.pinned) : motto.pinned),
+              todaysMotto: todaysMotto == true
+                  ? motto.id == id
+                  : (motto.id == id
+                      ? (todaysMotto ?? motto.todaysMotto)
+                      : motto.todaysMotto),
+              enabled:
+                  motto.id == id ? (enabled ?? motto.enabled) : motto.enabled,
             ))
         .toList();
     await _saveMotivationMottos(mottos);
   }
 
   MotivationMotto? getFeaturedMotivationMotto() {
-    final active = getMotivationMottos().where((motto) => motto.enabled).toList();
+    final active =
+        getMotivationMottos().where((motto) => motto.enabled).toList();
     if (active.isEmpty) return null;
     for (final predicate in [
       (MotivationMotto motto) => motto.todaysMotto,
@@ -2049,13 +2573,18 @@ class HiveService {
   }
 
   MotivationMotto? getNextMotivationMotto({String? excludeId}) {
-    final active = getMotivationMottos().where((motto) => motto.enabled && motto.id != excludeId).toList();
+    final active = getMotivationMottos()
+        .where((motto) => motto.enabled && motto.id != excludeId)
+        .toList();
     if (active.isEmpty) {
-      final fallback = getMotivationMottos().where((motto) => motto.enabled).toList();
+      final fallback =
+          getMotivationMottos().where((motto) => motto.enabled).toList();
       return fallback.isEmpty ? null : fallback.first;
     }
     active.sort((a, b) {
-      final shownCompare = (a.lastShownAt ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(b.lastShownAt ?? DateTime.fromMillisecondsSinceEpoch(0));
+      final shownCompare = (a.lastShownAt ??
+              DateTime.fromMillisecondsSinceEpoch(0))
+          .compareTo(b.lastShownAt ?? DateTime.fromMillisecondsSinceEpoch(0));
       if (shownCompare != 0) return shownCompare;
       return a.showCount.compareTo(b.showCount);
     });
@@ -2064,14 +2593,18 @@ class HiveService {
 
   Future<void> markMotivationMottoShown(String id) async {
     final mottos = getMotivationMottos()
-        .map((motto) => motto.id == id ? motto.copyWith(lastShownAt: DateTime.now(), showCount: motto.showCount + 1) : motto)
+        .map((motto) => motto.id == id
+            ? motto.copyWith(
+                lastShownAt: DateTime.now(), showCount: motto.showCount + 1)
+            : motto)
         .toList();
     await _saveMotivationMottos(mottos);
   }
 
   MottoReminderSettings getMottoReminderSettings() {
     final raw = _box.get(_mottoSettingsKey);
-    if (raw is List && raw.isNotEmpty && raw.first is Map) return MottoReminderSettings.fromMap(raw.first as Map);
+    if (raw is List && raw.isNotEmpty && raw.first is Map)
+      return MottoReminderSettings.fromMap(raw.first as Map);
     return const MottoReminderSettings();
   }
 
@@ -2080,7 +2613,8 @@ class HiveService {
   }
 
   Future<void> _saveMotivationMottos(List<MotivationMotto> mottos) async {
-    await _box.put(_mottoListKey, mottos.map((motto) => motto.toMap()).toList());
+    await _box.put(
+        _mottoListKey, mottos.map((motto) => motto.toMap()).toList());
   }
 
   /// Returns a ValueListenable that rebuilds when the box changes
@@ -2106,7 +2640,8 @@ class _RoutineTimingBonus {
   final int xp;
   final String reason;
 
-  const _RoutineTimingBonus({required this.points, required this.xp, required this.reason});
+  const _RoutineTimingBonus(
+      {required this.points, required this.xp, required this.reason});
 
   const _RoutineTimingBonus.none()
       : points = 0,

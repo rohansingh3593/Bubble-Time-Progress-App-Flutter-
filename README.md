@@ -152,8 +152,8 @@ lib/
 
 ## 📚 Documentation
 
-- [Complete Task Management Guide](./COMPLETE_TASK_MANAGEMENT_GUIDE.md)
-- [Production Architecture Roadmap](./PRODUCTION_ARCHITECTURE.md)
+- [Complete Task Management Guide](docs/COMPLETE_TASK_MANAGEMENT_GUIDE.md)
+- [Production Architecture Roadmap](docs/PRODUCTION_ARCHITECTURE.md)
 
 ---
 
@@ -186,7 +186,12 @@ On Windows/PowerShell, run the repository checks with:
 ```
 
 - Backend health check: `http://localhost:8000`
-- WebSocket endpoint: `ws://<your-windows-ip>:8000/ws`
+- REST API endpoint: `http://<your-windows-ip>:8000/tasks`
+- WebSocket endpoint: `ws://<your-windows-ip>:8000/ws?user_id=dev-user`
+- Production API endpoint: `https://api.momentum.com`
+- Production WebSocket endpoint: `wss://api.momentum.com/ws`
+- Development owner header: `X-User-Id: dev-user`
+- Flutter REST client: `lib/services/api_client.dart`
 - Flutter sync helper: `lib/services/sync_service.dart`
 
 Working flow:
@@ -203,6 +208,26 @@ Mobile Flutter → WebSocket → FastAPI → MongoDB → Broadcast → Windows F
 - This means the previous Windows app process is still running and locking `build\windows\x64\runner\Debug\momentum.exe`.
 - Close the running Momentum/Bubble Time Progress window, or stop it from Task Manager.
 - If needed, run `taskkill /F /IM momentum.exe`, then run `flutter clean` and launch again with `flutter run -d windows`.
+
+### Android Kotlin daemon `Could not close incremental caches`?
+- This is usually a stale Gradle/Kotlin daemon or corrupted generated cache, often under `build\image_picker_android\kotlin`.
+- Run `powershell -ExecutionPolicy Bypass -File .\activate.ps1`; the script stops the related daemons and clears generated build caches before rebuilding.
+
+### Test mobile/laptop API sync locally
+
+Start the API:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\server_run.ps1
+```
+
+Run the Flutter app with cloud sync pointed at your laptop LAN IP:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\mobile_api_run.ps1 -DeviceId <device-id>
+```
+
+When enabled, task add/edit/complete/delete changes save to Hive first, then sync to FastAPI/MongoDB. Other clients pull `/tasks` and refresh when FastAPI broadcasts task WebSocket events.
 
 ---
 
@@ -265,3 +290,18 @@ Container(
 ---
 
 
+## Project documentation
+
+Project analysis and plans live in [docs/](docs/). Consult them when investigating
+or extending the app, and check the implementation-status notes against current code.
+
+- [Repository analysis and verified changes](docs/details.md)
+- [Product requirements](docs/PRD.md)
+- [Architecture](docs/architecture.md)
+- [Technical design](docs/design.md)
+- [Delivery phases](docs/phases.md)
+- [Quick start](docs/QUICK_START.md)
+
+Older implementation reports are retained in docs/ as historical references.
+
+Offline voice tasks: see [setup, commands and verification](docs/OFFLINE_VOICE.md).

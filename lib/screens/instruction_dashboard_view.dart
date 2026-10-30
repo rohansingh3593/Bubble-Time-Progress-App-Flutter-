@@ -1035,7 +1035,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
       }
     }
     if (option == null || option.isRoutine) return const <String>[];
-    return parseTaskPhases(option.task.description).map((phase) => phase.name).where((name) => name.trim().isNotEmpty).toList();
+    return taskSteps(option.task).map((phase) => phase.name).where((name) => name.trim().isNotEmpty).toList();
   }
 
   Future<List<String>?> _showTaskSelectorDialog(List<String> initialSelection) async {

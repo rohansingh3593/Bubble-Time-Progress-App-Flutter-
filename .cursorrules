@@ -1,0 +1,114 @@
+# Momentum repository rules
+
+Implementation update (2026-10-28): immutable task/step IDs, Hive schema-v3 step migration, and exact positive-minute handling are now implemented. The AI tools and focus-session feature remain planned. See [verified foundation changes](docs/details.md#j-implemented-foundations).
+
+Read [details.md](docs/details.md) for source evidence, [PRD.md](docs/PRD.md) for scope,
+[design.md](docs/design.md) for implementation contracts, [architecture.md](docs/architecture.md)
+for boundaries, and [phases.md](docs/phases.md) for execution order. Plans are not implemented features.
+
+## Highest-priority code rule: reuse before writing
+
+- Search the relevant source with rg before adding code. Prefer standard-library and
+  installed-package capabilities; do not rebuild trusted library functionality.
+- Make the smallest safe, readable change. Avoid duplicate parsers, wrappers,
+  speculative interfaces, oversized functions, and unrelated refactors.
+- Apply SOLID, DRY, KISS, and YAGNI pragmatically. Dependency injection is useful for
+  clock/storage/HTTP tests, not a reason to introduce a framework.
+- Existing reuse points include HiveService, showTaskFormDialog,
+  showQuickAddTaskDialog, task_time_utils.dart, text_formatters.dart,
+  LogRewardPolicy, and the reusable widgets under lib/widgets/.
+
+## Repository and architecture
+
+- Inspect current code and git status before editing. Preserve pre-existing changes.
+- This is a Flutter/Dart client with an optional Python FastAPI/MongoDB starter;
+  it is not a Python web application requiring a replacement frontend.
+- Keep snake_case file names, existing lib/models, services, screens, widgets,
+  utils, constants folders, and the small backend layout.
+- Widgets use HiveService and Hive listeners. Keep persistence/business rules out
+  of new widget code. Keep API serialization in ApiClient and socket lifecycle in
+  SyncService. Avoid circular imports and new global service dependencies.
+- Preserve current task, routine, journal, instruction, reward, theme, profile,
+  streak, and productivity behavior unless the requirement explicitly changes it.
+- Default task storage is local. AI assistance may be enabled independently;
+  MOMENTUM_CLOUD_SYNC_ENABLED remains false for the AI pilot. Never
+  interpret X-User-Id, a local profile, or the WebSocket user_id as authentication.
+- REST persists cloud changes; WebSockets signal changes. Clients never access
+  MongoDB directly. Do not add separate Windows/mobile codebases or microservices.
+
+## Persistence and compatibility
+
+- tasksBox is Box<List>; date keys and reserved metadata keys share the box.
+  Filter metadata from task iteration. Never clear user storage to fix a migration.
+- Preserve Task adapter typeId 0 and Hive fields 0-18, plus TaskStep typeId 1
+  and fields 0-8. Fields 0-15 remain the original Task format. Append fields
+  with compatible defaults and migration tests. Regenerate task_model.g.dart using
+  build_runner only for an authorized model change; review generated defaults.
+- Existing descriptions contain phase and schedule metadata. Preserve their
+  compatibility until an explicit, tested migration replaces that representation.
+- Do not change reward formulas or recurring-series identity incidentally while
+  fixing task identity. See docs/design.md for the distinction.
+
+## Dependencies and protected content
+
+- Inspect pubspec.yaml, pubspec.lock, and backend/requirements.txt first. Explain
+  any new dependency's concrete benefit; avoid unrelated upgrades.
+- Do not add Django, SQLAlchemy, PostgreSQL, Redis, Kafka, Kubernetes, or another
+  state-management package merely because they are familiar.
+- Motor retirement is a separate backend maintenance task, not a local MVP dependency.
+- Do not modify secrets, private keys, real data, .git internals, generated platform
+  files, or build caches unless the authorized task specifically requires it.
+- Never run activate.ps1 or clean_up.ps1 as a routine test: they stop processes,
+  delete artifacts, and activate.ps1 runs flutter create .
+- A documentation-only request authorizes documentation, not source implementation.
+
+## Testing and security
+
+- Add/update meaningful tests for changed behavior, including failure, legacy-data,
+  duplicate-title, restart, and date-boundary cases when relevant.
+- Use temporary Hive directories and an isolated MongoDB test database. Do not
+  point api_test.ps1 at personal data; it performs writes and starts a server.
+- Run relevant tests and report actual commands/results. run.ps1 treats Flutter
+  test failure as a warning; its exit status alone is not a release gate.
+- Never claim a build, test, sync flow, or platform works without executing it.
+- Validate external payloads; do not silently substitute today's date for corrupt
+  remote data. Never log task bodies, journal text, credentials, or MongoDB URIs.
+- Use verified identity and owner filters before public sync. Secrets do not belong
+  in --dart-define values, source files, or documentation.
+
+## Workflow
+
+1. Read the requirement and relevant source; identify confirmed versus assumed facts.
+2. Search for reusable code; choose the smallest compatible implementation.
+3. Implement only authorized changes, preserving unrelated working-tree content.
+4. Run appropriate tests and inspect the diff; report environmental blockers honestly.
+5. Consult docs/ for project analysis and plans when needed. Keep README.md at
+   the repository root and other project Markdown documentation in docs/.
+   Update the six planning documents in docs/ when behavior, architecture, or configuration
+   changes. Keep feature IDs, scope, file mappings, estimates, and verification aligned.
+6. Report changed files, results, limitations, and the next concrete action.
+
+## AI feature extension
+
+- User constraint: Goblin Tools is feature inspiration only. Never integrate its
+  API, private endpoints, scraping, embedded pages, code, assets or branding.
+  Implement Momentum's own UI, prompts, logic and storage. A separately selected
+  model running locally on the device is allowed. The user now requires no external
+  inference API dependency. See docs/OFFLINE_VOICE.md; earlier hosted-provider
+  plans are historical and must not override this constraint.
+- For the current offline voice work, reuse VoiceCapture, VoiceTaskParser and
+  VoiceTaskService. Bundle models at build time; never add a hosted fallback.
+- Future PRD A1-A7/AX designs must respect the offline constraint and typed operation
+  contracts. Do not build seven independent backends or autonomous agents.
+- Do not add provider keys or external inference calls to the offline workflow.
+  Optional legacy task sync remains a separate, disabled-by-default feature.
+- AI output is a draft. Only an explicit user action may apply it to tasks or text.
+  Never auto-complete tasks, award rewards, send replies, or execute generated code.
+- Preserve raw estimates separately from actual focus time and reward accounting.
+  Duration normalization now preserves every positive integer; only legacy
+  null/zero default to 15. Validate AI estimates explicitly before constructing
+  TaskStep; do not use the legacy default to conceal invalid model output.
+- Use stable step IDs for reordering, completion and focus checkpoints. Do not
+  expand pipe-delimited descriptions into the new structured-step database.
+- Default to selected context only and no AI history. Test empty/invalid output,
+  timeouts, stale previews, duplicate Apply, and timer restart/background behavior.
