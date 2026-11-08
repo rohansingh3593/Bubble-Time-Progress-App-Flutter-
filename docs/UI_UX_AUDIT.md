@@ -1,5 +1,7 @@
 # Momentum / Bubble Time Progress — UI/UX audit
 
+> Historical baseline: the assessment below predates the UX implementation. For the navigation changes and verification updated on 4 November 2026, see [Navigation review](NAVIGATION_REVIEW.md).
+
 Original review: 29 October 2026; screenshot update: 30 October 2026  
 Scope: current Flutter repository; review only.
 

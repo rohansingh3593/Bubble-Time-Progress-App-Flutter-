@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../widgets/recoverable_delete.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -14,7 +15,7 @@ import '../utils/text_formatters.dart';
 class InstructionDashboardView extends StatefulWidget {
   final HiveService hiveService;
 
-  const InstructionDashboardView({super.key, required this.hiveService});
+  InstructionDashboardView({super.key, required this.hiveService});
 
   @override
   State<InstructionDashboardView> createState() => _InstructionDashboardViewState();
@@ -28,17 +29,17 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   Widget build(BuildContext context) {
     final today = DateTime.now();
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
-        foregroundColor: AppColors.textPrimary,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        foregroundColor: Theme.of(context).colorScheme.onSurface,
         elevation: 0,
-        title: const Text('Instruction Dashboard', style: TextStyle(fontWeight: FontWeight.w900)),
+        title: Text('Instruction Dashboard', style: TextStyle(fontWeight: FontWeight.w600)),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showInstructionForm(),
-        icon: const Icon(Icons.add_task_outlined),
-        label: const Text('Add Instruction'),
+        icon: Icon(Icons.add_task_outlined),
+        label: Text('Add Instruction'),
       ),
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
@@ -46,7 +47,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
           final instructions = widget.hiveService.getInstructions();
           final filtered = _filteredInstructions(instructions, today);
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 96),
+            padding: EdgeInsets.fromLTRB(16, 10, 16, 96),
             children: [
               _InstructionSummaryPanel(
                 hiveService: widget.hiveService,
@@ -56,11 +57,11 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 onPeriodChanged: (period) => setState(() => _instructionProductivityPeriod = period),
                 onOpenList: _showInstructionProductivityList,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               _filterChips(),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               if (filtered.isEmpty)
-                const _EmptyInstructionCard()
+                _EmptyInstructionCard()
               else
                 ...filtered.map((instruction) => _InstructionCard(
                       hiveService: widget.hiveService,
@@ -76,7 +77,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   }
 
   Widget _filterChips() {
-    const filters = ['All', 'Active', 'Followed', 'Missed', 'Pending', 'Disabled'];
+    const filters = ['All', 'Standalone', 'Linked', 'Active', 'Followed', 'Missed', 'Pending', 'Disabled'];
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -86,8 +87,8 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
           selected: selected,
           label: Text(filter),
           onSelected: (_) => setState(() => _filter = filter),
-          selectedColor: AppColors.primary.withOpacity(0.18),
-          labelStyle: TextStyle(fontWeight: FontWeight.w900, color: selected ? AppColors.primary : AppColors.textPrimary),
+          selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.18),
+          labelStyle: TextStyle(fontWeight: FontWeight.w600, color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface),
         );
       }).toList(),
     );
@@ -95,9 +96,11 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
 
   List<InstructionRule> _filteredInstructions(List<InstructionRule> instructions, DateTime today) {
     return instructions.where((instruction) {
-      if (instruction.isTaskLinked) return false;
+
       final entry = widget.hiveService.instructionEntryForDate(instruction, today);
       switch (_filter) {
+        case 'Linked':
+          return instruction.isTaskLinked;
         case 'Standalone':
           return instruction.isStandalone;
         case 'Task-Linked':
@@ -133,16 +136,16 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 10),
+                child: Text(title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
               ),
               Expanded(
                 child: instructions.isEmpty
-                    ? const Center(child: Text('No standalone instructions found for this filter.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)))
+                    ? Center(child: Text('No standalone instructions found for this filter.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700)))
                     : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+                        padding: EdgeInsets.fromLTRB(16, 0, 16, 18),
                         itemCount: instructions.length,
-                        separatorBuilder: (_, __) => const Divider(height: 18),
+                        separatorBuilder: (_, __) => Divider(height: 18),
                         itemBuilder: (context, index) {
                           final instruction = instructions[index];
                           final entry = widget.hiveService.instructionEntryForDate(instruction, today);
@@ -158,13 +161,13 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                           final lastUpdated = instruction.history.isEmpty ? 'Never' : _formatDate(instruction.history.last.date);
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
-                            title: Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900)),
+                            title: Text(toTitleCase(instruction.name), style: TextStyle(fontWeight: FontWeight.w600)),
                             subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 4),
+                              padding: EdgeInsets.only(top: 4),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(status, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                  Text(status, style: TextStyle(fontWeight: FontWeight.w800)),
                                   Text('Selected: $selected'),
                                   Text('Bonus: +${entry?.bonusPoints ?? 0} Points'),
                                   Text('Streak: $streak Day${streak == 1 ? '' : 's'}'),
@@ -189,29 +192,29 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
       showDragHandle: true,
       builder: (context) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
+          padding: EdgeInsets.fromLTRB(16, 4, 16, 18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-              const SizedBox(height: 6),
+              Text(toTitleCase(instruction.name), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
+              SizedBox(height: 6),
               Text(
                 instruction.isTaskLinked
                     ? 'Task-linked instruction • Edit here, update completion from the related task popup.'
                     : 'Standalone instruction • Edit details or update today’s status.',
-                style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54),
+                style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               if (instruction.isStandalone)
                 ListTile(
-                  leading: const Icon(Icons.check_circle_outline, color: Colors.green),
-                  title: const Text('Update Today'),
+                  leading: Icon(Icons.check_circle_outline, color: Colors.green),
+                  title: Text('Update Today'),
                   onTap: () => Navigator.pop(context, 'update'),
                 ),
               ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit Instruction'),
+                leading: Icon(Icons.edit_outlined),
+                title: Text('Edit Instruction'),
                 onTap: () => Navigator.pop(context, 'edit'),
               ),
               ListTile(
@@ -220,13 +223,13 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 onTap: () => Navigator.pop(context, 'toggle'),
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                title: const Text('Delete Instruction'),
+                leading: Icon(Icons.delete_outline, color: Colors.redAccent),
+                title: Text('Delete Instruction'),
                 onTap: () => Navigator.pop(context, 'delete'),
               ),
               ListTile(
-                leading: const Icon(Icons.close),
-                title: const Text('Close'),
+                leading: Icon(Icons.close),
+                title: Text('Close'),
                 onTap: () => Navigator.pop(context, 'close'),
               ),
             ],
@@ -247,7 +250,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
         await widget.hiveService.saveInstruction(instruction.copyWith(enabled: !instruction.enabled));
         return;
       case 'delete':
-        await widget.hiveService.deleteInstruction(instruction.id);
+        await recoverableDelete(context, label: 'instruction', remove: () => widget.hiveService.deleteInstruction(instruction.id), restore: () => widget.hiveService.saveInstruction(instruction));
         return;
     }
   }
@@ -284,16 +287,16 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (instruction.description.trim().isNotEmpty) ...[
-                      Text(instruction.description.trim(), style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
-                      const SizedBox(height: 12),
+                      Text(instruction.description.trim(), style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      SizedBox(height: 12),
                     ],
-                    const Text('Status', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                    Text('Status', style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
                     RadioListTile<String>(
                       value: InstructionHistoryEntry.statusFollowed,
                       groupValue: status,
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Followed'),
+                      title: Text('Followed'),
                       onChanged: (value) => setDialogState(() => status = value ?? status),
                     ),
                     RadioListTile<String>(
@@ -301,12 +304,12 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                       groupValue: status,
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Missed'),
+                      title: Text('Missed'),
                       onChanged: (value) => setDialogState(() => status = value ?? status),
                     ),
                     if (instruction.options.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      const Text('Options', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                      SizedBox(height: 8),
+                      Text('Options', style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
                       ...instruction.options.map((option) {
                         final checked = selectedIds.contains(option.id);
                         return CheckboxListTile(
@@ -315,7 +318,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                           contentPadding: EdgeInsets.zero,
                           title: Text('${option.name} (+${option.bonusPoints} Points)'),
                           subtitle: option.description.trim().isEmpty ? null : Text(option.description.trim()),
-                          secondary: Text(option.emoji, style: const TextStyle(fontSize: 22)),
+                          secondary: Text(option.emoji, style: TextStyle(fontSize: 22)),
                           onChanged: (value) => setDialogState(() {
                             status = InstructionHistoryEntry.statusFollowed;
                             if (value == true) {
@@ -327,21 +330,21 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                         );
                       }),
                     ],
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(12),
+                      padding: EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.surface,
+                        color: Theme.of(context).colorScheme.surface,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.black12),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Total Bonus Points: +$bonus', style: const TextStyle(fontWeight: FontWeight.w900)),
-                          Text('Completion Percentage: ${percentage.round()}%', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
-                          Text('Emoji Status: $emoji', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+                          Text('Total Bonus Points: +$bonus', style: TextStyle(fontWeight: FontWeight.w600)),
+                          Text('Completion Percentage: ${percentage.round()}%', style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          Text('Emoji Status: $emoji', style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         ],
                       ),
                     ),
@@ -350,19 +353,19 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel')),
               ElevatedButton(
                 onPressed: () => Navigator.pop(
                   context,
                   _InstructionUpdateResult(
                     status: status,
-                    selectedOptions: status == InstructionHistoryEntry.statusFollowed ? selectedOptions : const <InstructionOption>[],
+                    selectedOptions: status == InstructionHistoryEntry.statusFollowed ? selectedOptions : <InstructionOption>[],
                     bonusPoints: bonus,
                     percentage: percentage,
                     emojiStatus: emoji,
                   ),
                 ),
-                child: const Text('Save Update'),
+                child: Text('Save Update'),
               ),
             ],
           );
@@ -389,20 +392,20 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Status: ${result.status}', style: const TextStyle(fontWeight: FontWeight.w900)),
-            const SizedBox(height: 10),
-            const Text('Selected Options:', style: TextStyle(fontWeight: FontWeight.w900)),
+            Text('Status: ${result.status}', style: TextStyle(fontWeight: FontWeight.w600)),
+            SizedBox(height: 10),
+            Text('Selected Options:', style: TextStyle(fontWeight: FontWeight.w600)),
             if (result.selectedOptions.isEmpty)
-              const Text('• None')
+              Text('• None')
             else
               ...result.selectedOptions.map((option) => Text('• ${option.name}')),
-            const SizedBox(height: 10),
-            Text('Bonus Points Earned: +${result.bonusPoints}', style: const TextStyle(fontWeight: FontWeight.w900)),
+            SizedBox(height: 10),
+            Text('Bonus Points Earned: +${result.bonusPoints}', style: TextStyle(fontWeight: FontWeight.w600)),
             Text('Completion Percentage: ${result.percentage.round()}%'),
             Text('Emoji Status: ${result.emojiStatus}'),
           ],
         ),
-        actions: [ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+        actions: [ElevatedButton(onPressed: () => Navigator.pop(context), child: Text('Done'))],
       ),
     );
   }
@@ -417,16 +420,18 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   }
 
   Future<void> _showInstructionForm([InstructionRule? instruction]) async {
+    bool saving = false;
+    String? error;
     final nameController = TextEditingController(text: instruction?.name ?? '');
     final descriptionController = TextEditingController(text: instruction?.description ?? '');
     final bonusController = TextEditingController(text: instruction == null ? '20' : '${instruction.bonusPoints}');
     final xpController = TextEditingController(text: instruction == null ? '5' : '${instruction.pointsEarned}');
     final unitController = TextEditingController(text: instruction?.unit ?? 'km');
     var instructionType = InstructionRule.typeMultipleOption;
-    var levels = [...(instruction?.levels ?? const <InstructionLevel>[])];
-    var options = [...(instruction?.options ?? const <InstructionOption>[])];
+    var levels = [...(instruction?.levels ?? <InstructionLevel>[])];
+    var options = [...(instruction?.options ?? <InstructionOption>[])];
     if (options.isEmpty) {
-      options = const [
+      options = [
         InstructionOption(id: 'option_normal', name: 'Normal Juice', bonusPoints: 10, pointsEarned: 2, emoji: '🥤'),
         InstructionOption(id: 'option_beetroot', name: 'Beetroot Juice', bonusPoints: 20, pointsEarned: 5, emoji: '🥤'),
         InstructionOption(id: 'option_orange', name: 'Orange Juice', bonusPoints: 40, pointsEarned: 8, emoji: '🍊'),
@@ -434,23 +439,24 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
       ];
     }
     if (levels.isEmpty) {
-      levels = const [
+      levels = [
         InstructionLevel(id: 'level_1', name: 'Level 1', target: 2, unit: 'km', bonusPoints: 30, pointsEarned: 5),
         InstructionLevel(id: 'level_2', name: 'Level 2', target: 3, unit: 'km', bonusPoints: 40, pointsEarned: 8),
         InstructionLevel(id: 'level_3', name: 'Level 3', target: 5, unit: 'km', bonusPoints: 60, pointsEarned: 12),
       ];
     }
-    var instructionImagePaths = [...(instruction?.imagePaths ?? const <String>[])];
+    var instructionImagePaths = [...(instruction?.imagePaths ?? <String>[])];
     var instructionCoverImagePath = instruction?.coverImagePath ?? '';
-    var linkedTasks = [...(instruction?.linkedTasks ?? const <String>[])];
-    final initialPhases = instruction?.linkedPhases ?? const <String>[];
+    var linkedTasks = [...(instruction?.linkedTasks ?? <String>[])];
+    final initialPhases = instruction?.linkedPhases ?? <String>[];
     var linkedPhase = initialPhases.isEmpty ? '' : initialPhases.first;
     var repeatType = instruction?.repeatType ?? InstructionRule.repeatDaily;
     var enabled = instruction?.enabled ?? true;
     var streakTracking = instruction?.streakTracking ?? true;
     var colorValue = instruction?.colorValue ?? 0xFF43A047;
-    final saved = await showDialog<InstructionRule>(
+    await showDialog<InstructionRule>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           final availablePhases = _phaseOptionsForSelection(linkedTasks);
@@ -469,14 +475,14 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Instruction Name')),
-                    TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
-                    const SizedBox(height: 12),
+                    TextField(controller: nameController, decoration: InputDecoration(labelText: 'Instruction Name', errorText: error)),
+                    TextField(controller: descriptionController, maxLines: 2, decoration: InputDecoration(labelText: 'Description')),
+                    SizedBox(height: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Instruction Images (${instructionImagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900)),
-                        const SizedBox(height: 4),
+                        Text('Instruction Images (${instructionImagePaths.length})', style: TextStyle(fontWeight: FontWeight.w600)),
+                        SizedBox(height: 4),
                         TextButton.icon(
                           style: TextButton.styleFrom(padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                           onPressed: () async {
@@ -487,13 +493,13 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                               if (instructionCoverImagePath.isEmpty && instructionImagePaths.isNotEmpty) instructionCoverImagePath = instructionImagePaths.first;
                             });
                           },
-                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                          icon: Icon(Icons.add_photo_alternate_outlined),
                           label: Text(instructionImagePaths.isEmpty ? 'Add Images' : 'Add More Images'),
                         ),
                       ],
                     ),
                     if (instructionImagePaths.isEmpty)
-                      const Text('No instruction images added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                      Text('No instruction images added yet.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700))
                     else
                       ...instructionImagePaths.map((path) => ListTile(
                             dense: true,
@@ -504,11 +510,11 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                             trailing: Wrap(
                               spacing: 2,
                               children: [
-                                IconButton(tooltip: 'View', icon: const Icon(Icons.visibility_outlined, size: 18), onPressed: () => _showImagePathDialog(path)),
-                                IconButton(tooltip: 'Change Cover', icon: const Icon(Icons.star_border_rounded, size: 18), onPressed: () => setDialogState(() => instructionCoverImagePath = path)),
+                                IconButton(tooltip: 'View', icon: Icon(Icons.visibility_outlined, size: 18), onPressed: () => _showImagePathDialog(path)),
+                                IconButton(tooltip: 'Change Cover', icon: Icon(Icons.star_border_rounded, size: 18), onPressed: () => setDialogState(() => instructionCoverImagePath = path)),
                                 IconButton(
                                   tooltip: 'Remove',
-                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  icon: Icon(Icons.delete_outline, size: 18),
                                   onPressed: () => setDialogState(() {
                                     instructionImagePaths = instructionImagePaths.where((item) => item != path).toList();
                                     if (instructionCoverImagePath == path) instructionCoverImagePath = instructionImagePaths.isEmpty ? '' : instructionImagePaths.first;
@@ -517,16 +523,16 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                               ],
                             ),
                           )),
-                    const SizedBox(height: 12),
-                    const ListTile(
+                    SizedBox(height: 12),
+                    ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(Icons.checklist_rounded),
                       title: Text('Multiple Option Instruction'),
                       subtitle: Text('How It Works: users can select one or many checkbox options; points and Points are added from all selected options.'),
                     ),
-                    const SizedBox(height: 12),
-                    const Text('Linked Task (Optional)', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black54)),
-                    const SizedBox(height: 6),
+                    SizedBox(height: 12),
+                    Text('Linked Task (Optional)', style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    SizedBox(height: 6),
                     InkWell(
                       borderRadius: BorderRadius.circular(16),
                       onTap: () async {
@@ -539,33 +545,33 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                       },
                       child: Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.88),
+                          color: Theme.of(context).colorScheme.surface.withOpacity(0.88),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.primary.withOpacity(0.22)),
+                          border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.22)),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.link_rounded, color: AppColors.primary),
-                            const SizedBox(width: 10),
+                            Icon(Icons.link_rounded, color: Theme.of(context).colorScheme.primary),
+                            SizedBox(width: 10),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(taskSummary, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
-                                  const SizedBox(height: 2),
-                                  const Text('Tap to select from routine and non-routine tasks', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                                  Text(taskSummary, style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
+                                  SizedBox(height: 2),
+                                  Text('Tap to select from routine and non-routine tasks', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                                 ],
                               ),
                             ),
-                            const Icon(Icons.keyboard_arrow_down_rounded),
+                            Icon(Icons.keyboard_arrow_down_rounded),
                           ],
                         ),
                       ),
                     ),
                     if (linkedTasks.length > 1) ...[
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
@@ -581,10 +587,10 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                       ),
                     ],
                     if (availablePhases.isNotEmpty) ...[
-                      const SizedBox(height: 12),
+                      SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         value: linkedPhase.isEmpty ? 'All Phases' : linkedPhase,
-                        decoration: const InputDecoration(labelText: 'Linked Phase (Optional)'),
+                        decoration: InputDecoration(labelText: 'Linked Phase (Optional)'),
                         items: ['All Phases', ...availablePhases]
                             .map((phase) => DropdownMenuItem(value: phase, child: Text(phase)))
                             .toList(),
@@ -593,25 +599,25 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     ],
                     DropdownButtonFormField<String>(
                       value: repeatType,
-                      decoration: const InputDecoration(labelText: 'Repeat Type'),
-                      items: const [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly, InstructionRule.repeatOneTime]
+                      decoration: InputDecoration(labelText: 'Repeat Type'),
+                      items: [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly, InstructionRule.repeatOneTime]
                           .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                           .toList(),
                       onChanged: (value) => setDialogState(() => repeatType = value ?? repeatType),
                     ),
                     if (false) ...[
-                      TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
-                      const SizedBox(height: 10),
+                      TextField(controller: unitController, decoration: InputDecoration(labelText: 'Unit')),
+                      SizedBox(height: 10),
                       Row(
                         children: [
-                          const Expanded(child: Text('Levels', style: TextStyle(fontWeight: FontWeight.w900))),
+                          Expanded(child: Text('Levels', style: TextStyle(fontWeight: FontWeight.w600))),
                           TextButton.icon(
                             onPressed: () async {
                               final level = await _showInstructionLevelDialog(defaultUnit: unitController.text.trim(), index: levels.length);
                               if (level != null) setDialogState(() => levels = [...levels, level]);
                             },
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Level'),
+                            icon: Icon(Icons.add),
+                            label: Text('Add Level'),
                           ),
                         ],
                       ),
@@ -620,22 +626,22 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                         final level = entry.value;
                         return Card(
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
+                            padding: EdgeInsets.fromLTRB(14, 10, 8, 8),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(level.displayLabel, style: const TextStyle(fontWeight: FontWeight.w900)),
-                                const SizedBox(height: 4),
-                                Text('+${level.bonusPoints} points • ${level.pointsEarned} Points', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+                                Text(level.displayLabel, style: TextStyle(fontWeight: FontWeight.w600)),
+                                SizedBox(height: 4),
+                                Text('+${level.bonusPoints} points • ${level.pointsEarned} Points', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
                                 Align(
                                   alignment: Alignment.centerRight,
                                   child: Wrap(
                                     spacing: 2,
                                     children: [
-                                      IconButton(tooltip: 'Move up', icon: const Icon(Icons.arrow_upward, size: 18), onPressed: index == 0 ? null : () => setDialogState(() { final updated = [...levels]; final item = updated.removeAt(index); updated.insert(index - 1, item); levels = updated; })),
-                                      IconButton(tooltip: 'Move down', icon: const Icon(Icons.arrow_downward, size: 18), onPressed: index == levels.length - 1 ? null : () => setDialogState(() { final updated = [...levels]; final item = updated.removeAt(index); updated.insert(index + 1, item); levels = updated; })),
-                                      IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () async { final updatedLevel = await _showInstructionLevelDialog(existing: level, defaultUnit: unitController.text.trim(), index: index); if (updatedLevel != null) setDialogState(() { final updated = [...levels]; updated[index] = updatedLevel; levels = updated; }); }),
-                                      IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => setDialogState(() => levels = levels.where((item) => item.id != level.id).toList())),
+                                      IconButton(tooltip: 'Move up', icon: Icon(Icons.arrow_upward, size: 18), onPressed: index == 0 ? null : () => setDialogState(() { final updated = [...levels]; final item = updated.removeAt(index); updated.insert(index - 1, item); levels = updated; })),
+                                      IconButton(tooltip: 'Move down', icon: Icon(Icons.arrow_downward, size: 18), onPressed: index == levels.length - 1 ? null : () => setDialogState(() { final updated = [...levels]; final item = updated.removeAt(index); updated.insert(index + 1, item); levels = updated; })),
+                                      IconButton(tooltip: 'Edit', icon: Icon(Icons.edit_outlined, size: 18), onPressed: () async { final updatedLevel = await _showInstructionLevelDialog(existing: level, defaultUnit: unitController.text.trim(), index: index); if (updatedLevel != null) setDialogState(() { final updated = [...levels]; updated[index] = updatedLevel; levels = updated; }); }),
+                                      IconButton(tooltip: 'Delete', icon: Icon(Icons.delete_outline, size: 18), onPressed: () => setDialogState(() => levels = levels.where((item) => item.id != level.id).toList())),
                                     ],
                                   ),
                                 ),
@@ -647,14 +653,14 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     ] else ...[
                       Row(
                         children: [
-                          const Expanded(child: Text('Options', style: TextStyle(fontWeight: FontWeight.w900))),
+                          Expanded(child: Text('Options', style: TextStyle(fontWeight: FontWeight.w600))),
                           TextButton.icon(
                             onPressed: () async {
                               final option = await _showInstructionOptionDialog(index: options.length);
                               if (option != null) setDialogState(() => options = [...options, option]);
                             },
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Option'),
+                            icon: Icon(Icons.add),
+                            label: Text('Add Option'),
                           ),
                         ],
                       ),
@@ -663,24 +669,24 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                         final option = entry.value;
                         return Card(
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
+                            padding: EdgeInsets.fromLTRB(14, 10, 8, 8),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    SizedBox(width: 34, child: Text(option.emoji, style: const TextStyle(fontSize: 22))),
-                                    const SizedBox(width: 10),
+                                    SizedBox(width: 34, child: Text(option.emoji, style: TextStyle(fontSize: 22))),
+                                    SizedBox(width: 10),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(option.name, style: const TextStyle(fontWeight: FontWeight.w900)),
-                                          const SizedBox(height: 4),
+                                          Text(option.name, style: TextStyle(fontWeight: FontWeight.w600)),
+                                          SizedBox(height: 4),
                                           Text(
                                             '+${option.bonusPoints} points • ${option.pointsEarned} Points${option.description.isEmpty ? '' : ' • ${option.description}'}',
-                                            style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                                            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700),
                                           ),
                                         ],
                                       ),
@@ -692,10 +698,10 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                                   child: Wrap(
                                     spacing: 2,
                                     children: [
-                                      IconButton(tooltip: 'Move up', icon: const Icon(Icons.arrow_upward, size: 18), onPressed: index == 0 ? null : () => setDialogState(() { final updated = [...options]; final item = updated.removeAt(index); updated.insert(index - 1, item); options = updated; })),
-                                      IconButton(tooltip: 'Move down', icon: const Icon(Icons.arrow_downward, size: 18), onPressed: index == options.length - 1 ? null : () => setDialogState(() { final updated = [...options]; final item = updated.removeAt(index); updated.insert(index + 1, item); options = updated; })),
-                                      IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () async { final updatedOption = await _showInstructionOptionDialog(existing: option, index: index); if (updatedOption != null) setDialogState(() { final updated = [...options]; updated[index] = updatedOption; options = updated; }); }),
-                                      IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => setDialogState(() => options = options.where((item) => item.id != option.id).toList())),
+                                      IconButton(tooltip: 'Move up', icon: Icon(Icons.arrow_upward, size: 18), onPressed: index == 0 ? null : () => setDialogState(() { final updated = [...options]; final item = updated.removeAt(index); updated.insert(index - 1, item); options = updated; })),
+                                      IconButton(tooltip: 'Move down', icon: Icon(Icons.arrow_downward, size: 18), onPressed: index == options.length - 1 ? null : () => setDialogState(() { final updated = [...options]; final item = updated.removeAt(index); updated.insert(index + 1, item); options = updated; })),
+                                      IconButton(tooltip: 'Edit', icon: Icon(Icons.edit_outlined, size: 18), onPressed: () async { final updatedOption = await _showInstructionOptionDialog(existing: option, index: index); if (updatedOption != null) setDialogState(() { final updated = [...options]; updated[index] = updatedOption; options = updated; }); }),
+                                      IconButton(tooltip: 'Delete', icon: Icon(Icons.delete_outline, size: 18), onPressed: () => setDialogState(() => options = options.where((item) => item.id != option.id).toList())),
                                     ],
                                   ),
                                 ),
@@ -705,31 +711,32 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                         );
                       }),
                     ],
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10),
                     Wrap(
                       spacing: 8,
                       children: [
-                        for (final color in const [0xFF43A047, 0xFF1E88E5, 0xFFFF9800, 0xFF8E24AA, 0xFFE53935])
+                        for (final color in [0xFF43A047, 0xFF1E88E5, 0xFFFF9800, 0xFF8E24AA, 0xFFE53935])
                           ChoiceChip(
                             selected: colorValue == color,
-                            label: const Text(''),
+                            label: Text(''),
                             avatar: CircleAvatar(backgroundColor: Color(color)),
                             onSelected: (_) => setDialogState(() => colorValue = color),
                           ),
                       ],
                     ),
-                    SwitchListTile(value: enabled, onChanged: (value) => setDialogState(() => enabled = value), title: const Text('Enable Instruction')),
-                    SwitchListTile(value: streakTracking, onChanged: (value) => setDialogState(() => streakTracking = value), title: const Text('Streak Tracking')),
+                    SwitchListTile(value: enabled, onChanged: (value) => setDialogState(() => enabled = value), title: Text('Enable Instruction')),
+                    SwitchListTile(value: streakTracking, onChanged: (value) => setDialogState(() => streakTracking = value), title: Text('Streak Tracking')),
                   ],
                 ),
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              TextButton(onPressed: saving ? null : () => Navigator.pop(context), child: Text('Cancel')),
               ElevatedButton(
-                onPressed: () => Navigator.pop(
-                  context,
-                  InstructionRule(
+                onPressed: saving ? null : () async {
+                  if (nameController.text.trim().isEmpty) { setDialogState(() => error = 'Enter an instruction name'); return; }
+                  setDialogState(() { saving = true; error = null; });
+                  final result = InstructionRule(
                     id: instruction?.id ?? 'instruction_${DateTime.now().microsecondsSinceEpoch}',
                     name: nameController.text.trim().isEmpty ? 'Instruction' : nameController.text.trim(),
                     description: descriptionController.text.trim(),
@@ -738,7 +745,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     repeatType: repeatType,
                     instructionType: InstructionRule.typeMultipleOption,
                     unit: '',
-                    levels: const [],
+                    levels: [],
                     options: options,
                     bonusPoints: int.tryParse(bonusController.text.trim()) ?? 20,
                     pointsEarned: int.tryParse(xpController.text.trim()) ?? 5,
@@ -746,12 +753,18 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     enabled: enabled,
                     streakTracking: streakTracking,
                     createdAt: instruction?.createdAt ?? DateTime.now(),
-                    history: instruction?.history ?? const [],
+                    history: instruction?.history ?? [],
                     imagePaths: instructionImagePaths,
                     coverImagePath: instructionCoverImagePath,
-                  ),
-                ),
-                child: const Text('Save'),
+                  );
+                  try {
+                    await widget.hiveService.saveInstruction(result);
+                    if (context.mounted) Navigator.pop(context, result);
+                  } catch (_) {
+                    if (context.mounted) setDialogState(() { saving = false; error = 'Could not save. Please retry.'; });
+                  }
+                },
+                child: Text('Save'),
               ),
             ],
           );
@@ -762,7 +775,8 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     // the closing dialog route for its exit animation after showDialog completes.
     // Disposing immediately caused "TextEditingController was used after being
     // disposed" crashes while the Add/Edit Instruction dialog was closing.
-    if (saved != null) await widget.hiveService.saveInstruction(saved);
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    for (final controller in [nameController, descriptionController, bonusController, xpController, unitController]) { controller.dispose(); }
   }
 
 
@@ -774,8 +788,8 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
     final emojiController = TextEditingController(text: existing?.emoji ?? '🥤');
     final linkController = TextEditingController();
     final descriptionController = TextEditingController(text: existing?.description ?? '');
-    var imagePaths = [...(existing?.imagePaths ?? const <String>[])];
-    var linkUrls = [...(existing?.effectiveLinks ?? const <String>[])];
+    var imagePaths = [...(existing?.imagePaths ?? <String>[])];
+    var linkUrls = [...(existing?.effectiveLinks ?? <String>[])];
     var coverImagePath = existing?.coverImagePath ?? '';
     return showDialog<InstructionOption>(
       context: context,
@@ -789,16 +803,16 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Option Name')),
-                  TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Points')),
-                  TextField(controller: emojiController, decoration: const InputDecoration(labelText: 'Emoji')),
-                  const SizedBox(height: 12),
+                  TextField(controller: nameController, decoration: InputDecoration(labelText: 'Option Name')),
+                  TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Bonus Points')),
+                  TextField(controller: xpController, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Points')),
+                  TextField(controller: emojiController, decoration: InputDecoration(labelText: 'Emoji')),
+                  SizedBox(height: 12),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Option Images (${imagePaths.length})', style: const TextStyle(fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 4),
+                      Text('Option Images (${imagePaths.length})', style: TextStyle(fontWeight: FontWeight.w600)),
+                      SizedBox(height: 4),
                       TextButton.icon(
                         style: TextButton.styleFrom(padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                         onPressed: () async {
@@ -809,13 +823,13 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                             if (coverImagePath.isEmpty && imagePaths.isNotEmpty) coverImagePath = imagePaths.first;
                           });
                         },
-                        icon: const Icon(Icons.add_photo_alternate_outlined),
+                        icon: Icon(Icons.add_photo_alternate_outlined),
                         label: Text(imagePaths.isEmpty ? 'Choose From Gallery' : 'Add More Images'),
                       ),
                     ],
                   ),
                   if (imagePaths.isEmpty)
-                    const Text('No images added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                    Text('No images added yet.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700))
                   else
                     ...imagePaths.map((path) => ListTile(
                           dense: true,
@@ -826,11 +840,11 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                           trailing: Wrap(
                             spacing: 2,
                             children: [
-                              IconButton(tooltip: 'View', icon: const Icon(Icons.visibility_outlined, size: 18), onPressed: () => _showImagePathDialog(path)),
-                              IconButton(tooltip: 'Change Cover', icon: const Icon(Icons.star_border_rounded, size: 18), onPressed: () => setDialogState(() => coverImagePath = path)),
+                              IconButton(tooltip: 'View', icon: Icon(Icons.visibility_outlined, size: 18), onPressed: () => _showImagePathDialog(path)),
+                              IconButton(tooltip: 'Change Cover', icon: Icon(Icons.star_border_rounded, size: 18), onPressed: () => setDialogState(() => coverImagePath = path)),
                               IconButton(
                                 tooltip: 'Remove',
-                                icon: const Icon(Icons.delete_outline, size: 18),
+                                icon: Icon(Icons.delete_outline, size: 18),
                                 onPressed: () => setDialogState(() {
                                   imagePaths = imagePaths.where((item) => item != path).toList();
                                   if (coverImagePath == path) coverImagePath = imagePaths.isEmpty ? '' : imagePaths.first;
@@ -839,14 +853,14 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                             ],
                           ),
                         )),
-                  const SizedBox(height: 10),
-                  const Text('Website / Video Links Optional', style: TextStyle(fontWeight: FontWeight.w900)),
+                  SizedBox(height: 10),
+                  Text('Website / Video Links Optional', style: TextStyle(fontWeight: FontWeight.w600)),
                   Row(
                     children: [
-                      Expanded(child: TextField(controller: linkController, decoration: const InputDecoration(hintText: 'https://youtube.com/...'))),
+                      Expanded(child: TextField(controller: linkController, decoration: InputDecoration(hintText: 'https://youtube.com/...'))),
                       IconButton(
                         tooltip: 'Add Link',
-                        icon: const Icon(Icons.add_link),
+                        icon: Icon(Icons.add_link),
                         onPressed: () => setDialogState(() {
                           final link = linkController.text.trim();
                           if (link.isEmpty || linkUrls.contains(link)) return;
@@ -857,32 +871,32 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                     ],
                   ),
                   if (linkUrls.isEmpty)
-                    const Text('No links added yet.', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700))
+                    Text('No links added yet.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700))
                   else
                     ...linkUrls.map((link) => ListTile(
                           dense: true,
                           contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.link),
+                          leading: Icon(Icons.link),
                           title: Text(link, maxLines: 1, overflow: TextOverflow.ellipsis),
                           trailing: Wrap(
                             spacing: 2,
                             children: [
-                              TextButton.icon(onPressed: () => _openOptionLink(link), icon: const Icon(Icons.open_in_new, size: 18), label: const Text('Open Link')),
+                              TextButton.icon(onPressed: () => _openOptionLink(link), icon: Icon(Icons.open_in_new, size: 18), label: Text('Open Link')),
                               IconButton(
                                 tooltip: 'Remove Link',
-                                icon: const Icon(Icons.delete_outline, size: 18),
+                                icon: Icon(Icons.delete_outline, size: 18),
                                 onPressed: () => setDialogState(() => linkUrls = linkUrls.where((item) => item != link).toList()),
                               ),
                             ],
                           ),
                         )),
-                  TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
+                  TextField(controller: descriptionController, maxLines: 2, decoration: InputDecoration(labelText: 'Description')),
                 ],
               ),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel')),
             ElevatedButton(
               onPressed: () => Navigator.pop(
                 context,
@@ -899,7 +913,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   linkUrls: linkUrls,
                 ),
               ),
-              child: const Text('Save'),
+              child: Text('Save'),
             ),
           ],
         ),
@@ -914,7 +928,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
       builder: (context) => AlertDialog(
         title: Text(title),
         content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),
+          constraints: BoxConstraints(maxWidth: 520, maxHeight: 520),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -929,14 +943,14 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
-              SelectableText(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 4),
-              SelectableText(path, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+              SizedBox(height: 10),
+              SelectableText(title, style: TextStyle(fontWeight: FontWeight.w600)),
+              SizedBox(height: 4),
+              SelectableText(path, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
             ],
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text('Close'))],
       ),
     );
   }
@@ -973,16 +987,16 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Level Name')),
-              TextField(controller: targetController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Target')),
-              TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
-              TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Bonus Points')),
-              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Points')),
+              TextField(controller: nameController, decoration: InputDecoration(labelText: 'Level Name')),
+              TextField(controller: targetController, keyboardType: TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: 'Target')),
+              TextField(controller: unitController, decoration: InputDecoration(labelText: 'Unit')),
+              TextField(controller: bonusController, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Bonus Points')),
+              TextField(controller: xpController, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Points')),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(
               context,
@@ -995,7 +1009,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 pointsEarned: int.tryParse(xpController.text.trim()) ?? 0,
               ),
             ),
-            child: const Text('Save'),
+            child: Text('Save'),
           ),
         ],
       ),
@@ -1025,7 +1039,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
   }
 
   List<String> _phaseOptionsForSelection(List<String> selectedTasks) {
-    if (selectedTasks.length != 1) return const <String>[];
+    if (selectedTasks.length != 1) return <String>[];
     final selected = selectedTasks.first.trim().toLowerCase();
     _InstructionTaskOption? option;
     for (final taskOption in _taskOptions()) {
@@ -1034,7 +1048,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
         break;
       }
     }
-    if (option == null || option.isRoutine) return const <String>[];
+    if (option == null || option.isRoutine) return <String>[];
     return taskSteps(option.task).map((phase) => phase.name).where((name) => name.trim().isNotEmpty).toList();
   }
 
@@ -1054,7 +1068,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
           final routineTasks = filtered.where((option) => option.isRoutine).toList();
           final nonRoutineTasks = filtered.where((option) => !option.isRoutine).toList();
           return AlertDialog(
-            title: const Text('Select Task'),
+            title: Text('Select Task'),
             content: SizedBox(
               width: 520,
               height: 520,
@@ -1062,19 +1076,19 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                 children: [
                   TextField(
                     controller: searchController,
-                    decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search Task...'),
+                    decoration: InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search Task...'),
                     onChanged: (_) => setDialogState(() {}),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
                   Expanded(
                     child: ListView(
                       children: [
                         if (routineTasks.isNotEmpty) _taskSelectorSection('📅 Routine Tasks', routineTasks, selected, setDialogState),
                         if (nonRoutineTasks.isNotEmpty) _taskSelectorSection('📁 Non-Routine Tasks', nonRoutineTasks, selected, setDialogState),
                         if (filtered.isEmpty)
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.all(24),
-                            child: Text('No matching tasks found.', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+                            child: Text('No matching tasks found.', textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
                           ),
                       ],
                     ),
@@ -1083,8 +1097,8 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context, <String>[]), child: const Text('Clear')),
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              TextButton(onPressed: () => Navigator.pop(context, <String>[]), child: Text('Clear')),
+              TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel')),
               ElevatedButton(
                 onPressed: () {
                   final orderedSelected = options.where((option) => selected.contains(option.title)).map((option) => option.title).toList();
@@ -1093,7 +1107,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
                   }
                   Navigator.pop(context, orderedSelected);
                 },
-                child: const Text('Use Selected'),
+                child: Text('Use Selected'),
               ),
             ],
           );
@@ -1110,8 +1124,8 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-          child: Text(title, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          padding: EdgeInsets.fromLTRB(4, 12, 4, 6),
+          child: Text(title, style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
         ),
         ...options.map((option) {
           final checked = selected.contains(option.title);
@@ -1124,7 +1138,7 @@ class _InstructionDashboardViewState extends State<InstructionDashboardView> {
               backgroundColor: option.isRoutine ? Colors.green.withOpacity(0.14) : Colors.blue.withOpacity(0.14),
               child: Icon(option.isRoutine ? Icons.repeat_rounded : Icons.folder_copy_outlined, color: option.isRoutine ? Colors.green : Colors.blue, size: 16),
             ),
-            title: Text(option.title, style: const TextStyle(fontWeight: FontWeight.w900)),
+            title: Text(option.title, style: TextStyle(fontWeight: FontWeight.w600)),
             subtitle: Text(option.subtitle),
             onChanged: (value) => setDialogState(() {
               if (value == true) {
@@ -1146,7 +1160,7 @@ class _InstructionTaskOption {
   final Task task;
   final bool isRoutine;
 
-  const _InstructionTaskOption({required this.task, required this.isRoutine});
+  _InstructionTaskOption({required this.task, required this.isRoutine});
 
   String get title => task.task.trim();
 
@@ -1168,7 +1182,7 @@ class _InstructionUpdateResult {
   final double percentage;
   final String emojiStatus;
 
-  const _InstructionUpdateResult({
+  _InstructionUpdateResult({
     required this.status,
     required this.selectedOptions,
     required this.bonusPoints,
@@ -1185,7 +1199,7 @@ class _InstructionSummaryPanel extends StatelessWidget {
   final ValueChanged<String> onPeriodChanged;
   final void Function(String title, List<InstructionRule> instructions) onOpenList;
 
-  const _InstructionSummaryPanel({required this.hiveService, required this.instructions, required this.today, required this.period, required this.onPeriodChanged, required this.onOpenList});
+  _InstructionSummaryPanel({required this.hiveService, required this.instructions, required this.today, required this.period, required this.onPeriodChanged, required this.onOpenList});
 
   @override
   Widget build(BuildContext context) {
@@ -1193,28 +1207,28 @@ class _InstructionSummaryPanel extends StatelessWidget {
     final metrics = _metricsForPeriod(standalone);
     final periodLabel = _periodLabel(period);
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(24), border: Border.all(color: AppColors.primary.withOpacity(0.14))),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface.withOpacity(0.9), borderRadius: BorderRadius.circular(24), border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.14))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📘 Instruction Productivity', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
-          const SizedBox(height: 8),
+          Text('📘 Instruction Productivity', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
+          SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: const [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly].map((item) {
+            children: [InstructionRule.repeatDaily, InstructionRule.repeatWeekly, InstructionRule.repeatMonthly, InstructionRule.repeatYearly].map((item) {
               final selected = item == period;
               return ChoiceChip(
                 selected: selected,
                 label: Text(item),
                 onSelected: (_) => onPeriodChanged(item),
-                selectedColor: AppColors.primary.withOpacity(0.18),
-                labelStyle: TextStyle(fontWeight: FontWeight.w900, color: selected ? AppColors.primary : AppColors.textPrimary),
+                selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.18),
+                labelStyle: TextStyle(fontWeight: FontWeight.w600, color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface),
               );
             }).toList(),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {
               final chart = _InstructionProductivityPie(
@@ -1230,15 +1244,15 @@ class _InstructionSummaryPanel extends StatelessWidget {
                   _InstructionStat(label: 'Followed $periodLabel', value: '${metrics.followed}', color: Colors.green, onTap: () => onOpenList('Followed $periodLabel Instructions', metrics.followedInstructions)),
                   _InstructionStat(label: 'Missed $periodLabel', value: '${metrics.missed}', color: Colors.red, onTap: () => onOpenList('Missed $periodLabel Instructions', metrics.missedInstructions)),
                   _InstructionStat(label: 'Pending $periodLabel', value: '${metrics.pending}', onTap: () => onOpenList('Pending $periodLabel Instructions', metrics.pendingInstructions)),
-                  _InstructionStat(label: 'Bonus Points $periodLabel', value: '+${metrics.bonusPoints}', color: AppColors.primary, onTap: () => onOpenList('Bonus Points $periodLabel', metrics.bonusInstructions)),
+                  _InstructionStat(label: 'Bonus Points $periodLabel', value: '+${metrics.bonusPoints}', color: Theme.of(context).colorScheme.primary, onTap: () => onOpenList('Bonus Points $periodLabel', metrics.bonusInstructions)),
                   if (period != InstructionRule.repeatDaily)
                     _InstructionStat(label: '$period Completion', value: '${metrics.completionRate}%', color: Colors.green, onTap: () => onOpenList('$period Standalone Instructions', standalone)),
                 ],
               );
               if (constraints.maxWidth < 620) {
-                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Center(child: chart), const SizedBox(height: 12), cards]);
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Center(child: chart), SizedBox(height: 12), cards]);
               }
-              return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [chart, const SizedBox(width: 16), Expanded(child: cards)]);
+              return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [chart, SizedBox(width: 16), Expanded(child: cards)]);
             },
           ),
         ],
@@ -1295,7 +1309,7 @@ class _InstructionSummaryPanel extends StatelessWidget {
   (DateTime, DateTime) _periodRange(DateTime date, String period) {
     final day = DateTime(date.year, date.month, date.day);
     return switch (period) {
-      InstructionRule.repeatWeekly => (day.subtract(Duration(days: day.weekday - 1)), day.subtract(Duration(days: day.weekday - 1)).add(const Duration(days: 6))),
+      InstructionRule.repeatWeekly => (day.subtract(Duration(days: day.weekday - 1)), day.subtract(Duration(days: day.weekday - 1)).add(Duration(days: 6))),
       InstructionRule.repeatMonthly => (DateTime(day.year, day.month), DateTime(day.year, day.month + 1, 0)),
       InstructionRule.repeatYearly => (DateTime(day.year), DateTime(day.year, 12, 31)),
       _ => (day, day),
@@ -1307,7 +1321,7 @@ class _InstructionSummaryPanel extends StatelessWidget {
     var cursor = DateTime(start.year, start.month, start.day);
     while (!cursor.isAfter(end)) {
       if (_instructionOccursOn(instruction, cursor)) dates.add(cursor);
-      cursor = cursor.add(const Duration(days: 1));
+      cursor = cursor.add(Duration(days: 1));
     }
     return dates;
   }
@@ -1350,7 +1364,7 @@ class _InstructionPeriodMetrics {
   final List<InstructionRule> pendingInstructions;
   final List<InstructionRule> bonusInstructions;
 
-  const _InstructionPeriodMetrics({
+  _InstructionPeriodMetrics({
     required this.total,
     required this.followed,
     required this.missed,
@@ -1370,7 +1384,7 @@ class _InstructionCard extends StatelessWidget {
   final DateTime today;
   final VoidCallback onTap;
 
-  const _InstructionCard({required this.hiveService, required this.instruction, required this.today, required this.onTap});
+  _InstructionCard({required this.hiveService, required this.instruction, required this.today, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1382,25 +1396,25 @@ class _InstructionCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(22),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: Colors.white.withOpacity(0.92), borderRadius: BorderRadius.circular(22), border: Border.all(color: color.withOpacity(0.18))),
+        margin: EdgeInsets.only(bottom: 12),
+        padding: EdgeInsets.all(14),
+        decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface.withOpacity(0.92), borderRadius: BorderRadius.circular(22), border: Border.all(color: color.withOpacity(0.18))),
         child: Row(
           children: [
             CircleAvatar(backgroundColor: color.withOpacity(0.14), child: Icon(Icons.rule_folder_outlined, color: color)),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(toTitleCase(instruction.name), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
-                const SizedBox(height: 4),
-                Text((entry?.hasLevel == true || entry?.hasOption == true) ? 'Today: ${entry!.selectionSummary} • +${entry.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • ${instruction.options.length} options • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
-                if (instruction.linkedTasks.isNotEmpty) Text('Linked: ${_linkedTaskSummary(instruction)}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: const TextStyle(fontSize: 12, color: Colors.black45)),
+                Text(toTitleCase(instruction.name), style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
+                SizedBox(height: 4),
+                Text((entry?.hasLevel == true || entry?.hasOption == true) ? 'Today: ${entry!.selectionSummary} • +${entry.bonusPoints} points • ${hiveService.instructionCurrentStreak(instruction, today)} streak' : '${instruction.isStandalone ? 'Standalone' : 'Task-linked'} • ${instruction.repeatType} • ${instruction.options.length} options • ${hiveService.instructionCurrentStreak(instruction, today)} streak', style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                if (instruction.linkedTasks.isNotEmpty) Text('Linked: ${_linkedTaskSummary(instruction)}${instruction.linkedPhase.isEmpty ? '' : ' • ${instruction.linkedPhase}'}', style: TextStyle(fontSize: 12, color: Colors.black45)),
               ]),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(999)),
-              child: Text(toTitleCase(status), style: TextStyle(color: statusColor, fontWeight: FontWeight.w900, fontSize: 12)),
+              child: Text(toTitleCase(status), style: TextStyle(color: statusColor, fontWeight: FontWeight.w600, fontSize: 12)),
             ),
           ],
         ),
@@ -1415,7 +1429,7 @@ class _InstructionProductivityPie extends StatelessWidget {
   final int missed;
   final int pending;
 
-  const _InstructionProductivityPie({required this.followed, required this.missed, required this.pending});
+  _InstructionProductivityPie({required this.followed, required this.missed, required this.pending});
 
   @override
   Widget build(BuildContext context) {
@@ -1433,25 +1447,25 @@ class _InstructionProductivityPie extends StatelessWidget {
               alignment: Alignment.center,
               children: [
                 CustomPaint(
-                  size: const Size.square(132),
+                  size: Size.square(132),
                   painter: _InstructionProductivityPiePainter(followed: followed, missed: missed, pending: pending),
                 ),
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('$percent%', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: AppColors.textPrimary)),
-                    const Text('Followed', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: Colors.black54)),
+                    Text('$percent%', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 22, color: Theme.of(context).colorScheme.onSurface)),
+                    Text('Followed', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Wrap(
             alignment: WrapAlignment.center,
             spacing: 8,
             runSpacing: 4,
-            children: const [
+            children: [
               _PieLegendDot(color: Colors.green, label: 'Followed'),
               _PieLegendDot(color: Colors.red, label: 'Missed'),
               _PieLegendDot(color: Colors.grey, label: 'Pending'),
@@ -1468,7 +1482,7 @@ class _InstructionProductivityPiePainter extends CustomPainter {
   final int missed;
   final int pending;
 
-  const _InstructionProductivityPiePainter({required this.followed, required this.missed, required this.pending});
+  _InstructionProductivityPiePainter({required this.followed, required this.missed, required this.pending});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1505,7 +1519,7 @@ class _PieLegendDot extends StatelessWidget {
   final Color color;
   final String label;
 
-  const _PieLegendDot({required this.color, required this.label});
+  _PieLegendDot({required this.color, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -1513,8 +1527,8 @@ class _PieLegendDot extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black54)),
+        SizedBox(width: 4),
+        Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ],
     );
   }
@@ -1526,7 +1540,7 @@ class _InstructionStat extends StatelessWidget {
   final Color? color;
   final VoidCallback? onTap;
 
-  const _InstructionStat({required this.label, required this.value, this.color, this.onTap});
+  _InstructionStat({required this.label, required this.value, this.color, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1535,12 +1549,12 @@ class _InstructionStat extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       child: Container(
         width: 150,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.black12)),
+        padding: EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.black12)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.black54)),
-          const SizedBox(height: 6),
-          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color ?? AppColors.textPrimary)),
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          SizedBox(height: 6),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: color ?? Theme.of(context).colorScheme.onSurface)),
         ]),
       ),
     );
@@ -1548,14 +1562,14 @@ class _InstructionStat extends StatelessWidget {
 }
 
 class _EmptyInstructionCard extends StatelessWidget {
-  const _EmptyInstructionCard();
+  _EmptyInstructionCard();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(22)),
-      child: const Text('No instructions yet. Tap “Add Instruction” to create your first productivity rule.', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.black54)),
+      padding: EdgeInsets.all(18),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface.withOpacity(0.9), borderRadius: BorderRadius.circular(22)),
+      child: Text('No instructions yet. Tap “Add Instruction” to create your first productivity rule.', style: TextStyle(fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurfaceVariant)),
     );
   }
 }

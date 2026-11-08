@@ -1,0 +1,15 @@
+---
+description: Flutter/Dart architecture and reuse contracts.
+globs:
+  - "lib/**/*.dart"
+  - "pubspec.yaml"
+  - "pubspec.lock"
+alwaysApply: false
+---
+
+# Flutter
+- Keep the Flutter client and existing `lib/{models,services,screens,widgets,utils,constants}` structure; do not create separate platform apps.
+- Reuse existing services/helpers/widgets (including `HiveService`, task dialogs, time/text utilities, reward policy) after verifying their APIs. Keep persistence/business logic out of widgets, API serialization in `ApiClient`, and socket lifecycle in `SyncService`.
+- Preserve existing task, routine, journal, instruction, reward, theme, profile, streak, and productivity behavior unless requested.
+- Avoid new global dependencies, circular imports, state-management packages, or dependency upgrades without concrete need. Inspect pubspec and lockfile before adding packages.
+- Validate Flutter changes with `flutter analyze` and focused tests when available; report blockers.

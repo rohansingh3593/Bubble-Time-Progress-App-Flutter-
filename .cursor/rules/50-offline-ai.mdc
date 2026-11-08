@@ -1,0 +1,17 @@
+---
+description: Offline voice and AI constraints.
+globs:
+  - "lib/**/*voice*.dart"
+  - "lib/**/*ai*.dart"
+  - "lib/**/*inference*.dart"
+  - "docs/OFFLINE_VOICE.md"
+  - "docs/*AI*.md"
+alwaysApply: false
+---
+
+# Offline AI and voice
+- Use explicitly selected on-device models only; no external inference APIs, hosted fallback, provider keys, or Goblin Tools integration/assets/branding. Verify current implementation and `docs/OFFLINE_VOICE.md`.
+- Reuse `VoiceCapture`, `VoiceTaskParser`, and `VoiceTaskService` after confirming their APIs. Keep AI behind typed contracts; don't add per-feature backends or agents.
+- Treat model output as a draft: user action is required to apply it. Never auto-complete tasks, award rewards, send replies, or execute generated code.
+- Use selected context only and retain no AI history by default. Keep AI estimates separate from measured time/rewards; validate estimates and preserve Hive/legacy step contracts.
+- Test malformed/empty output, timeout, stale/duplicate apply, and timer restart/background cases when affected. Optional legacy sync stays separate and disabled by default.

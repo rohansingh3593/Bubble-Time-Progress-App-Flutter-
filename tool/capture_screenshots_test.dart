@@ -6,9 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:momentum/main.dart';
+import 'package:momentum/screens/home_views.dart';
 import 'package:momentum/constants/dashboard_themes.dart';
 import 'package:momentum/models/task_model.dart';
 import 'package:momentum/models/task_step.dart';
@@ -42,7 +42,14 @@ const outputPath = String.fromEnvironment('CAPTURE_OUTPUT');
 const fontPath = String.fromEnvironment('CAPTURE_FONTS');
 const captureTheme =
     String.fromEnvironment('CAPTURE_THEME', defaultValue: 'light');
+const capturePalette =
+    String.fromEnvironment('CAPTURE_PALETTE', defaultValue: 'forestGlow');
 const onlyScreen = String.fromEnvironment('CAPTURE_SCREEN');
+final selectedScreens = onlyScreen
+    .split(',')
+    .map((s) => s.trim())
+    .where((s) => s.isNotEmpty)
+    .toSet();
 
 // The reference screen never opens the real microphone/native recorder.
 class ReferenceCapture implements VoiceCapture {
@@ -69,6 +76,10 @@ Future<void> seed(HiveService hive) async {
   await hive.setDashboardTheme(captureTheme == 'dark'
       ? DashboardThemeType.dark
       : DashboardThemeType.light);
+  await hive.setDashboardPalette(DashboardPaletteType.values.firstWhere(
+      (palette) => palette.storageKey == capturePalette,
+      orElse: () =>
+          throw StateError('Unknown capture palette: $capturePalette')));
   await hive.saveMottoReminderSettings(
       const MottoReminderSettings(popupEnabled: false));
   for (var ago = 6; ago >= 0; ago--) {
@@ -212,7 +223,9 @@ void main() {
     final previousErrorHandler = FlutterError.onError;
     await tester.binding.setSurfaceSize(const Size(390, 844));
     tester.view.devicePixelRatio = 1;
-    GoogleFonts.config.allowRuntimeFetching = false;
+    tester.view.physicalSize = const Size(390, 844);
+    final previousDisableShadows = debugDisableShadows;
+    debugDisableShadows = false;
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('plugins.flutter.io/path_provider'),
         (_) async => fontPath);
@@ -220,12 +233,28 @@ void main() {
     // remain in the existing system/cache directories, never in the repository.
     await tester.runAsync(() async {
       print('Capture setup: loading fonts');
-      final regular = Directory(fontPath)
+      final cachedFonts = Directory(fontPath)
           .listSync()
           .whereType<File>()
-          .firstWhere(
-              (f) => f.uri.pathSegments.last.startsWith('Inter_regular_'));
-      for (final family in ['Ahem', 'Roboto']) {
+          .where((file) => file.path.toLowerCase().endsWith('.ttf'))
+          .toList();
+      File? regular;
+      for (final file in cachedFonts) {
+        if (file.uri.pathSegments.last.startsWith('Inter_regular_')) {
+          regular = file;
+          break;
+        }
+      }
+      regular ??= cachedFonts.isEmpty ? null : cachedFonts.first;
+      if (regular == null) {
+        throw StateError(
+            'No cached TTF font found in $fontPath. Run the app once to cache a font or supply -FontDirectory.');
+      }
+      if (!regular.uri.pathSegments.last.startsWith('Inter_regular_')) {
+        stdout.writeln(
+            'Capture warning: Inter is not cached; using ${regular.uri.pathSegments.last} for this reference render.');
+      }
+      for (final family in ['CaptureFont', 'Ahem', 'Roboto']) {
         final loader = FontLoader(family)
           ..addFont(
               Future.value(ByteData.sublistView(regular.readAsBytesSync())));
@@ -240,18 +269,6 @@ void main() {
         }
         await loader.load();
       }
-      for (final weight in [
-        FontWeight.w300,
-        FontWeight.w400,
-        FontWeight.w500,
-        FontWeight.w600,
-        FontWeight.w700,
-        FontWeight.w800,
-        FontWeight.w900
-      ]) {
-        GoogleFonts.inter(fontWeight: weight);
-      }
-      await GoogleFonts.pendingFonts();
       await (FontLoader('MaterialIcons')
             ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf')))
           .load();
@@ -305,6 +322,7 @@ void main() {
         'screen': name,
         'page': page,
         'theme': captureTheme,
+        'palette': capturePalette,
         'note': note
       });
     }
@@ -348,8 +366,9 @@ void main() {
 
     try {
       print('Capture: mounting app');
-      await tester.pumpWidget(
-          RepaintBoundary(key: boundaryKey, child: MyApp(hiveService: hive)));
+      await tester.pumpWidget(RepaintBoundary(
+          key: boundaryKey,
+          child: MyApp(hiveService: hive, fontFamilyOverride: 'CaptureFont')));
       // Reuse the production theme/home, with explicit glyph fallbacks for the
       // headless renderer and without the development-only DEBUG banner.
       final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
@@ -365,14 +384,32 @@ void main() {
             home: app.home,
             debugShowCheckedModeBanner: false,
           )));
+      expect(MediaQuery.sizeOf(tester.element(find.byType(MainScreen))),
+          const Size(390, 844));
       print('Capture: rendering');
       await pump();
-      if (onlyScreen.isEmpty || onlyScreen == '00-app-shell') {
+      if (selectedScreens.isEmpty || selectedScreens.contains('00-app-shell')) {
         await capturePages('00-app-shell', scroll: false);
-        await tester.tapAt(const Offset(5, 420));
+        await tester.tap(find.text('More').last);
         await pump();
-        await capturePages('00-navigation', scroll: false);
-        await tester.tapAt(const Offset(370, 420));
+        await capturePages('00-navigation');
+        // Capture the persistent shell around detail routes and calendar scales.
+        await tester.tap(find.byTooltip('Open Settings'));
+        await pump();
+        await capturePages('00-settings', scroll: false);
+        await tester.tap(find.descendant(
+            of: find.byType(NavigationBar), matching: find.text('Plan')));
+        await pump();
+        for (final scale in ['Day', 'Week', 'Month', 'Year']) {
+          await tester.tap(find.widgetWithText(ChoiceChip, scale));
+          await pump();
+          await capturePages('00-plan-${scale.toLowerCase()}', scroll: false);
+        }
+        await tester.tap(find.descendant(
+            of: find.byType(NavigationBar), matching: find.text('Progress')));
+        await pump();
+        await capturePages('00-progress', scroll: false);
+        await tester.tap(find.text('Today').last);
         await pump();
       }
       final navigator =
@@ -393,11 +430,14 @@ void main() {
         '13-log-earn': LogEarnView(hiveService: hive),
         '14-journal': JournalView(hiveService: hive),
         '15-journey': JourneyTimelineView(hiveService: hive),
+        '17-today': TodayView(service: hive),
+        '18-settings': SettingsView(service: hive),
         '16-voice':
             VoiceTasksScreen(hiveService: hive, capture: ReferenceCapture()),
       };
       for (final entry in screens.entries) {
-        if (onlyScreen.isNotEmpty && onlyScreen != entry.key) continue;
+        if (selectedScreens.isNotEmpty && !selectedScreens.contains(entry.key))
+          continue;
         activeScreen = entry.key;
         navigator.push(MaterialPageRoute<void>(builder: (_) => entry.value));
         await pump();
@@ -423,7 +463,7 @@ void main() {
           final labels = <String, String>{
             '08-instructions': 'Add Instruction',
             '09-goals': 'Add Goal',
-            '10-money': 'Withdraw / Use Money',
+            '10-money': 'Record spending',
             '11-motivation': 'Add Motivation Motto',
             '15-journey': 'Log journey'
           };
@@ -487,6 +527,8 @@ void main() {
       });
       await tester.binding.setSurfaceSize(null);
       tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+      debugDisableShadows = previousDisableShadows;
       File('${output.path}/manifest.json')
           .writeAsStringSync(const JsonEncoder.withIndent('  ').convert({
         'capturedAt': DateTime.now().toIso8601String(),
@@ -494,6 +536,7 @@ void main() {
         'data': 'Synthetic sample data in temporary Hive storage',
         'method': 'Production Flutter widgets in widget-test renderer',
         'theme': captureTheme,
+        'palette': capturePalette,
         'captures': captures,
         'issues': issues,
         'limitations': [
@@ -501,9 +544,9 @@ void main() {
           'Microphone adapter stubbed; no native audio or permissions tested.',
           'No OS status bar, system keyboard, camera or permission dialogs.',
           'Individual screens opened as routes under the actual app theme.',
-          'Inter from local font cache; default fallback uses Inter/Windows glyph fonts.',
+          'Cached local TTF is used for text; if Inter is unavailable the fallback font may differ.',
           'Reports duplicates Progress, captured once.',
-          'Settings is not reachable through current active UI; not captured.',
+          'Settings and Today are captured as separate routes as well as through the shell.',
           'Main vertical scroll paginated; nested lists not exhaustively scrolled.',
           'Representative states/forms, not every interaction combination.'
         ],

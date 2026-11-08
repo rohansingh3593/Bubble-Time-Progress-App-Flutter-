@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/instruction.dart';
 import '../models/journal_entry.dart';
@@ -107,7 +108,6 @@ class HiveService {
     _box = await Hive.openBox<List>(_boxName);
     await _runMigrationsIfNeeded();
     await _recoverPendingTaskMove();
-    await _normalizeTaskNamesOnStartup();
     await _dedupeRecurringTasksOnStartup();
     await refreshProductivitySnapshotsFromTasks();
     await _startCloudSyncIfEnabled();
@@ -278,41 +278,8 @@ class HiveService {
 
   String _cloudTaskId(Task task) => ApiClient.taskCloudId(task);
 
-  Future<void> _normalizeTaskNamesOnStartup() async {
-    for (final key in _box.keys) {
-      if (key is! String) continue;
-      if (DateTime.tryParse(key) == null) continue;
-      final rawList = _box.get(key);
-      if (rawList == null) continue;
-      final tasks = rawList.cast<Task>().toList();
-      bool changed = false;
-      final normalized = tasks.map((task) {
-        final title = _toTitleCase(task.task);
-        if (title != task.task) {
-          changed = true;
-          return task.copyWith(task: title);
-        }
-        return task;
-      }).toList();
-      if (changed) {
-        await _box.put(key, normalized);
-      }
-    }
-  }
-
-  String _toTitleCase(String text) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return trimmed;
-    final words = trimmed.split(RegExp(r'\s+'));
-    return words.map((word) {
-      if (word.isEmpty) return word;
-      final lower = word.toLowerCase();
-      return lower[0].toUpperCase() + lower.substring(1);
-    }).join(' ');
-  }
-
   Task _withNormalizedTaskName(Task task) {
-    return task.copyWith(task: _toTitleCase(task.task), steps: taskSteps(task));
+    return task.copyWith(task: task.task.trim(), steps: taskSteps(task));
   }
 
   Future<void> _dedupeRecurringTasksOnStartup() async {
@@ -586,11 +553,6 @@ class HiveService {
       source.dueDate.month,
       source.dueDate.day,
     );
-    if (!source.repeatTask && !_isSameDate(sourceDay, day)) {
-      // Move an overdue/manual occurrence rather than copying it, preserving a
-      // single Master Task record while recording completion on the log date.
-      await deleteTaskByReference(source);
-    }
     final key = _formatKey(day);
     final tasks = _storedTasksForDate(day);
     final index = source.repeatTask
@@ -617,6 +579,10 @@ class HiveService {
       status: completed ? 'Completed' : 'In Progress',
       dueDate: dueDate,
     ));
+    if (!source.repeatTask && !_isSameDate(sourceDay, day)) {
+      if (!await updateTaskByReference(source, updated)) throw StateError('Task no longer exists');
+      return;
+    }
     if (index >= 0) {
       tasks[index] = updated;
     } else {
@@ -846,6 +812,24 @@ class HiveService {
     return '$_journalPrefix${_formatKey(date)}';
   }
 
+  Map<String, dynamic>? getJournalDraft(DateTime date) {
+    final stored = _box.get('__draft_journal_${_formatKey(date)}');
+    return stored == null || stored.isEmpty ? null : Map<String, dynamic>.from(stored.first as Map);
+  }
+
+  Future<void> saveJournalDraft(DateTime date, String text, String mood) =>
+      _box.put('__draft_journal_${_formatKey(date)}', [{'text': text, 'mood': mood}]);
+
+  Future<void> clearJournalDraft(DateTime date) => _box.delete('__draft_journal_${_formatKey(date)}');
+
+  int getStartScreen() {
+    final value = _box.get('__start_screen__');
+    final index = value == null || value.isEmpty ? 0 : value.first;
+    return index is int && index >= 0 && index < 4 ? index : 0;
+  }
+
+  Future<void> setStartScreen(int index) => _box.put('__start_screen__', [index.clamp(0, 3)]);
+
   JournalEntry? getJournalEntryForDate(DateTime date) {
     final raw = _box.get(_journalKey(date));
     if (raw == null) return null;
@@ -921,6 +905,7 @@ class HiveService {
   }
 
   DashboardThemeType getDashboardTheme() {
+    if (getFollowSystemTheme()) return WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark ? DashboardThemeType.dark : DashboardThemeType.calm;
     final stored = _box.get(_dashboardThemeKey);
     final firstValue = stored == null || stored.isEmpty ? null : stored.first;
     return dashboardThemeTypeFromStorage(
@@ -1257,6 +1242,13 @@ class HiveService {
     await _handleRecurringIfNeeded(updated: normalizedUpdated);
     _syncCloudUpsert(normalizedUpdated);
     return true;
+  }
+
+  Future<void> saveTaskChanges(Task original, Task updated) async {
+    final saved = original.repeatTask
+        ? await updateRecurringTaskSeriesByReference(original, updated)
+        : await updateTaskByReference(original, updated);
+    if (!saved) throw StateError('The task no longer exists.');
   }
 
   Future<bool> updateTaskByReference(Task original, Task updated) async {
@@ -1830,7 +1822,7 @@ class HiveService {
     DateTime? date,
   }) async {
     final cleanAmount = amountRupees.clamp(0, 1 << 31).toInt();
-    if (cleanAmount <= 0) return;
+    if (cleanAmount <= 0) throw ArgumentError('Enter an amount greater than zero.');
     final summary = getRewardMoneySummary();
     if (cleanAmount > summary.availableRupees) {
       throw ArgumentError('Not enough reward balance available.');
@@ -1855,7 +1847,7 @@ class HiveService {
     String note = '',
   }) async {
     final cleanAmount = amountRupees.clamp(0, 1 << 31).toInt();
-    if (cleanAmount <= 0) return;
+    if (cleanAmount <= 0) throw ArgumentError('Enter an amount greater than zero.');
     final summary = getRewardMoneySummary();
     if (cleanAmount > summary.availableRupees) {
       throw ArgumentError('Not enough reward balance available.');
@@ -2159,6 +2151,11 @@ class HiveService {
           'On time within ${_formatScheduleMinutes(schedule.startMinutes)}–${_formatScheduleMinutes(schedule.endMinutes)} window',
     );
   }
+
+  /// Scheduled time comes from schedule metadata, never the completion timestamp.
+  int? getTaskScheduledStartMinutes(Task task) =>
+      _routineScheduleForTask(task)?.startMinutes ??
+      (task.hourSlot == null ? null : task.hourSlot! * 60);
 
   _RoutineSchedule? _routineScheduleForTask(Task task) {
     int? start;

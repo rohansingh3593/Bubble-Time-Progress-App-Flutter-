@@ -1,0 +1,16 @@
+---
+description: Focused, safe testing and honest verification.
+globs:
+  - "test/**"
+  - "integration_test/**"
+  - "backend/tests/**"
+  - "**/*test*.ps1"
+  - "**/run.ps1"
+alwaysApply: false
+---
+
+# Testing
+- Run the smallest tests that cover changed behavior; add regression and failure-path tests for the change.
+- Flutter: use `flutter analyze` and focused `flutter test`; broaden for shared behavior. Use temporary Hive storage and isolated database fixtures.
+- Never test against personal/production data. `run.ps1` may treat Flutter test failures as warnings; inspect test output.
+- Don't routinely run `activate.ps1` or `clean_up.ps1`; they can stop processes, delete artifacts, or invoke `flutter create .`.

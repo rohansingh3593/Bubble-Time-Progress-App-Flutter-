@@ -135,7 +135,7 @@ class MottoReminderSettings {
   final int frequencyMinutes;
   final bool activeOnly;
 
-  const MottoReminderSettings({this.popupEnabled = true, this.frequencyMinutes = 15, this.activeOnly = true});
+  const MottoReminderSettings({this.popupEnabled = false, this.frequencyMinutes = 15, this.activeOnly = true});
 
   factory MottoReminderSettings.fromMap(Map<dynamic, dynamic> map) => MottoReminderSettings(
         popupEnabled: map['popupEnabled'] != false,

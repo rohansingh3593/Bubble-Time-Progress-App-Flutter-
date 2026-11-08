@@ -60,7 +60,7 @@ class PeriodProgressBubbleMap extends StatelessWidget {
         final availableWidth = constraints.maxWidth - horizontalPadding - (spacing * (itemsPerRow - 1));
         final cellWidth = availableWidth / itemsPerRow;
         final bubbleSize = cellWidth < minBubbleSize ? cellWidth : cellWidth.clamp(minBubbleSize, maxBubbleSize).toDouble();
-        final cellHeight = belowLabelBuilder == null ? bubbleSize : bubbleSize + 18;
+        final cellHeight = belowLabelBuilder == null ? bubbleSize : bubbleSize + 3 + MediaQuery.textScalerOf(context).scale(9) * 1.6;
 
         return Container(
           width: double.infinity,
@@ -221,7 +221,7 @@ class _LegendItem extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800)),
+        Flexible(child: Text(label, style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800))),
       ],
     );
   }

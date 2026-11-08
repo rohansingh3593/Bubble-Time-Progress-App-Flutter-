@@ -193,7 +193,7 @@ extension AppFontWeightChoiceX on AppFontWeightChoice {
 AppFontWeightChoice appFontWeightFromStorage(String? value) {
   return AppFontWeightChoice.values.firstWhere(
     (weight) => weight.storageKey == value,
-    orElse: () => AppFontWeightChoice.semiBold,
+    orElse: () => AppFontWeightChoice.regular,
   );
 }
 
@@ -250,7 +250,8 @@ extension DashboardCardAnimationStyleX on DashboardCardAnimationStyle {
   }
 }
 
-DashboardCardAnimationStyle dashboardCardAnimationStyleFromStorage(String? value) {
+DashboardCardAnimationStyle dashboardCardAnimationStyleFromStorage(
+    String? value) {
   return DashboardCardAnimationStyle.values.firstWhere(
     (animation) => animation.storageKey == value,
     orElse: () => DashboardCardAnimationStyle.fade,
@@ -353,23 +354,18 @@ DashboardIconPack dashboardIconPackFromStorage(String? value) {
 }
 
 enum DashboardPaletteType {
-  seaCalm,
+  forestGlow,
   emeraldGrey,
-  springEnergy,
-  happyPurple,
+  oceanTeal,
   royalFocus,
-  minimalCream,
-  fieryOcean,
-  refreshingSummerFun,
-  earthyForestHues,
-  oliveGardenFeast,
-  aquaFocus,
-  vividNightfall,
-  midnightNavy,
+  purpleHaze,
+  roseBlush,
   sunsetOrange,
-  oceanBlue,
-  roseGold,
-  forest,
+  minimalCream,
+  arcticBlue,
+  oliveLuxe,
+  mochaEarth,
+  midnightNavy,
 }
 
 extension DashboardPaletteTypeX on DashboardPaletteType {
@@ -377,79 +373,99 @@ extension DashboardPaletteTypeX on DashboardPaletteType {
 
   String get label {
     switch (this) {
-      case DashboardPaletteType.seaCalm:
-        return 'Sea Calm';
+      case DashboardPaletteType.forestGlow:
+        return 'Forest Glow';
       case DashboardPaletteType.emeraldGrey:
         return 'Emerald Grey';
-      case DashboardPaletteType.springEnergy:
-        return 'Spring Energy';
-      case DashboardPaletteType.happyPurple:
-        return 'Happy Purple';
+      case DashboardPaletteType.oceanTeal:
+        return 'Ocean Teal';
       case DashboardPaletteType.royalFocus:
         return 'Royal Focus';
-      case DashboardPaletteType.minimalCream:
-        return 'Minimal Cream';
-      case DashboardPaletteType.fieryOcean:
-        return 'Fiery Ocean';
-      case DashboardPaletteType.refreshingSummerFun:
-        return 'Refreshing Summer Fun';
-      case DashboardPaletteType.earthyForestHues:
-        return 'Earthy Forest Hues';
-      case DashboardPaletteType.oliveGardenFeast:
-        return 'Olive Garden Feast';
-      case DashboardPaletteType.aquaFocus:
-        return 'Aqua Focus';
-      case DashboardPaletteType.vividNightfall:
-        return 'Vivid Nightfall';
-      case DashboardPaletteType.midnightNavy:
-        return 'Midnight Navy';
+      case DashboardPaletteType.purpleHaze:
+        return 'Purple Haze';
+      case DashboardPaletteType.roseBlush:
+        return 'Rose Blush';
       case DashboardPaletteType.sunsetOrange:
         return 'Sunset Orange';
-      case DashboardPaletteType.oceanBlue:
-        return 'Ocean Blue';
-      case DashboardPaletteType.roseGold:
-        return 'Rose Gold';
-      case DashboardPaletteType.forest:
-        return 'Forest';
+      case DashboardPaletteType.minimalCream:
+        return 'Minimal Cream';
+      case DashboardPaletteType.arcticBlue:
+        return 'Arctic Blue';
+      case DashboardPaletteType.oliveLuxe:
+        return 'Olive Luxe';
+      case DashboardPaletteType.mochaEarth:
+        return 'Mocha Earth';
+      case DashboardPaletteType.midnightNavy:
+        return 'Midnight Navy';
     }
   }
 
   List<Color> get colors {
     switch (this) {
-      case DashboardPaletteType.seaCalm:
-        return const [Color(0xFF0F8F83), Color(0xFF2EC4B6), Color(0xFFFFD166), Color(0xFFEAFBF7), Color(0xFFFFFFFF), Color(0xFF0F766E), Color(0xFF14B8A6), Color(0xFF5EEAD4)];
+      case DashboardPaletteType.forestGlow:
+        return forestGlowTheme.paletteColors;
       case DashboardPaletteType.emeraldGrey:
-        return const [Color(0xFF047857), Color(0xFF10B981), Color(0xFFA7F3D0), Color(0xFFF3F7F5), Color(0xFFFFFFFF), Color(0xFF065F46), Color(0xFF047857), Color(0xFF34D399)];
-      case DashboardPaletteType.springEnergy:
-        return const [Color(0xFF16A34A), Color(0xFF84CC16), Color(0xFFFB923C), Color(0xFFF7FEE7), Color(0xFFFFFFFF), Color(0xFF16A34A), Color(0xFF65A30D), Color(0xFFFACC15)];
-      case DashboardPaletteType.happyPurple:
-        return const [Color(0xFF7C3AED), Color(0xFFA78BFA), Color(0xFFF472B6), Color(0xFFF5F3FF), Color(0xFFFFFFFF), Color(0xFF6D28D9), Color(0xFF8B5CF6), Color(0xFFC084FC)];
+        return const [
+          Color(0xFF047857),
+          Color(0xFF10B981),
+          Color(0xFFA7F3D0),
+          Color(0xFFF3F7F5),
+          Color(0xFFFFFFFF),
+          Color(0xFF065F46),
+          Color(0xFF047857),
+          Color(0xFF34D399)
+        ];
       case DashboardPaletteType.royalFocus:
-        return const [Color(0xFF2563EB), Color(0xFF38BDF8), Color(0xFFF59E0B), Color(0xFFEFF6FF), Color(0xFFFFFFFF), Color(0xFF1D4ED8), Color(0xFF2563EB), Color(0xFF60A5FA)];
+        return const [
+          Color(0xFF2563EB),
+          Color(0xFF38BDF8),
+          Color(0xFFF59E0B),
+          Color(0xFFEFF6FF),
+          Color(0xFFFFFFFF),
+          Color(0xFF1D4ED8),
+          Color(0xFF2563EB),
+          Color(0xFF60A5FA)
+        ];
       case DashboardPaletteType.minimalCream:
-        return const [Color(0xFF92400E), Color(0xFFD97706), Color(0xFFFBBF24), Color(0xFFFFFBEB), Color(0xFFFFFFFF), Color(0xFF92400E), Color(0xFFD97706), Color(0xFFFBBF24)];
-      case DashboardPaletteType.fieryOcean:
-        return fieryOcean.paletteColors;
-      case DashboardPaletteType.refreshingSummerFun:
-        return refreshingSummerFun.paletteColors;
-      case DashboardPaletteType.earthyForestHues:
-        return earthyForestHues.paletteColors;
-      case DashboardPaletteType.oliveGardenFeast:
-        return oliveGardenFeast.paletteColors;
-      case DashboardPaletteType.aquaFocus:
-        return aquaFocus.paletteColors;
-      case DashboardPaletteType.vividNightfall:
-        return vividNightfall.paletteColors;
+        return const [
+          Color(0xFF92400E),
+          Color(0xFFD97706),
+          Color(0xFFFBBF24),
+          Color(0xFFFFFBEB),
+          Color(0xFFFFFFFF),
+          Color(0xFF92400E),
+          Color(0xFFD97706),
+          Color(0xFFFBBF24)
+        ];
       case DashboardPaletteType.midnightNavy:
-        return const [Color(0xFF2563EB), Color(0xFF38BDF8), Color(0xFF22C55E), Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF1E3A8A), Color(0xFF2563EB), Color(0xFF38BDF8)];
+        return const [
+          Color(0xFF2563EB),
+          Color(0xFF38BDF8),
+          Color(0xFF22C55E),
+          Color(0xFF0F172A),
+          Color(0xFF1E293B),
+          Color(0xFF1E3A8A),
+          Color(0xFF2563EB),
+          Color(0xFF38BDF8)
+        ];
       case DashboardPaletteType.sunsetOrange:
-        return const [Color(0xFFEA580C), Color(0xFFFB923C), Color(0xFFFACC15), Color(0xFFFFF7ED), Color(0xFFFFFFFF), Color(0xFFC2410C), Color(0xFFEA580C), Color(0xFFFB923C)];
-      case DashboardPaletteType.oceanBlue:
-        return const [Color(0xFF0284C7), Color(0xFF38BDF8), Color(0xFF7DD3FC), Color(0xFFF0F9FF), Color(0xFFFFFFFF), Color(0xFF0369A1), Color(0xFF0284C7), Color(0xFF38BDF8)];
-      case DashboardPaletteType.roseGold:
-        return const [Color(0xFFDB2777), Color(0xFFF472B6), Color(0xFFFB7185), Color(0xFFFFF1F2), Color(0xFFFFFFFF), Color(0xFFBE185D), Color(0xFFDB2777), Color(0xFFF472B6)];
-      case DashboardPaletteType.forest:
-        return const [Color(0xFF166534), Color(0xFF22C55E), Color(0xFFA3E635), Color(0xFFF0FDF4), Color(0xFFFFFFFF), Color(0xFF14532D), Color(0xFF166534), Color(0xFF22C55E)];
+        return const [
+          Color(0xFFEA580C),
+          Color(0xFFFB923C),
+          Color(0xFFFACC15),
+          Color(0xFFFFF7ED),
+          Color(0xFFFFFFFF),
+          Color(0xFFC2410C),
+          Color(0xFFEA580C),
+          Color(0xFFFB923C)
+        ];
+      case DashboardPaletteType.purpleHaze:
+      case DashboardPaletteType.roseBlush:
+      case DashboardPaletteType.arcticBlue:
+      case DashboardPaletteType.oceanTeal:
+      case DashboardPaletteType.oliveLuxe:
+      case DashboardPaletteType.mochaEarth:
+        return config!.paletteColors;
     }
   }
 
@@ -462,48 +478,59 @@ extension DashboardPaletteTypeX on DashboardPaletteType {
 
   DashboardThemeConfig? get config {
     switch (this) {
-      case DashboardPaletteType.seaCalm:
-        return seaCalmTheme;
       case DashboardPaletteType.emeraldGrey:
         return emeraldGreyTheme;
-      case DashboardPaletteType.springEnergy:
-        return springEnergyTheme;
-      case DashboardPaletteType.happyPurple:
-        return happyPurpleTheme;
       case DashboardPaletteType.royalFocus:
         return royalFocusTheme;
       case DashboardPaletteType.minimalCream:
         return minimalCreamTheme;
-      case DashboardPaletteType.fieryOcean:
-        return fieryOcean;
-      case DashboardPaletteType.refreshingSummerFun:
-        return refreshingSummerFun;
-      case DashboardPaletteType.earthyForestHues:
-        return earthyForestHues;
-      case DashboardPaletteType.oliveGardenFeast:
-        return oliveGardenFeast;
-      case DashboardPaletteType.aquaFocus:
-        return aquaFocus;
-      case DashboardPaletteType.vividNightfall:
-        return vividNightfall;
       case DashboardPaletteType.midnightNavy:
+        return midnightNavyTheme;
       case DashboardPaletteType.sunsetOrange:
-      case DashboardPaletteType.oceanBlue:
-      case DashboardPaletteType.roseGold:
-      case DashboardPaletteType.forest:
-        return null;
+        return sunsetOrangeTheme;
+      case DashboardPaletteType.purpleHaze:
+        return purpleHazeTheme;
+      case DashboardPaletteType.forestGlow:
+        return forestGlowTheme;
+      case DashboardPaletteType.roseBlush:
+        return roseBlushTheme;
+      case DashboardPaletteType.arcticBlue:
+        return arcticBlueTheme;
+      case DashboardPaletteType.oceanTeal:
+        return oceanTealTheme;
+      case DashboardPaletteType.oliveLuxe:
+        return oliveLuxeTheme;
+      case DashboardPaletteType.mochaEarth:
+        return mochaEarthTheme;
     }
   }
 }
 
-
 DashboardPaletteType dashboardPaletteTypeFromStorage(String? value) {
+  const legacyAliases = <String, DashboardPaletteType>{
+    'seaCalm': DashboardPaletteType.oceanTeal,
+    'springEnergy': DashboardPaletteType.forestGlow,
+    'happyPurple': DashboardPaletteType.purpleHaze,
+    'fieryOcean': DashboardPaletteType.royalFocus,
+    'refreshingSummerFun': DashboardPaletteType.royalFocus,
+    'earthyForestHues': DashboardPaletteType.forestGlow,
+    'oliveGardenFeast': DashboardPaletteType.oliveLuxe,
+    'aquaFocus': DashboardPaletteType.royalFocus,
+    'vividNightfall': DashboardPaletteType.purpleHaze,
+    'sunsetFusion': DashboardPaletteType.sunsetOrange,
+    'neonPop': DashboardPaletteType.roseBlush,
+    'oceanBlue': DashboardPaletteType.royalFocus,
+    'roseGold': DashboardPaletteType.roseBlush,
+    'forest': DashboardPaletteType.forestGlow,
+  };
+  final legacyPalette = legacyAliases[value];
+  if (legacyPalette != null) return legacyPalette;
+
   return DashboardPaletteType.values.firstWhere(
     (palette) => palette.storageKey == value,
-    orElse: () => DashboardPaletteType.seaCalm,
+    orElse: () => DashboardPaletteType.forestGlow,
   );
 }
-
 
 class DashboardThemeConfig {
   final String id;
@@ -519,6 +546,11 @@ class DashboardThemeConfig {
   final Color success;
   final Color warning;
   final Color danger;
+  final Color? darkBackground;
+  final Color? darkSurface;
+  final Color? darkElevatedSurface;
+  final Color? darkText;
+  final Color? darkMutedText;
 
   const DashboardThemeConfig({
     required this.id,
@@ -534,52 +566,442 @@ class DashboardThemeConfig {
     required this.success,
     required this.warning,
     required this.danger,
+    this.darkBackground,
+    this.darkSurface,
+    this.darkElevatedSurface,
+    this.darkText,
+    this.darkMutedText,
   });
 
-  List<Color> get paletteColors => [primary, secondary, accent, background, surface, primary, secondary, accent];
+  List<Color> get paletteColors => [
+        primary,
+        secondary,
+        accent,
+        background,
+        surface,
+        primary,
+        secondary,
+        accent,
+      ];
 }
 
-const seaCalmTheme = DashboardThemeConfig(id: 'sea_calm', name: 'Sea Calm', primary: Color(0xFF0F8F83), secondary: Color(0xFF2EC4B6), accent: Color(0xFFFFD166), background: Color(0xFFEAFBF7), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFDDF6F1), text: Color(0xFF0F172A), mutedText: Color(0xFF335C67), success: Color(0xFF22C55E), warning: Color(0xFFF59E0B), danger: Color(0xFFEF4444));
-const emeraldGreyTheme = DashboardThemeConfig(id: 'emerald_grey', name: 'Emerald Grey', primary: Color(0xFF047857), secondary: Color(0xFF10B981), accent: Color(0xFFA7F3D0), background: Color(0xFFF3F7F5), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFE7F4EF), text: Color(0xFF111827), mutedText: Color(0xFF4B5F55), success: Color(0xFF22C55E), warning: Color(0xFFF59E0B), danger: Color(0xFFEF4444));
-const springEnergyTheme = DashboardThemeConfig(id: 'spring_energy', name: 'Spring Energy', primary: Color(0xFF16A34A), secondary: Color(0xFF84CC16), accent: Color(0xFFFB923C), background: Color(0xFFF7FEE7), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFECFCCB), text: Color(0xFF1F2937), mutedText: Color(0xFF4D5F2F), success: Color(0xFF22C55E), warning: Color(0xFFFB923C), danger: Color(0xFFEF4444));
-const happyPurpleTheme = DashboardThemeConfig(id: 'happy_purple', name: 'Happy Purple', primary: Color(0xFF7C3AED), secondary: Color(0xFFA78BFA), accent: Color(0xFFF472B6), background: Color(0xFFF5F3FF), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFEDE9FE), text: Color(0xFF2E1065), mutedText: Color(0xFF5B4B8A), success: Color(0xFF22C55E), warning: Color(0xFFF59E0B), danger: Color(0xFFEF4444));
-const royalFocusTheme = DashboardThemeConfig(id: 'royal_focus', name: 'Royal Focus', primary: Color(0xFF2563EB), secondary: Color(0xFF38BDF8), accent: Color(0xFFF59E0B), background: Color(0xFFEFF6FF), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFDBEAFE), text: Color(0xFF111827), mutedText: Color(0xFF31586A), success: Color(0xFF22C55E), warning: Color(0xFFF59E0B), danger: Color(0xFFEF4444));
-const minimalCreamTheme = DashboardThemeConfig(id: 'minimal_cream', name: 'Minimal Cream', primary: Color(0xFF92400E), secondary: Color(0xFFD97706), accent: Color(0xFFFBBF24), background: Color(0xFFFFFBEB), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFFEF3C7), text: Color(0xFF2D241A), mutedText: Color(0xFF756B5D), success: Color(0xFF22C55E), warning: Color(0xFFD97706), danger: Color(0xFFEF4444));
-const fieryOcean = DashboardThemeConfig(id: 'fiery_ocean', name: 'Fiery Ocean', primary: Color(0xFFC1121F), secondary: Color(0xFF003049), accent: Color(0xFFFDF0D5), background: Color(0xFFFFF7F1), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFFDF0D5), text: Color(0xFF111827), mutedText: Color(0xFF555555), success: Color(0xFF16A34A), warning: Color(0xFFBC6C25), danger: Color(0xFFC1121F));
-const refreshingSummerFun = DashboardThemeConfig(id: 'refreshing_summer_fun', name: 'Refreshing Summer Fun', primary: Color(0xFF219EBC), secondary: Color(0xFF8ECAE6), accent: Color(0xFFFFB703), background: Color(0xFFEAF8FF), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFDDF6FF), text: Color(0xFF023047), mutedText: Color(0xFF31586A), success: Color(0xFF22C55E), warning: Color(0xFFFFB703), danger: Color(0xFFEF4444));
-const earthyForestHues = DashboardThemeConfig(id: 'earthy_forest_hues', name: 'Earthy Forest Hues', primary: Color(0xFF588157), secondary: Color(0xFFA3B18A), accent: Color(0xFF344E41), background: Color(0xFFF4F6EF), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFE9F0E3), text: Color(0xFF1F2937), mutedText: Color(0xFF4B5F55), success: Color(0xFF588157), warning: Color(0xFFDDA15E), danger: Color(0xFFB91C1C));
-const oliveGardenFeast = DashboardThemeConfig(id: 'olive_garden_feast', name: 'Olive Garden Feast', primary: Color(0xFF606C38), secondary: Color(0xFFDDA15E), accent: Color(0xFFBC6C25), background: Color(0xFFFFFCF0), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFFEFAE0), text: Color(0xFF283618), mutedText: Color(0xFF5F5F45), success: Color(0xFF606C38), warning: Color(0xFFDDA15E), danger: Color(0xFFB91C1C));
-const aquaFocus = DashboardThemeConfig(id: 'aqua_focus', name: 'Aqua Focus', primary: Color(0xFF0096C7), secondary: Color(0xFF48CAE4), accent: Color(0xFF023E8A), background: Color(0xFFEAFBFF), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFDDF8FF), text: Color(0xFF03045E), mutedText: Color(0xFF335C67), success: Color(0xFF22C55E), warning: Color(0xFFFFB703), danger: Color(0xFFEF4444));
-const vividNightfall = DashboardThemeConfig(id: 'vivid_nightfall', name: 'Vivid Nightfall', primary: Color(0xFF7B2CBF), secondary: Color(0xFF9D4EDD), accent: Color(0xFF5A189A), background: Color(0xFFF8F0FF), surface: Color(0xFFFFFFFF), cardTint: Color(0xFFF1E4FF), text: Color(0xFF10002B), mutedText: Color(0xFF4C3575), success: Color(0xFF22C55E), warning: Color(0xFFF59E0B), danger: Color(0xFFEF4444));
+const seaCalmTheme = DashboardThemeConfig(
+    id: 'sea_calm',
+    name: 'Sea Calm',
+    primary: Color(0xFF0F8F83),
+    secondary: Color(0xFF2EC4B6),
+    accent: Color(0xFFFFD166),
+    background: Color(0xFFEAFBF7),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFDDF6F1),
+    text: Color(0xFF0F172A),
+    mutedText: Color(0xFF335C67),
+    success: Color(0xFF22C55E),
+    warning: Color(0xFFF59E0B),
+    danger: Color(0xFFEF4444));
+const emeraldGreyTheme = DashboardThemeConfig(
+    id: 'emerald_grey',
+    name: 'Emerald Grey',
+    primary: Color(0xFF047857),
+    secondary: Color(0xFF10B981),
+    accent: Color(0xFFA7F3D0),
+    background: Color(0xFFF3F7F5),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFE7F4EF),
+    text: Color(0xFF111827),
+    mutedText: Color(0xFF4B5F55),
+    success: Color(0xFF22C55E),
+    warning: Color(0xFFF59E0B),
+    danger: Color(0xFFEF4444));
+const springEnergyTheme = DashboardThemeConfig(
+    id: 'spring_energy',
+    name: 'Spring Energy',
+    primary: Color(0xFF16A34A),
+    secondary: Color(0xFF84CC16),
+    accent: Color(0xFFFB923C),
+    background: Color(0xFFF7FEE7),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFECFCCB),
+    text: Color(0xFF1F2937),
+    mutedText: Color(0xFF4D5F2F),
+    success: Color(0xFF22C55E),
+    warning: Color(0xFFFB923C),
+    danger: Color(0xFFEF4444));
+const happyPurpleTheme = DashboardThemeConfig(
+    id: 'happy_purple',
+    name: 'Happy Purple',
+    primary: Color(0xFF7C3AED),
+    secondary: Color(0xFFA78BFA),
+    accent: Color(0xFFF472B6),
+    background: Color(0xFFF5F3FF),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFEDE9FE),
+    text: Color(0xFF2E1065),
+    mutedText: Color(0xFF5B4B8A),
+    success: Color(0xFF22C55E),
+    warning: Color(0xFFF59E0B),
+    danger: Color(0xFFEF4444));
+const royalFocusTheme = DashboardThemeConfig(
+    id: 'royal_focus',
+    name: 'Royal Focus',
+    primary: Color(0xFF2563EB),
+    secondary: Color(0xFF38BDF8),
+    accent: Color(0xFFF59E0B),
+    background: Color(0xFFEFF6FF),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFDBEAFE),
+    text: Color(0xFF111827),
+    mutedText: Color(0xFF31586A),
+    success: Color(0xFF22C55E),
+    warning: Color(0xFFF59E0B),
+    danger: Color(0xFFEF4444));
+const minimalCreamTheme = DashboardThemeConfig(
+    id: 'minimal_cream',
+    name: 'Minimal Cream',
+    primary: Color(0xFF92400E),
+    secondary: Color(0xFFD97706),
+    accent: Color(0xFFFBBF24),
+    background: Color(0xFFFFFBEB),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFFEF3C7),
+    text: Color(0xFF2D241A),
+    mutedText: Color(0xFF756B5D),
+    success: Color(0xFF22C55E),
+    warning: Color(0xFFD97706),
+    danger: Color(0xFFEF4444));
+const fieryOcean = DashboardThemeConfig(
+    id: 'fiery_ocean',
+    name: 'Fiery Ocean',
+    primary: Color(0xFFC1121F),
+    secondary: Color(0xFF003049),
+    accent: Color(0xFFFDF0D5),
+    background: Color(0xFFFFF7F1),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFFDF0D5),
+    text: Color(0xFF111827),
+    mutedText: Color(0xFF555555),
+    success: Color(0xFF16A34A),
+    warning: Color(0xFFBC6C25),
+    danger: Color(0xFFC1121F));
+const refreshingSummerFun = DashboardThemeConfig(
+    id: 'refreshing_summer_fun',
+    name: 'Refreshing Summer Fun',
+    primary: Color(0xFF219EBC),
+    secondary: Color(0xFF8ECAE6),
+    accent: Color(0xFFFFB703),
+    background: Color(0xFFEAF8FF),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFDDF6FF),
+    text: Color(0xFF023047),
+    mutedText: Color(0xFF31586A),
+    success: Color(0xFF22C55E),
+    warning: Color(0xFFFFB703),
+    danger: Color(0xFFEF4444));
+const earthyForestHues = DashboardThemeConfig(
+    id: 'earthy_forest_hues',
+    name: 'Earthy Forest Hues',
+    primary: Color(0xFF588157),
+    secondary: Color(0xFFA3B18A),
+    accent: Color(0xFF344E41),
+    background: Color(0xFFF4F6EF),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFE9F0E3),
+    text: Color(0xFF1F2937),
+    mutedText: Color(0xFF4B5F55),
+    success: Color(0xFF588157),
+    warning: Color(0xFFDDA15E),
+    danger: Color(0xFFB91C1C));
+const oliveGardenFeast = DashboardThemeConfig(
+    id: 'olive_garden_feast',
+    name: 'Olive Garden Feast',
+    primary: Color(0xFF606C38),
+    secondary: Color(0xFFDDA15E),
+    accent: Color(0xFFBC6C25),
+    background: Color(0xFFFFFCF0),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFFEFAE0),
+    text: Color(0xFF283618),
+    mutedText: Color(0xFF5F5F45),
+    success: Color(0xFF606C38),
+    warning: Color(0xFFDDA15E),
+    danger: Color(0xFFB91C1C));
+const aquaFocus = DashboardThemeConfig(
+    id: 'aqua_focus',
+    name: 'Aqua Focus',
+    primary: Color(0xFF0096C7),
+    secondary: Color(0xFF48CAE4),
+    accent: Color(0xFF023E8A),
+    background: Color(0xFFEAFBFF),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFDDF8FF),
+    text: Color(0xFF03045E),
+    mutedText: Color(0xFF335C67),
+    success: Color(0xFF22C55E),
+    warning: Color(0xFFFFB703),
+    danger: Color(0xFFEF4444));
+const vividNightfall = DashboardThemeConfig(
+    id: 'vivid_nightfall',
+    name: 'Vivid Nightfall',
+    primary: Color(0xFF7B2CBF),
+    secondary: Color(0xFF9D4EDD),
+    accent: Color(0xFF5A189A),
+    background: Color(0xFFF8F0FF),
+    surface: Color(0xFFFFFFFF),
+    cardTint: Color(0xFFF1E4FF),
+    text: Color(0xFF10002B),
+    mutedText: Color(0xFF4C3575),
+    success: Color(0xFF22C55E),
+    warning: Color(0xFFF59E0B),
+    danger: Color(0xFFEF4444));
+const purpleHazeTheme = DashboardThemeConfig(
+  id: 'purple_haze',
+  name: 'Purple Haze',
+  primary: Color(0xFF5A3B8C),
+  secondary: Color(0xFF8B7CC7),
+  accent: Color(0xFF7B61B5),
+  background: Color(0xFFF7F5FB),
+  surface: Color(0xFFFFFFFF),
+  cardTint: Color(0xFFECE8F5),
+  text: Color(0xFF201535),
+  mutedText: Color(0xFF5C526D),
+  success: Color(0xFF2E7D5B),
+  warning: Color(0xFFA66300),
+  danger: Color(0xFFB3261E),
+  darkBackground: Color(0xFF0E0B1D),
+  darkSurface: Color(0xFF2A1E4D),
+  darkElevatedSurface: Color(0xFF3A3A52),
+  darkText: Color(0xFFC9C2E3),
+  darkMutedText: Color(0xFFB8AED7),
+);
+const forestGlowTheme = DashboardThemeConfig(
+  id: 'forest_glow',
+  name: 'Forest Glow',
+  primary: Color(0xFF3E5A3F),
+  secondary: Color(0xFF6B7F67),
+  accent: Color(0xFF607D58),
+  background: Color(0xFFF4F6F0),
+  surface: Color(0xFFFFFFFF),
+  cardTint: Color(0xFFE5EBDD),
+  text: Color(0xFF17251C),
+  mutedText: Color(0xFF4B5D4C),
+  success: Color(0xFF2E7D32),
+  warning: Color(0xFF986600),
+  danger: Color(0xFFB3261E),
+  darkBackground: Color(0xFF0F1F17),
+  darkSurface: Color(0xFF1E3A2E),
+  darkElevatedSurface: Color(0xFF3E5A3F),
+  darkText: Color(0xFFC7C8B8),
+  darkMutedText: Color(0xFFAEB9A6),
+);
+const sunsetFusionTheme = DashboardThemeConfig(
+  id: 'sunset_fusion',
+  name: 'Sunset Fusion',
+  primary: Color(0xFF6A5ACD),
+  secondary: Color(0xFFA678B9),
+  accent: Color(0xFFF4A62A),
+  background: Color(0xFFFFF8EE),
+  surface: Color(0xFFFFFFFF),
+  cardTint: Color(0xFFF4E8D9),
+  text: Color(0xFF27213A),
+  mutedText: Color(0xFF5C5265),
+  success: Color(0xFF2E7D5B),
+  warning: Color(0xFF986000),
+  danger: Color(0xFFB3261E),
+  darkBackground: Color(0xFF1A1A1F),
+  darkSurface: Color(0xFF2D2B55),
+  darkElevatedSurface: Color(0xFF6A5ACD),
+  darkText: Color(0xFFF0D9B5),
+  darkMutedText: Color(0xFFD6BBD7),
+);
+const roseBlushTheme = DashboardThemeConfig(
+  id: 'rose_blush',
+  name: 'Rose Blush',
+  primary: Color(0xFF7A2E6F),
+  secondary: Color(0xFFD6598F),
+  accent: Color(0xFFFF6B6B),
+  background: Color(0xFFFFF5F4),
+  surface: Color(0xFFFFFFFF),
+  cardTint: Color(0xFFF8E4E2),
+  text: Color(0xFF32172F),
+  mutedText: Color(0xFF6A4B61),
+  success: Color(0xFF2E7D5B),
+  warning: Color(0xFF986000),
+  danger: Color(0xFFB3261E),
+  darkBackground: Color(0xFF1A0F2E),
+  darkSurface: Color(0xFF3B1B4F),
+  darkElevatedSurface: Color(0xFF7A2E6F),
+  darkText: Color(0xFFF4D7D4),
+  darkMutedText: Color(0xFFE6A6C3),
+);
+const arcticBlueTheme = DashboardThemeConfig(
+  id: 'arctic_blue',
+  name: 'Arctic Blue',
+  primary: Color(0xFF334155),
+  secondary: Color(0xFF64748B),
+  accent: Color(0xFFEC4899),
+  background: Color(0xFFF1F5F9),
+  surface: Color(0xFFFFFFFF),
+  cardTint: Color(0xFFE2E8F0),
+  text: Color(0xFF121212),
+  mutedText: Color(0xFF475569),
+  success: Color(0xFF2E7D5B),
+  warning: Color(0xFF986000),
+  danger: Color(0xFFB3261E),
+  darkBackground: Color(0xFF121212),
+  darkSurface: Color(0xFF1F2937),
+  darkElevatedSurface: Color(0xFF334155),
+  darkText: Color(0xFFF1F5F9),
+  darkMutedText: Color(0xFF64748B),
+);
+const oceanTealTheme = DashboardThemeConfig(
+  id: 'ocean_teal',
+  name: 'Ocean Teal',
+  primary: Color(0xFF2E6F73),
+  secondary: Color(0xFF7FB3B8),
+  accent: Color(0xFFC6601F),
+  background: Color(0xFFF3F8F7),
+  surface: Color(0xFFFFFFFF),
+  cardTint: Color(0xFFE2EFED),
+  text: Color(0xFF142325),
+  mutedText: Color(0xFF426568),
+  success: Color(0xFF2E7D5B),
+  warning: Color(0xFF986000),
+  danger: Color(0xFFB3261E),
+  darkBackground: Color(0xFF0A0F14),
+  darkSurface: Color(0xFF0F3D3E),
+  darkElevatedSurface: Color(0xFF2E6F73),
+  darkText: Color(0xFFEADCC8),
+  darkMutedText: Color(0xFF7FB3B8),
+);
+const neonPopTheme = DashboardThemeConfig(
+  id: 'neon_pop',
+  name: 'Neon Pop',
+  primary: Color(0xFFB42368),
+  secondary: Color(0xFFDB2777),
+  accent: Color(0xFFEC4899),
+  background: Color(0xFFF7F8FC),
+  surface: Color(0xFFFFFFFF),
+  cardTint: Color(0xFFE8EAF0),
+  text: Color(0xFF16151A),
+  mutedText: Color(0xFF52525B),
+  success: Color(0xFF2E7D5B),
+  warning: Color(0xFF986000),
+  danger: Color(0xFFB3261E),
+  darkBackground: Color(0xFF121212),
+  darkSurface: Color(0xFF1F2937),
+  darkElevatedSurface: Color(0xFF334155),
+  darkText: Color(0xFFF1F5F9),
+  darkMutedText: Color(0xFFCBD5E1),
+);
+const oliveLuxeTheme = DashboardThemeConfig(
+  id: 'olive_luxe',
+  name: 'Olive Luxe',
+  primary: Color(0xFF3E5A3F),
+  secondary: Color(0xFF738A70),
+  accent: Color(0xFF9A6A35),
+  background: Color(0xFFF7F4EC),
+  surface: Color(0xFFFFFFFF),
+  cardTint: Color(0xFFECE7D8),
+  text: Color(0xFF1B241B),
+  mutedText: Color(0xFF53604E),
+  success: Color(0xFF2E7D32),
+  warning: Color(0xFF986000),
+  danger: Color(0xFFB3261E),
+  darkBackground: Color(0xFF0B0F0D),
+  darkSurface: Color(0xFF1F2A1F),
+  darkElevatedSurface: Color(0xFF3E5A3F),
+  darkText: Color(0xFFD9C7A3),
+  darkMutedText: Color(0xFFB8C6B2),
+);
+const mochaEarthTheme = DashboardThemeConfig(
+  id: 'mocha_earth',
+  name: 'Mocha Earth',
+  primary: Color(0xFF6B4A2E),
+  secondary: Color(0xFF8B6242),
+  accent: Color(0xFF9A6131),
+  background: Color(0xFFFAF6F1),
+  surface: Color(0xFFFFFFFF),
+  cardTint: Color(0xFFEDE3D8),
+  text: Color(0xFF281B13),
+  mutedText: Color(0xFF5D4A3A),
+  success: Color(0xFF2E7D5B),
+  warning: Color(0xFF986000),
+  danger: Color(0xFFB3261E),
+  darkBackground: Color(0xFF1A120E),
+  darkSurface: Color(0xFF3A2418),
+  darkElevatedSurface: Color(0xFF6B4A2E),
+  darkText: Color(0xFFD5C4AE),
+  darkMutedText: Color(0xFFB89B7C),
+);
+const sunsetOrangeTheme = DashboardThemeConfig(
+  id: 'sunset_orange',
+  name: 'Sunset Orange',
+  primary: Color(0xFFEA580C),
+  secondary: Color(0xFFFB923C),
+  accent: Color(0xFFFACC15),
+  background: Color(0xFFFFF7ED),
+  surface: Color(0xFFFFFFFF),
+  cardTint: Color(0xFFFFEDD5),
+  text: Color(0xFF2D1B10),
+  mutedText: Color(0xFF6D4C41),
+  success: Color(0xFF2E7D5B),
+  warning: Color(0xFF986000),
+  danger: Color(0xFFB3261E),
+  darkBackground: Color(0xFF1F120C),
+  darkSurface: Color(0xFF3A1D12),
+  darkElevatedSurface: Color(0xFF7C2D12),
+  darkText: Color(0xFFFFF7ED),
+  darkMutedText: Color(0xFFFDBA74),
+);
+const midnightNavyTheme = DashboardThemeConfig(
+  id: 'midnight_navy',
+  name: 'Midnight Navy',
+  primary: Color(0xFF2563EB),
+  secondary: Color(0xFF38BDF8),
+  accent: Color(0xFF22C55E),
+  background: Color(0xFF0F172A),
+  surface: Color(0xFF1E293B),
+  cardTint: Color(0xFF27364B),
+  text: Color(0xFFF8FAFC),
+  mutedText: Color(0xFFCBD5E1),
+  success: Color(0xFF22C55E),
+  warning: Color(0xFFF59E0B),
+  danger: Color(0xFFEF4444),
+  darkBackground: Color(0xFF0F172A),
+  darkSurface: Color(0xFF1E293B),
+  darkElevatedSurface: Color(0xFF27364B),
+  darkText: Color(0xFFF8FAFC),
+  darkMutedText: Color(0xFFCBD5E1),
+);
 
 final List<DashboardThemeConfig> dashboardThemes = [
-  seaCalmTheme,
+  forestGlowTheme,
   emeraldGreyTheme,
-  springEnergyTheme,
-  happyPurpleTheme,
+  oceanTealTheme,
   royalFocusTheme,
+  purpleHazeTheme,
+  roseBlushTheme,
+  sunsetOrangeTheme,
   minimalCreamTheme,
-  fieryOcean,
-  refreshingSummerFun,
-  earthyForestHues,
-  oliveGardenFeast,
-  aquaFocus,
-  vividNightfall,
+  arcticBlueTheme,
+  oliveLuxeTheme,
+  mochaEarthTheme,
+  midnightNavyTheme,
 ];
 
 const List<DashboardPaletteType> dashboardThemePickerPalettes = [
-  DashboardPaletteType.seaCalm,
+  DashboardPaletteType.forestGlow,
   DashboardPaletteType.emeraldGrey,
-  DashboardPaletteType.springEnergy,
-  DashboardPaletteType.happyPurple,
+  DashboardPaletteType.oceanTeal,
   DashboardPaletteType.royalFocus,
+  DashboardPaletteType.purpleHaze,
+  DashboardPaletteType.roseBlush,
+  DashboardPaletteType.sunsetOrange,
   DashboardPaletteType.minimalCream,
-  DashboardPaletteType.fieryOcean,
-  DashboardPaletteType.refreshingSummerFun,
-  DashboardPaletteType.earthyForestHues,
-  DashboardPaletteType.oliveGardenFeast,
-  DashboardPaletteType.aquaFocus,
-  DashboardPaletteType.vividNightfall,
+  DashboardPaletteType.arcticBlue,
+  DashboardPaletteType.oliveLuxe,
+  DashboardPaletteType.mochaEarth,
+  DashboardPaletteType.midnightNavy,
 ];
 
 enum DashboardThemeType {
@@ -622,7 +1044,6 @@ extension DashboardThemeTypeX on DashboardThemeType {
         return 'Clean professional dashboard for work';
     }
   }
-
 }
 
 DashboardThemeType dashboardThemeTypeFromStorage(String? value) {
@@ -669,7 +1090,8 @@ class DashboardThemeStyle {
     required this.animated,
   });
 
-  static DashboardThemeStyle of(DashboardThemeType type, {DashboardPaletteType? palette}) {
+  static DashboardThemeStyle of(DashboardThemeType type,
+      {DashboardPaletteType? palette}) {
     if (palette != null) return _fromPalette(type, palette);
     switch (type) {
       case DashboardThemeType.light:
@@ -713,7 +1135,11 @@ class DashboardThemeStyle {
           accent: Color(0xFFFF6A3D),
           textPrimary: Colors.white,
           textMuted: Color(0xFFE7D9FF),
-          heroGradient: [Color(0xFFFF6A3D), Color(0xFF7C3AED), Color(0xFF2563EB)],
+          heroGradient: [
+            Color(0xFFFF6A3D),
+            Color(0xFF7C3AED),
+            Color(0xFF2563EB)
+          ],
           dark: true,
           animated: true,
         );
@@ -750,7 +1176,8 @@ class DashboardThemeStyle {
     }
   }
 
-  static DashboardThemeStyle _fromPalette(DashboardThemeType type, DashboardPaletteType palette) {
+  static DashboardThemeStyle _fromPalette(
+      DashboardThemeType type, DashboardPaletteType palette) {
     final primary = palette.primary;
     final secondary = palette.secondary;
     final accent = palette.accent;
@@ -778,8 +1205,9 @@ class DashboardThemeStyle {
         background: background,
         surface: surface,
         elevatedSurface: elevatedSurface,
-        primary: primary,
-        secondary: secondary,
+        primary: dark ? Color.lerp(primary, Colors.white, 0.50)! : primary,
+        secondary:
+            dark ? Color.lerp(secondary, Colors.white, 0.35)! : secondary,
         accent: accent,
         textPrimary: textPrimary,
         textMuted: textMuted,
@@ -814,7 +1242,9 @@ class DashboardThemeStyle {
       );
     }
 
-    if (type == DashboardThemeType.calm || type == DashboardThemeType.light || type == DashboardThemeType.minimal) {
+    if (type == DashboardThemeType.calm ||
+        type == DashboardThemeType.light ||
+        type == DashboardThemeType.minimal) {
       return DashboardThemeStyle(
         type: type,
         background: base,
@@ -824,14 +1254,16 @@ class DashboardThemeStyle {
         secondary: secondary,
         accent: accent,
         textPrimary: config?.text ?? _readableTextOn(base),
-        textMuted: config?.mutedText ?? Color.lerp(primary, Colors.black54, 0.56)!,
+        textMuted:
+            config?.mutedText ?? Color.lerp(primary, Colors.black54, 0.56)!,
         success: config?.success,
         warning: config?.warning,
         danger: config?.danger,
         cardTint: config?.cardTint,
         heroGradient: paletteHero,
         dark: false,
-        animated: type != DashboardThemeType.calm && type != DashboardThemeType.minimal,
+        animated: type != DashboardThemeType.calm &&
+            type != DashboardThemeType.minimal,
       );
     }
 
@@ -849,21 +1281,29 @@ class DashboardThemeStyle {
         );
       case DashboardThemeType.dark:
         return build(
-          background: _tint(primary, Colors.black, 0.74),
-          surface: _tint(primary, Colors.black, 0.58),
-          elevatedSurface: _tint(secondary, Colors.black, 0.52),
-          textPrimary: Colors.white,
-          textMuted: _tint(accent, Colors.white, 0.38),
-          heroGradient: [_tint(primary, Colors.black, 0.18), _tint(secondary, Colors.black, 0.20), _tint(accent, Colors.black, 0.26)],
+          background:
+              config?.darkBackground ?? _tint(primary, Colors.black, 0.74),
+          surface: config?.darkSurface ?? _tint(primary, Colors.black, 0.58),
+          elevatedSurface: config?.darkElevatedSurface ??
+              _tint(secondary, Colors.black, 0.52),
+          textPrimary: config?.darkText ?? Colors.white,
+          textMuted: config?.darkMutedText ?? _tint(accent, Colors.white, 0.38),
+          heroGradient: [
+            _tint(primary, Colors.black, 0.18),
+            _tint(secondary, Colors.black, 0.20),
+            _tint(accent, Colors.black, 0.26)
+          ],
           dark: true,
         );
       case DashboardThemeType.gamified:
         return build(
-          background: _tint(secondary, Colors.black, 0.68),
-          surface: _tint(secondary, Colors.black, 0.46),
-          elevatedSurface: _tint(accent, Colors.black, 0.34),
-          textPrimary: Colors.white,
-          textMuted: _tint(base, Colors.white, 0.18),
+          background:
+              config?.darkBackground ?? _tint(secondary, Colors.black, 0.68),
+          surface: config?.darkSurface ?? _tint(secondary, Colors.black, 0.46),
+          elevatedSurface:
+              config?.darkElevatedSurface ?? _tint(accent, Colors.black, 0.34),
+          textPrimary: config?.darkText ?? Colors.white,
+          textMuted: config?.darkMutedText ?? _tint(base, Colors.white, 0.18),
           heroGradient: [primary, secondary, accent],
           dark: true,
         );
@@ -875,7 +1315,10 @@ class DashboardThemeStyle {
           elevatedSurface: _tint(accent, const Color(0xFFFFF7EA), 0.60),
           textPrimary: const Color(0xFF2D241A),
           textMuted: Color.lerp(primary, const Color(0xFF756B5D), 0.58)!,
-          heroGradient: [primary, _tint(secondary, const Color(0xFFE89A5B), 0.35)],
+          heroGradient: [
+            primary,
+            _tint(secondary, const Color(0xFFE89A5B), 0.35)
+          ],
           dark: false,
           animated: false,
         );
@@ -886,7 +1329,10 @@ class DashboardThemeStyle {
           elevatedSurface: _tint(accent, const Color(0xFFE5E7EB), 0.74),
           textPrimary: const Color(0xFF111827),
           textMuted: const Color(0xFF6B7280),
-          heroGradient: [_tint(primary, const Color(0xFF4B5563), 0.42), _tint(secondary, const Color(0xFF111827), 0.28)],
+          heroGradient: [
+            _tint(primary, const Color(0xFF4B5563), 0.42),
+            _tint(secondary, const Color(0xFF111827), 0.28)
+          ],
           dark: false,
           animated: false,
         );
@@ -898,12 +1344,11 @@ class DashboardThemeStyle {
   }
 
   static Color _readableTextOn(Color color) {
-    return color.computeLuminance() < 0.45 ? Colors.white : const Color(0xFF14211E);
+    return color.computeLuminance() < 0.45
+        ? Colors.white
+        : const Color(0xFF14211E);
   }
-
 }
-
-
 
 class AppThemeColors extends ThemeExtension<AppThemeColors> {
   final Color background;
@@ -964,15 +1409,20 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     final card = style.cardTint ??
         (style.dark
             ? DashboardThemeStyle._tint(style.surface, style.primary, 0.16)
-            : DashboardThemeStyle._tint(style.elevatedSurface, style.surface, 0.24));
+            : DashboardThemeStyle._tint(
+                style.elevatedSurface, style.surface, 0.24));
     final cardDark = style.dark
         ? DashboardThemeStyle._tint(style.surface, style.primary, 0.26)
         : DashboardThemeStyle._tint(style.primary, style.elevatedSurface, 0.72);
     final selectedBackground = style.primary;
     final chipBackground = style.surface;
-    final success = style.success ?? Color.lerp(style.primary, style.accent, 0.42)!;
-    final warning = style.warning ?? Color.lerp(const Color(0xFFFACC15), style.secondary, style.dark ? 0.22 : 0.08)!;
-    final danger = style.danger ?? Color.lerp(style.secondary, style.primary, 0.22)!;
+    final success =
+        style.success ?? Color.lerp(style.primary, style.accent, 0.42)!;
+    final warning = style.warning ??
+        Color.lerp(const Color(0xFFFACC15), style.secondary,
+            style.dark ? 0.22 : 0.08)!;
+    final danger =
+        style.danger ?? Color.lerp(style.secondary, style.primary, 0.22)!;
     return AppThemeColors(
       background: style.background,
       surface: style.surface,
@@ -980,14 +1430,17 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
       card: card,
       cardDark: cardDark,
       primary: style.primary,
-      primarySoft: Color.lerp(style.surface, style.primary, style.dark ? 0.30 : 0.18)!,
+      primarySoft:
+          Color.lerp(style.surface, style.primary, style.dark ? 0.30 : 0.18)!,
       secondary: style.secondary,
       accent: style.accent,
       success: success,
       warning: warning,
       danger: danger,
-      border: Color.lerp(style.textMuted, style.primary, 0.32)!.withOpacity(style.dark ? 0.38 : 0.26),
-      divider: Color.lerp(style.surface, style.textMuted, style.dark ? 0.30 : 0.18)!,
+      border: Color.lerp(style.textMuted, style.primary, 0.32)!
+          .withOpacity(style.dark ? 0.38 : 0.26),
+      divider:
+          Color.lerp(style.surface, style.textMuted, style.dark ? 0.30 : 0.18)!,
       textPrimary: style.textPrimary,
       textSecondary: style.textMuted,
       textMuted: style.textMuted,
@@ -998,7 +1451,14 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
       chipBackground: chipBackground,
       chipText: readableTextOn(chipBackground, style),
       shadow: style.primary.withOpacity(style.dark ? 0.36 : 0.24),
-      chartColors: [style.primary, style.secondary, style.accent, success, warning, danger],
+      chartColors: [
+        style.primary,
+        style.secondary,
+        style.accent,
+        success,
+        warning,
+        danger
+      ],
     );
   }
 
@@ -1045,7 +1505,9 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
   Color get primaryGlow => primary.withOpacity(0.08);
 
   static Color readableTextOn(Color background, DashboardThemeStyle style) {
-    return background.computeLuminance() < 0.45 ? (style.dark ? style.textPrimary : style.surface) : style.textPrimary;
+    return background.computeLuminance() < 0.45
+        ? (style.dark ? style.textPrimary : style.surface)
+        : style.textPrimary;
   }
 
   @override
@@ -1055,9 +1517,9 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
   AppThemeColors lerp(ThemeExtension<AppThemeColors>? other, double t) => this;
 }
 
-
-
 extension DashboardThemeContext on BuildContext {
-  AppThemeColors get dashboardTheme => Theme.of(this).extension<AppThemeColors>() ??
-      AppThemeColors.fromDashboardStyle(DashboardThemeStyle.of(DashboardThemeType.light));
+  AppThemeColors get dashboardTheme =>
+      Theme.of(this).extension<AppThemeColors>() ??
+      AppThemeColors.fromDashboardStyle(
+          DashboardThemeStyle.of(DashboardThemeType.light));
 }

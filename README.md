@@ -154,6 +154,7 @@ lib/
 
 - [Complete Task Management Guide](docs/COMPLETE_TASK_MANAGEMENT_GUIDE.md)
 - [Production Architecture Roadmap](docs/PRODUCTION_ARCHITECTURE.md)
+- [Dashboard theme palettes and color codes](docs/THEME_PALETTES.md)
 
 ---
 
@@ -168,6 +169,19 @@ flutter run
 
 ---
 
+## 🎨 Dashboard color palettes
+
+The theme picker includes 12 color palettes, each with documented primary,
+secondary, accent, surface, text, and status colors. Nine palettes also define
+explicit dark-mode colors; the other three derive dark surfaces at runtime.
+See the [complete palette and hex-color reference](docs/THEME_PALETTES.md).
+
+The Today dashboard also displays the approved scenic wallpaper for the
+selected palette. The existing saved palette controls the image; see the
+[palette reference](docs/THEME_PALETTES.md) for the exact wallpaper mapping and
+the note about labels and color swatches present in the supplied images.
+
+---
 
 ## 🔄 Working Sync Starter
 

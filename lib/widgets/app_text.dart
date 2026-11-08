@@ -3,12 +3,7 @@ import 'package:flutter/material.dart';
 import '../utils/text_formatters.dart';
 
 double responsiveFont(BuildContext context, double base) {
-  final width = MediaQuery.of(context).size.width;
-  if (width < 360) return base * 0.82;
-  if (width < 430) return base * 0.90;
-  if (width < 600) return base;
-  if (width < 900) return base * 1.08;
-  return base * 1.16;
+  return base < 14 ? 14 : base;
 }
 
 class AppText extends StatelessWidget {

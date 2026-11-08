@@ -1,0 +1,13 @@
+---
+description: Documentation structure and evidence discipline.
+globs:
+  - "docs/**/*.md"
+  - "README.md"
+alwaysApply: false
+---
+
+# Documentation
+- Keep root `README.md`; other project Markdown belongs in `docs/`.
+- Consult only relevant references: `details.md` (evidence), `PRD.md` (scope), `design.md` (contracts), `architecture.md` (boundaries), `phases.md` (sequence), and `OFFLINE_VOICE.md` (voice).
+- Distinguish implemented, verified, planned, blocked, and historical behavior; plans are not proof.
+- Update only docs affected by approved code/behavior/config changes. Documentation-only requests do not authorize source edits.

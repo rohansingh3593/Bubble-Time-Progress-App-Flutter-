@@ -68,15 +68,102 @@ flutter pub get
 # flutter analyze   # Flutter SDK is not installed in this environment (flutter: command not found).
 # flutter test      # Flutter SDK is not installed in this environment (flutter: command not found).
 
+
+
 Write-Host ""
 Write-Host "====================================="
 Write-Host "Environment setup completed."
 Write-Host "====================================="
 Write-Host "Application Running"
+
+flutter test
+
+Write-Host ""
+Write-Host "====================================="
+Write-Host "Testing completed."
+Write-Host "====================================="
+Write-Host "Application Running"
+
+
 flutter config --enable-windows-desktop
 flutter config --enable-web
 flutter create .
 flutter run -d windows
+
+function Get-FirstFlutterEmulatorId {
+    param([string[]]$Output)
+
+    foreach ($line in $Output) {
+        if ($line -match '^\s*(\S+)\s+•' -and $Matches[1] -ne 'Id') {
+            return $Matches[1]
+        }
+    }
+
+    return $null
+}
+
+$emulatorId = $env:ANDROID_EMULATOR_ID
+if ([string]::IsNullOrWhiteSpace($emulatorId)) {
+    $emulatorOutput = flutter emulators
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not list Flutter emulators."
+    }
+
+    $emulatorId = Get-FirstFlutterEmulatorId -Output $emulatorOutput
+}
+
+if ([string]::IsNullOrWhiteSpace($emulatorId)) {
+    Write-Host "No Android emulator is configured. Creating a Pixel emulator..."
+    flutter emulators --create --name BubbleTimeAndroid
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not create an Android emulator. Install Android Studio and its Android SDK, or set ANDROID_EMULATOR_ID to an existing emulator."
+    }
+
+    $emulatorOutput = flutter emulators
+    if ($LASTEXITCODE -ne 0) {
+        throw "Android emulator creation completed, but Flutter could not list emulators."
+    }
+
+    $emulatorId = Get-FirstFlutterEmulatorId -Output $emulatorOutput
+}
+
+if ([string]::IsNullOrWhiteSpace($emulatorId)) {
+    throw "No Android emulator is available. Create one in Android Studio, or set ANDROID_EMULATOR_ID to an existing emulator."
+}
+
+Write-Host "Launching Android emulator '$emulatorId'."
+flutter emulators --launch $emulatorId
+if ($LASTEXITCODE -ne 0) {
+    throw "Flutter could not launch Android emulator '$emulatorId'."
+}
+
+$androidDeviceId = $null
+$emulatorTimeout = (Get-Date).AddMinutes(3)
+while ((Get-Date) -lt $emulatorTimeout) {
+    Start-Sleep -Seconds 5
+    $devicesOutput = flutter devices --machine | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not check whether the Android emulator is ready."
+    }
+
+    $androidDevice = @($devicesOutput | ConvertFrom-Json) |
+        Where-Object {
+            $_.targetPlatform -like 'android-*' -and $_.emulator -eq $true
+        } |
+        Select-Object -First 1
+    if ($null -ne $androidDevice) {
+        $androidDeviceId = $androidDevice.id
+        break
+    }
+    Write-Host "Waiting for Android emulator to become ready..."
+}
+
+if ([string]::IsNullOrWhiteSpace($androidDeviceId)) {
+    throw "Android emulator '$emulatorId' did not become available within 3 minutes."
+}
+
+Write-Host "Running the app on Android device '$androidDeviceId'."
+flutter run -d $androidDeviceId
 
 # Default build for easy installation with Play Protect
 # flutter build apk --release --flavor safe

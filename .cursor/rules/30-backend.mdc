@@ -1,0 +1,17 @@
+---
+description: Optional FastAPI/MongoDB backend and sync boundaries.
+globs:
+  - "backend/**"
+  - "lib/services/**/*api*.dart"
+  - "lib/services/**/*sync*.dart"
+  - "**/*api_test.ps1"
+alwaysApply: false
+---
+
+# Backend and sync
+- Backend sync is optional; local storage is the default. Keep existing service boundaries: REST persists cloud state, WebSockets signal changes, and clients never connect to MongoDB directly.
+- Sync and AI enablement are independent. Verify current opt-in flags before changes.
+- `X-User-Id`, profile data, and socket `user_id` are not authentication. Don't expose sync publicly without verified auth, ownership/authorization, and tests.
+- Validate payloads; never silently replace malformed remote dates with today. Don't log user content, credentials, tokens, or connection URIs.
+- Check `backend/requirements.txt` before adding dependencies. Keep backend layout small; justify new technologies.
+- `api_test.ps1` writes data and starts a server: use only an isolated test database, never personal/production data.

@@ -1,0 +1,20 @@
+---
+description: Hive schema, migration, and task compatibility.
+globs:
+  - "lib/models/**/*.dart"
+  - "lib/services/**/*hive*.dart"
+  - "lib/services/**/*task*.dart"
+  - "lib/utils/task_time_utils.dart"
+  - "test/**/*hive*.dart"
+  - "test/**/*migration*.dart"
+  - "test/**/*task*.dart"
+alwaysApply: false
+---
+
+# Hive and tasks
+- `tasksBox` is `Box<List>`; date keys share it with reserved metadata. Exclude metadata from task iteration. Never clear user storage to fix migrations.
+- Preserve `Task` typeId 0/indices 0–18 (fields 0–15 are legacy) and `TaskStep` typeId 1/indices 0–8. Append fields compatibly with defaults; regenerate generated adapters only for an authorized model change and review output.
+- Confirm contracts in `docs/design.md` and `docs/details.md` before identity, migration, or duration changes. Preserve legacy descriptions (including phase/schedule encoding); don't incidentally restructure them.
+- Identity must be immutable, not derived from title/order. Preserve legacy records, recurring-series identity, and reward formulas. Cover duplicates, reorder/completion, date boundaries, and restart/recovery where relevant.
+- Keep null legacy steps distinct from an explicit empty list. Validate new AI estimates; don't disguise invalid input with legacy defaults. Default legacy null/zero duration only as the shared helper specifies; reject invalid new values.
+- Use isolated temporary Hive storage in tests. Verify adapter round trips, migration/retry, and restart behavior when relevant.
