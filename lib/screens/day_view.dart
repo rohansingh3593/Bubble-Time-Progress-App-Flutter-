@@ -1,13 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'voice_tasks_screen.dart';
 import '../widgets/quick_add_task_dialog.dart';
+import '../widgets/task_row.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/period_progress_bubble_map.dart';
 import '../services/hive_service.dart';
 import '../models/journal_entry.dart';
 import '../models/task_model.dart';
-import '../constants/colors.dart';
 import '../constants/dashboard_themes.dart';
 import '../utils/task_time_utils.dart';
 import 'journal_view.dart';
@@ -15,8 +16,16 @@ import '../utils/text_formatters.dart';
 
 class DayView extends StatefulWidget {
   final HiveService hiveService;
+  final DateTime? initialDate;
+  final ValueChanged<DateTime>? onDateChanged;
+  final bool showPeriodControls;
 
-  const DayView({super.key, required this.hiveService});
+  const DayView(
+      {super.key,
+      required this.hiveService,
+      this.initialDate,
+      this.onDateChanged,
+      this.showPeriodControls = true});
 
   @override
   State<DayView> createState() => _DayViewState();
@@ -31,16 +40,46 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
 
   static const int _scheduleSnapMinutes = 15;
   static const int _defaultScheduledDurationMinutes = 15;
-  static const List<int> _scheduleDurationSteps = [15, 30, 45, 60, 75, 90, 105, 120];
+  static const List<int> _scheduleDurationSteps = [
+    15,
+    30,
+    45,
+    60,
+    75,
+    90,
+    105,
+    120
+  ];
+
+  @override
+  void didUpdateWidget(covariant DayView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialDate != null &&
+        widget.initialDate != oldWidget.initialDate) {
+      _currentDay = widget.initialDate!;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _currentDay = DateTime.now();
-    _schedulePulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..repeat(reverse: true);
+    _currentDay = widget.initialDate ?? DateTime.now();
+    _schedulePulseController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1800));
     _scheduleClockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() => _scheduleNow = DateTime.now());
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _schedulePulseController.stop();
+      _schedulePulseController.value = 0;
+    } else if (!_schedulePulseController.isAnimating) {
+      _schedulePulseController.repeat(reverse: true);
+    }
   }
 
   @override
@@ -59,7 +98,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
 
   void _openJournalForTask(Task task) {
     Navigator.of(context).push(
-      JournalView.route(hiveService: widget.hiveService, initialDate: task.dueDate),
+      JournalView.route(
+          hiveService: widget.hiveService, initialDate: task.dueDate),
     );
   }
 
@@ -70,8 +110,10 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   }
 
   Future<void> _editTask(Task task, {int? index}) async {
-    if (isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task)) {
-      final action = await showRoutineOccurrenceDialog(context: context, task: task, hiveService: widget.hiveService);
+    if (isRoutineTask(task) ||
+        hasTaskLinkedInstructions(widget.hiveService, task)) {
+      final action = await showRoutineOccurrenceDialog(
+          context: context, task: task, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {
@@ -79,23 +121,21 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
           _openJournalForTask(task);
           return;
         case RoutineOccurrenceAction.disableRoutine:
-          await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
+          await widget.hiveService
+              .setRecurringTaskEnabledByReference(task, false);
           return;
         case RoutineOccurrenceAction.editDetails:
-          final edited = await showTaskFormDialog(
+          await showTaskFormDialog(
             context,
             date: task.dueDate,
             initialTask: task,
-            title: isRoutineTask(task) ? 'Edit Routine Details' : 'View Task Details',
+            title: isRoutineTask(task)
+                ? 'Edit Routine Details'
+                : 'View Task Details',
             actionLabel: isRoutineTask(task) ? 'Save Routine' : 'Save Task',
+            onSave: (edited) =>
+                widget.hiveService.saveTaskChanges(task, edited),
           );
-          if (edited != null) {
-            if (isRoutineTask(task)) {
-              await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
-            } else {
-              await widget.hiveService.updateTaskByReference(task, edited);
-            }
-          }
           return;
         case RoutineOccurrenceAction.missOccurrence:
           final updated = task.copyWith(done: false, status: 'Missed');
@@ -110,31 +150,23 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
       }
     }
 
-    final updated = await showTaskFormDialog(
+    await showTaskFormDialog(
       context,
       date: _currentDay,
       initialTask: task,
       title: 'Update Task',
       actionLabel: 'Save Task',
+      onSave: (updated) => widget.hiveService.saveTaskChanges(task, updated),
+      onRestore: () => widget.hiveService.addTask(task.dueDate, task),
       onDelete: () async {
-        if (index != null) {
-          await widget.hiveService.deleteTask(_currentDay, index);
-        } else {
-          await widget.hiveService.deleteTaskByReference(task);
-        }
+        await widget.hiveService.deleteTaskByReference(task);
       },
     );
-
-    if (updated == null) return;
-    if (index != null) {
-      await widget.hiveService.updateTask(_currentDay, index, updated);
-    } else {
-      await widget.hiveService.updateTaskByReference(task, updated);
-    }
   }
 
   Map<String, double> _calculateMatrix(List<Task> tasks) {
-    final visibleTasks = tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
+    final visibleTasks =
+        tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
     int bothMinutes = 0;
     int importantOnlyMinutes = 0;
     int urgentOnlyMinutes = 0;
@@ -154,7 +186,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
       }
     }
 
-    final totalMinutes = bothMinutes + importantOnlyMinutes + urgentOnlyMinutes + neitherMinutes;
+    final totalMinutes =
+        bothMinutes + importantOnlyMinutes + urgentOnlyMinutes + neitherMinutes;
     final totalHours = totalMinutes / 60;
     final bothHours = bothMinutes / 60;
     final importantOnlyHours = importantOnlyMinutes / 60;
@@ -164,10 +197,12 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     final importantOnlyPoints = importantOnlyHours * 80;
     final urgentOnlyPoints = urgentOnlyHours * 50;
     final neitherPoints = neitherHours * 10;
-    final totalPoints = bothPoints + importantOnlyPoints + urgentOnlyPoints + neitherPoints;
+    final totalPoints =
+        bothPoints + importantOnlyPoints + urgentOnlyPoints + neitherPoints;
     final productivityScore = (totalPoints / 1600) * 100;
 
-    double percentage(int minutes) => totalMinutes == 0 ? 0 : minutes / totalMinutes * 100;
+    double percentage(int minutes) =>
+        totalMinutes == 0 ? 0 : minutes / totalMinutes * 100;
 
     return {
       'ui': percentage(bothMinutes),
@@ -200,9 +235,11 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     return 'Poor ❌';
   }
 
-  DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+  DateTime _dateOnly(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
 
-  bool _sameDate(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+  bool _sameDate(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   String _taskOccurrenceKey(Task task) {
     return '${task.task.trim().toLowerCase()}|${task.category.trim().toLowerCase()}|${task.repeatFrequency?.trim().toLowerCase() ?? ''}';
@@ -229,7 +266,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   List<Task> _tasksForCurrentDay() {
     final selectedDay = _dateOnly(_currentDay);
     final tasks = widget.hiveService.getTasksForDate(selectedDay).toList();
-    final existingKeys = tasks.where((task) => task.repeatTask).map(_taskOccurrenceKey).toSet();
+    final existingKeys =
+        tasks.where((task) => task.repeatTask).map(_taskOccurrenceKey).toSet();
     final routineTemplates = widget.hiveService
         .getAllTasksByDate()
         .values
@@ -243,7 +281,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
       tasks.add(template.copyWith(
         done: false,
         status: 'Not Updated',
-        dueDate: DateTime(selectedDay.year, selectedDay.month, selectedDay.day, template.dueDate.hour, template.dueDate.minute),
+        dueDate: DateTime(selectedDay.year, selectedDay.month, selectedDay.day,
+            template.dueDate.hour, template.dueDate.minute),
       ));
     }
     return tasks;
@@ -256,12 +295,22 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget _dayHourProgressMap(DashboardThemeStyle theme, DateTime now, bool isToday, bool isPastDay) {
+  Widget _dayHourProgressMap(
+      DashboardThemeStyle theme, DateTime now, bool isToday, bool isPastDay) {
     final todayStart = DateTime(now.year, now.month, now.day);
-    final selectedDayStart = DateTime(_currentDay.year, _currentDay.month, _currentDay.day);
+    final selectedDayStart =
+        DateTime(_currentDay.year, _currentDay.month, _currentDay.day);
     final isFutureDay = selectedDayStart.isAfter(todayStart);
-    final passedHours = isPastDay ? 24 : isFutureDay ? 0 : now.hour.clamp(0, 24).toInt();
-    final remainingHours = isPastDay ? 0 : isFutureDay ? 24 : (24 - passedHours - 1).clamp(0, 24).toInt();
+    final passedHours = isPastDay
+        ? 24
+        : isFutureDay
+            ? 0
+            : now.hour.clamp(0, 24).toInt();
+    final remainingHours = isPastDay
+        ? 0
+        : isFutureDay
+            ? 24
+            : (24 - passedHours - 1).clamp(0, 24).toInt();
     return PeriodProgressBubbleMap(
       theme: theme,
       title: 'Day Hour Progress',
@@ -282,24 +331,34 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
 
   List<_DayScheduleEntry> _buildDayScheduleEntries(List<Task> tasks) {
     final taskEntries = <_DayScheduleEntry>[];
-    for (final task in tasks.where((task) => !task.repeatTask || task.routineEnabled)) {
+    for (final task
+        in tasks.where((task) => !task.repeatTask || task.routineEnabled)) {
       final range = _scheduleRangeForTask(task);
       if (range == null) continue;
-      taskEntries.add(_DayScheduleEntry(startMinutes: range.start, endMinutes: range.end, task: task));
+      taskEntries.add(_DayScheduleEntry(
+          startMinutes: range.start, endMinutes: range.end, task: task));
     }
     taskEntries.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
 
     final entries = <_DayScheduleEntry>[];
     var cursor = 8 * 60;
-    final dayEnd = taskEntries.isEmpty ? 18 * 60 : taskEntries.map((entry) => entry.endMinutes).reduce((a, b) => a > b ? a : b).clamp(18 * 60, 24 * 60).toInt();
+    final dayEnd = taskEntries.isEmpty
+        ? 18 * 60
+        : taskEntries
+            .map((entry) => entry.endMinutes)
+            .reduce((a, b) => a > b ? a : b)
+            .clamp(18 * 60, 24 * 60)
+            .toInt();
     for (final entry in taskEntries) {
       if (entry.startMinutes > cursor) {
-        entries.add(_DayScheduleEntry(startMinutes: cursor, endMinutes: entry.startMinutes));
+        entries.add(_DayScheduleEntry(
+            startMinutes: cursor, endMinutes: entry.startMinutes));
       }
       entries.add(entry);
       if (entry.endMinutes > cursor) cursor = entry.endMinutes;
     }
-    if (cursor < dayEnd) entries.add(_DayScheduleEntry(startMinutes: cursor, endMinutes: dayEnd));
+    if (cursor < dayEnd)
+      entries.add(_DayScheduleEntry(startMinutes: cursor, endMinutes: dayEnd));
     return entries;
   }
 
@@ -309,7 +368,11 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
 
   bool _isSchedulablePendingTask(Task task) {
     final status = task.status.trim().toLowerCase();
-    return !task.done && status != 'completed' && status != 'missed' && status != 'cancelled' && (!task.repeatTask || task.routineEnabled);
+    return !task.done &&
+        status != 'completed' &&
+        status != 'missed' &&
+        status != 'cancelled' &&
+        (!task.repeatTask || task.routineEnabled);
   }
 
   bool _hasScheduleRange(Task task) => _scheduleRangeForTask(task) != null;
@@ -320,9 +383,11 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     for (final line in description.split('\n')) {
       final trimmed = line.trim();
       if (trimmed.startsWith('⏰ Schedule Start:')) {
-        start = _parseScheduleMinutes(trimmed.substring('⏰ Schedule Start:'.length).trim());
+        start = _parseScheduleMinutes(
+            trimmed.substring('⏰ Schedule Start:'.length).trim());
       } else if (trimmed.startsWith('⏰ Schedule End:')) {
-        end = _parseScheduleMinutes(trimmed.substring('⏰ Schedule End:'.length).trim());
+        end = _parseScheduleMinutes(
+            trimmed.substring('⏰ Schedule End:'.length).trim());
       }
     }
     if (start == null || end == null) return null;
@@ -330,7 +395,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     return _DayScheduleRange(start: start, end: end);
   }
 
-  String _mergeScheduleIntoDescription(String description, int startMinutes, int endMinutes) {
+  String _mergeScheduleIntoDescription(
+      String description, int startMinutes, int endMinutes) {
     final cleaned = description
         .split('\n')
         .where((line) {
@@ -360,31 +426,73 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     return (minutes / _scheduleSnapMinutes).round() * _scheduleSnapMinutes;
   }
 
-  Future<void> _saveScheduledTask(Task task, int startMinutes, int endMinutes) async {
-    final snappedStart = _snapMinutes(startMinutes).clamp(0, 24 * 60 - _scheduleSnapMinutes).toInt();
-    final snappedEnd = _snapMinutes(endMinutes).clamp(snappedStart + _scheduleSnapMinutes, 24 * 60).toInt();
+  Future<void> _saveScheduledTask(
+      Task task, int startMinutes, int endMinutes) async {
+    final snappedStart = _snapMinutes(startMinutes)
+        .clamp(0, 24 * 60 - _scheduleSnapMinutes)
+        .toInt();
+    final snappedEnd = _snapMinutes(endMinutes)
+        .clamp(snappedStart + _scheduleSnapMinutes, 24 * 60)
+        .toInt();
     final selectedDay = _dateOnly(_currentDay);
     final updated = task.copyWith(
-      dueDate: DateTime(selectedDay.year, selectedDay.month, selectedDay.day, snappedStart ~/ 60, snappedStart % 60),
+      dueDate: DateTime(selectedDay.year, selectedDay.month, selectedDay.day,
+          snappedStart ~/ 60, snappedStart % 60),
       estimatedMinutes: snappedEnd - snappedStart,
-      description: _mergeScheduleIntoDescription(task.description, snappedStart, snappedEnd),
+      description: _mergeScheduleIntoDescription(
+          task.description, snappedStart, snappedEnd),
     );
     if (task.repeatTask) {
-      await widget.hiveService.updateRecurringTaskSeriesByReference(task, updated.copyWith(repeatTask: true));
+      await widget.hiveService.updateRecurringTaskSeriesByReference(
+          task, updated.copyWith(repeatTask: true));
     } else {
       await widget.hiveService.updateTaskByReference(task, updated);
     }
   }
 
   Future<void> _scheduleTaskAt(Task task, int startMinutes) {
-    final duration = task.estimatedMinutes > 0 ? task.estimatedMinutes : _defaultScheduledDurationMinutes;
-    return _saveScheduledTask(task, startMinutes, (startMinutes + duration).clamp(startMinutes + _scheduleSnapMinutes, 24 * 60).toInt());
+    final duration = task.estimatedMinutes > 0
+        ? task.estimatedMinutes
+        : _defaultScheduledDurationMinutes;
+    return _saveScheduledTask(
+        task,
+        startMinutes,
+        (startMinutes + duration)
+            .clamp(startMinutes + _scheduleSnapMinutes, 24 * 60)
+            .toInt());
   }
 
   Future<void> _resizeScheduledTask(Task task, int newDuration) {
     final range = _scheduleRangeForTask(task);
     if (range == null) return Future.value();
-    return _saveScheduledTask(task, range.start, (range.start + newDuration).clamp(range.start + _scheduleSnapMinutes, 24 * 60).toInt());
+    return _saveScheduledTask(
+        task,
+        range.start,
+        (range.start + newDuration)
+            .clamp(range.start + _scheduleSnapMinutes, 24 * 60)
+            .toInt());
+  }
+
+  Future<void> _editScheduledStart(Task task, int currentStart) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime:
+          TimeOfDay(hour: currentStart ~/ 60, minute: currentStart % 60),
+    );
+    if (picked == null) return;
+
+    final start = picked.hour * 60 + picked.minute;
+    final currentRange = _scheduleRangeForTask(task);
+    final duration = currentRange == null
+        ? (task.estimatedMinutes > 0
+            ? task.estimatedMinutes
+            : _defaultScheduledDurationMinutes)
+        : currentRange.end - currentRange.start;
+    await _saveScheduledTask(
+      task,
+      start,
+      (start + duration).clamp(start + _scheduleSnapMinutes, 24 * 60).toInt(),
+    );
   }
 
   Future<void> _returnTaskToPending(Task task) async {
@@ -405,7 +513,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
       dueDate: DateTime(selectedDay.year, selectedDay.month, selectedDay.day),
     );
     if (task.repeatTask) {
-      await widget.hiveService.updateRecurringTaskSeriesByReference(task, updated.copyWith(repeatTask: true));
+      await widget.hiveService.updateRecurringTaskSeriesByReference(
+          task, updated.copyWith(repeatTask: true));
     } else {
       await widget.hiveService.updateTaskByReference(task, updated);
     }
@@ -416,7 +525,12 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     if (parts.length != 2) return null;
     final hour = int.tryParse(parts[0]);
     final minute = int.tryParse(parts[1]);
-    if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    if (hour == null ||
+        minute == null ||
+        hour < 0 ||
+        hour > 23 ||
+        minute < 0 ||
+        minute > 59) return null;
     return hour * 60 + minute;
   }
 
@@ -426,7 +540,9 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     final minute = normalized % 60;
     final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
     final period = hour >= 12 ? 'PM' : 'AM';
-    return minute == 0 ? '$displayHour $period' : '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+    return minute == 0
+        ? '$displayHour $period'
+        : '$displayHour:${minute.toString().padLeft(2, '0')} $period';
   }
 
   _DayScheduleStatus _scheduleStatusFor(Task task, _DayScheduleEntry entry) {
@@ -438,12 +554,14 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     if (selectedDay.isBefore(today)) return _DayScheduleStatus.overdue;
     if (selectedDay.isAfter(today)) return _DayScheduleStatus.upcoming;
     final nowMinutes = _scheduleNow.hour * 60 + _scheduleNow.minute;
-    if (nowMinutes >= entry.startMinutes && nowMinutes < entry.endMinutes) return _DayScheduleStatus.active;
+    if (nowMinutes >= entry.startMinutes && nowMinutes < entry.endMinutes)
+      return _DayScheduleStatus.active;
     if (nowMinutes >= entry.endMinutes) return _DayScheduleStatus.overdue;
     return _DayScheduleStatus.upcoming;
   }
 
-  Color _scheduleStatusColor(_DayScheduleStatus status, DashboardThemeStyle theme) {
+  Color _scheduleStatusColor(
+      _DayScheduleStatus status, DashboardThemeStyle theme) {
     final appTheme = AppThemeColors.fromDashboardStyle(theme);
     switch (status) {
       case _DayScheduleStatus.completed:
@@ -473,20 +591,24 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     }
   }
 
-  List<_PositionedDayScheduleEntry> _positionOverlappingEntries(List<_DayScheduleEntry> entries) {
+  List<_PositionedDayScheduleEntry> _positionOverlappingEntries(
+      List<_DayScheduleEntry> entries) {
     final positioned = <_PositionedDayScheduleEntry>[];
     for (var i = 0; i < entries.length; i++) {
       final entry = entries[i];
       final overlappingIndexes = <int>[];
       for (var j = 0; j < entries.length; j++) {
         final other = entries[j];
-        if (entry.startMinutes < other.endMinutes && other.startMinutes < entry.endMinutes) {
+        if (entry.startMinutes < other.endMinutes &&
+            other.startMinutes < entry.endMinutes) {
           overlappingIndexes.add(j);
         }
       }
       final columnCount = overlappingIndexes.length.clamp(1, 4).toInt();
-      final column = overlappingIndexes.indexOf(i).clamp(0, columnCount - 1).toInt();
-      positioned.add(_PositionedDayScheduleEntry(entry: entry, column: column, columnCount: columnCount));
+      final column =
+          overlappingIndexes.indexOf(i).clamp(0, columnCount - 1).toInt();
+      positioned.add(_PositionedDayScheduleEntry(
+          entry: entry, column: column, columnCount: columnCount));
     }
     return positioned;
   }
@@ -495,29 +617,51 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
-    final isToday = _currentDay.year == now.year && _currentDay.month == now.month && _currentDay.day == now.day;
+    final isToday = _currentDay.year == now.year &&
+        _currentDay.month == now.month &&
+        _currentDay.day == now.day;
     final isPastDay = _currentDay.isBefore(todayStart);
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.chevron_left),
-              onPressed: () {
-                setState(() => _currentDay = _currentDay.subtract(const Duration(days: 1)));
-              },
-            ),
-            Text('${_currentDay.month}/${_currentDay.day}/${_currentDay.year}'),
-            IconButton(
-              icon: const Icon(Icons.chevron_right),
-              onPressed: () {
-                setState(() => _currentDay = _currentDay.add(const Duration(days: 1)));
-              },
-            ),
-          ],
-        ),
+        actions: [
+          IconButton(
+              tooltip: 'Add by voice',
+              icon: const Icon(Icons.mic),
+              onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                      builder: (_) =>
+                          VoiceTasksScreen(hiveService: widget.hiveService))))
+        ],
+        title: widget.showPeriodControls
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Previous day',
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: () {
+                      setState(() => _currentDay =
+                          _currentDay.subtract(const Duration(days: 1)));
+                      widget.onDateChanged?.call(_currentDay);
+                    },
+                  ),
+                  Expanded(
+                      child: Text(
+                          '${_currentDay.day}/${_currentDay.month}/${_currentDay.year}',
+                          textAlign: TextAlign.center)),
+                  IconButton(
+                    tooltip: 'Next day',
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: () {
+                      setState(() => _currentDay =
+                          _currentDay.add(const Duration(days: 1)));
+                      widget.onDateChanged?.call(_currentDay);
+                    },
+                  ),
+                ],
+              )
+            : const Text('Day'),
       ),
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
@@ -525,19 +669,25 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
           final todayTasks = _tasksForCurrentDay();
           final matrix = _calculateMatrix(todayTasks);
           final selectedDashboardTheme = _selectedDashboardTheme();
-          final journalEntry = widget.hiveService.getJournalEntryForDate(_currentDay);
+          final journalEntry =
+              widget.hiveService.getJournalEntryForDate(_currentDay);
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 110),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
             child: Column(
               children: [
-                _dayHourProgressMap(selectedDashboardTheme, now, isToday, isPastDay),
-                const SizedBox(height: 10),
-                _metricsPanel(matrix),
-                const SizedBox(height: 10),
-                _todaySchedulePanel(todayTasks, selectedDashboardTheme),
-                const SizedBox(height: 10),
                 _todayTasksPanel(todayTasks, selectedDashboardTheme),
+                const SizedBox(height: 10),
+                ExpansionTile(title: const Text('Schedule'), children: [
+                  _todaySchedulePanel(todayTasks, selectedDashboardTheme)
+                ]),
+                ExpansionTile(
+                    title: const Text('Time overview and metrics'),
+                    children: [
+                      _dayHourProgressMap(
+                          selectedDashboardTheme, now, isToday, isPastDay),
+                      _metricsPanel(matrix, selectedDashboardTheme),
+                    ]),
                 const SizedBox(height: 10),
                 _journalReflectionPanel(selectedDashboardTheme, journalEntry),
               ],
@@ -545,19 +695,10 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
           );
         },
       ),
-      floatingActionButton: SafeArea(
-        child: FloatingActionButton(
-          onPressed: () async {
-            await showQuickAddTaskDialog(context, _currentDay, widget.hiveService);
-          },
-          tooltip: 'Add task',
-          child: const Icon(Icons.add),
-        ),
-      ),
     );
   }
 
-  Widget _metricsPanel(Map<String, double> matrix) {
+  Widget _metricsPanel(Map<String, double> matrix, DashboardThemeStyle theme) {
     final productivityScore = matrix['productivityScore'] ?? 0;
     final totalPoints = matrix['totalPoints'] ?? 0;
     final focusedHours = matrix['focusedHours'] ?? 0;
@@ -565,10 +706,15 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.black.withOpacity(0.08)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 18, offset: const Offset(0, 10))],
+        border: Border.all(color: theme.primary.withValues(alpha: 0.14)),
+        boxShadow: [
+          BoxShadow(
+              color: theme.primary.withValues(alpha: theme.dark ? 0.16 : 0.06),
+              blurRadius: 18,
+              offset: const Offset(0, 10))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -580,7 +726,10 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
               curve: Curves.easeOutCubic,
               builder: (context, value, _) => Text(
                 'Total hours recorded: ${value.toStringAsFixed(1)}',
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                style: TextStyle(
+                    color: theme.textPrimary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15),
               ),
             ),
           ),
@@ -592,31 +741,103 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _matrixSummaryCard(width: cardWidth, emoji: '📈', label: 'Score', value: productivityScore, suffix: '%', decimals: 0, color: const Color(0xFF8E8CFF)),
-                  _matrixSummaryTextCard(width: cardWidth, emoji: '💪', label: 'Rating', value: _productivityRating(productivityScore), color: const Color(0xFF7E57C2)),
-                  _matrixSummaryCard(width: cardWidth, emoji: '⭐', label: 'Points', value: totalPoints, suffix: ' / 1600', decimals: 0, color: const Color(0xFFFF9800)),
-                  _matrixSummaryCard(width: cardWidth, emoji: '🎯', label: 'Focus', value: focusedHours, suffix: ' hrs', decimals: 1, color: const Color(0xFF2196F3)),
+                  _matrixSummaryCard(
+                      width: cardWidth,
+                      emoji: '📈',
+                      label: 'Score',
+                      value: productivityScore,
+                      suffix: '%',
+                      decimals: 0,
+                      color: const Color(0xFF8E8CFF),
+                      theme: theme),
+                  _matrixSummaryTextCard(
+                      width: cardWidth,
+                      emoji: '💪',
+                      label: 'Rating',
+                      value: _productivityRating(productivityScore),
+                      color: const Color(0xFF7E57C2),
+                      theme: theme),
+                  _matrixSummaryCard(
+                      width: cardWidth,
+                      emoji: '⭐',
+                      label: 'Points',
+                      value: totalPoints,
+                      suffix: ' / 1600',
+                      decimals: 0,
+                      color: const Color(0xFFFF9800),
+                      theme: theme),
+                  _matrixSummaryCard(
+                      width: cardWidth,
+                      emoji: '🎯',
+                      label: 'Focus',
+                      value: focusedHours,
+                      suffix: ' hrs',
+                      decimals: 1,
+                      color: const Color(0xFF2196F3),
+                      theme: theme),
                 ],
               );
             },
           ),
           const SizedBox(height: 18),
-          const Text('Daily Productivity Matrix', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+          Text('Daily Productivity Matrix',
+              style: TextStyle(
+                  color: theme.textPrimary,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 17)),
           const SizedBox(height: 4),
-          Text('Completed time, percentage share, and points by urgency/importance.', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w600, fontSize: 12)),
+          Text(
+              'Completed time, percentage share, and points by urgency/importance.',
+              style: TextStyle(
+                  color: theme.textMuted,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12)),
           const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {
               final wide = constraints.maxWidth >= 620;
-              final cardWidth = wide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+              final cardWidth =
+                  wide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
               return Wrap(
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _matrixQuadrantCard(width: cardWidth, emoji: '🔥', title: 'Both', rate: '100 pts/hr', keyPrefix: 'ui', color: const Color(0xFFE91E63), matrix: matrix),
-                  _matrixQuadrantCard(width: cardWidth, emoji: '💙', title: 'Important Only', rate: '80 pts/hr', keyPrefix: 'ni', color: const Color(0xFF2196F3), matrix: matrix),
-                  _matrixQuadrantCard(width: cardWidth, emoji: '⚡', title: 'Urgent Only', rate: '50 pts/hr', keyPrefix: 'uu', color: const Color(0xFFFFC107), matrix: matrix),
-                  _matrixQuadrantCard(width: cardWidth, emoji: '🌫️', title: 'Neither', rate: '10 pts/hr', keyPrefix: 'nu', color: const Color(0xFF9E9E9E), matrix: matrix),
+                  _matrixQuadrantCard(
+                      width: cardWidth,
+                      emoji: '🔥',
+                      title: 'Both',
+                      rate: '100 pts/hr',
+                      keyPrefix: 'ui',
+                      color: const Color(0xFFE91E63),
+                      matrix: matrix,
+                      theme: theme),
+                  _matrixQuadrantCard(
+                      width: cardWidth,
+                      emoji: '💙',
+                      title: 'Important Only',
+                      rate: '80 pts/hr',
+                      keyPrefix: 'ni',
+                      color: const Color(0xFF2196F3),
+                      matrix: matrix,
+                      theme: theme),
+                  _matrixQuadrantCard(
+                      width: cardWidth,
+                      emoji: '⚡',
+                      title: 'Urgent Only',
+                      rate: '50 pts/hr',
+                      keyPrefix: 'uu',
+                      color: const Color(0xFFFFC107),
+                      matrix: matrix,
+                      theme: theme),
+                  _matrixQuadrantCard(
+                      width: cardWidth,
+                      emoji: '🌫️',
+                      title: 'Neither',
+                      rate: '10 pts/hr',
+                      keyPrefix: 'nu',
+                      color: const Color(0xFF9E9E9E),
+                      matrix: matrix,
+                      theme: theme),
                 ],
               );
             },
@@ -626,13 +847,14 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFF3F7FF),
+              color: theme.elevatedSurface,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFF8E8CFF).withOpacity(0.22)),
+              border: Border.all(color: theme.primary.withValues(alpha: 0.22)),
             ),
             child: Text(
               _matrixInsight(matrix),
-              style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF263238)),
+              style: TextStyle(
+                  fontWeight: FontWeight.w800, color: theme.textPrimary),
             ),
           ),
         ],
@@ -642,11 +864,21 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
 
   Widget _todaySchedulePanel(List<Task> tasks, DashboardThemeStyle theme) {
     final entries = _buildDayScheduleEntries(tasks);
-    final positionedEntries = _positionOverlappingEntries(entries.where((entry) => entry.task != null).toList());
-    final unscheduledTasks = tasks.where((task) => _isSchedulablePendingTask(task) && !_hasScheduleRange(task)).toList();
-    final visibleTasks = tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
-    final completed = visibleTasks.where((task) => task.done || task.status.trim().toLowerCase() == 'completed').length;
-    final completionRate = visibleTasks.isEmpty ? 0 : ((completed / visibleTasks.length) * 100).round();
+    final positionedEntries = _positionOverlappingEntries(
+        entries.where((entry) => entry.task != null).toList());
+    final unscheduledTasks = tasks
+        .where((task) =>
+            _isSchedulablePendingTask(task) && !_hasScheduleRange(task))
+        .toList();
+    final visibleTasks =
+        tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
+    final completed = visibleTasks
+        .where((task) =>
+            task.done || task.status.trim().toLowerCase() == 'completed')
+        .length;
+    final completionRate = visibleTasks.isEmpty
+        ? 0
+        : ((completed / visibleTasks.length) * 100).round();
     const hourHeight = 72.0;
     const labelWidth = 58.0;
     const timelineHeight = hourHeight * 24;
@@ -658,19 +890,34 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
         color: theme.surface,
         border: Border.all(color: theme.primary.withOpacity(0.18)),
         borderRadius: BorderRadius.circular(22),
-        boxShadow: [BoxShadow(color: theme.primary.withOpacity(theme.dark ? 0.16 : 0.08), blurRadius: 16, offset: const Offset(0, 8))],
+        boxShadow: [
+          BoxShadow(
+              color: theme.primary.withOpacity(theme.dark ? 0.16 : 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 8))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(child: Text('Today Schedule', style: TextStyle(color: theme.textPrimary, fontSize: 18, fontWeight: FontWeight.w900))),
-              Text('${_currentDay.month}/${_currentDay.day}/${_currentDay.year}', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700)),
+              Expanded(
+                  child: Text('Day schedule',
+                      style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900))),
+              Text(
+                  '${_currentDay.month}/${_currentDay.day}/${_currentDay.year}',
+                  style: TextStyle(
+                      color: theme.textMuted, fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 6),
-          Text('$completionRate% Complete', style: TextStyle(color: theme.primary, fontWeight: FontWeight.w900)),
+          Text('$completionRate% Complete',
+              style:
+                  TextStyle(color: theme.primary, fontWeight: FontWeight.w900)),
           const SizedBox(height: 12),
           _unscheduledTaskPlanner(theme, unscheduledTasks),
           const SizedBox(height: 14),
@@ -682,16 +929,22 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                   final box = context.findRenderObject() as RenderBox?;
                   if (box == null) return;
                   final local = box.globalToLocal(details.offset);
-                  final minutes = ((local.dy / hourHeight) * 60).clamp(0, 24 * 60 - _scheduleSnapMinutes).toInt();
+                  final minutes = ((local.dy / hourHeight) * 60)
+                      .clamp(0, 24 * 60 - _scheduleSnapMinutes)
+                      .toInt();
                   _scheduleTaskAt(details.data, minutes);
                 },
                 builder: (context, candidateData, rejectedData) {
                   final preview = candidateData.isNotEmpty;
                   return Container(
                     decoration: BoxDecoration(
-                      color: preview ? theme.primary.withOpacity(0.06) : Colors.transparent,
+                      color: preview
+                          ? theme.primary.withOpacity(0.06)
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(18),
-                      border: preview ? Border.all(color: theme.primary.withOpacity(0.28)) : null,
+                      border: preview
+                          ? Border.all(color: theme.primary.withOpacity(0.28))
+                          : null,
                     ),
                     child: SizedBox(
                       height: timelineHeight,
@@ -704,14 +957,28 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                               right: 0,
                               height: hourHeight,
                               child: InkWell(
-                                onTap: () => showTaskFormDialog(context, date: _currentDay, initialHourSlot: hour),
+                                onTap: () => showTaskFormDialog(context,
+                                    date: _currentDay,
+                                    initialHourSlot: hour,
+                                    onSave: (task) => widget.hiveService
+                                        .addTask(task.dueDate, task)),
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    SizedBox(width: labelWidth, child: Text(_formatScheduleTime(hour * 60), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800))),
+                                    SizedBox(
+                                        width: labelWidth,
+                                        child: Text(
+                                            _formatScheduleTime(hour * 60),
+                                            style: TextStyle(
+                                                color: theme.textMuted,
+                                                fontWeight: FontWeight.w800))),
                                     Expanded(
                                       child: Container(
-                                        decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.textMuted.withOpacity(0.35)))),
+                                        decoration: BoxDecoration(
+                                            border: Border(
+                                                top: BorderSide(
+                                                    color: theme.textMuted
+                                                        .withOpacity(0.35)))),
                                       ),
                                     ),
                                   ],
@@ -720,18 +987,43 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                             ),
                           if (_sameDate(_currentDay, _scheduleNow))
                             Positioned(
-                              top: ((_scheduleNow.hour * 60 + _scheduleNow.minute) / 60) * hourHeight,
+                              top: ((_scheduleNow.hour * 60 +
+                                          _scheduleNow.minute) /
+                                      60) *
+                                  hourHeight,
                               left: labelWidth,
                               right: 0,
-                              child: Container(height: 2, color: AppThemeColors.fromDashboardStyle(theme).accent),
+                              child: Container(
+                                  height: 2,
+                                  color:
+                                      AppThemeColors.fromDashboardStyle(theme)
+                                          .accent),
                             ),
                           for (final positioned in positionedEntries)
                             Positioned(
-                              top: (positioned.entry.startMinutes / 60) * hourHeight,
-                              left: labelWidth + positioned.column * ((laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount + 6),
-                              width: (laneAreaWidth - ((positioned.columnCount - 1) * 6)) / positioned.columnCount,
-                              height: ((positioned.entry.endMinutes - positioned.entry.startMinutes) / 60 * hourHeight).clamp(36.0, timelineHeight),
-                              child: _taskScheduleTile(theme, positioned.entry, compact: positioned.columnCount > 2 || (positioned.entry.endMinutes - positioned.entry.startMinutes) <= 75),
+                              top: (positioned.entry.startMinutes / 60) *
+                                  hourHeight,
+                              left: labelWidth +
+                                  positioned.column *
+                                      ((laneAreaWidth -
+                                                  ((positioned.columnCount -
+                                                          1) *
+                                                      6)) /
+                                              positioned.columnCount +
+                                          6),
+                              width: (laneAreaWidth -
+                                      ((positioned.columnCount - 1) * 6)) /
+                                  positioned.columnCount,
+                              height: ((positioned.entry.endMinutes -
+                                          positioned.entry.startMinutes) /
+                                      60 *
+                                      hourHeight)
+                                  .clamp(36.0, timelineHeight),
+                              child: _taskScheduleTile(theme, positioned.entry,
+                                  compact: positioned.columnCount > 2 ||
+                                      (positioned.entry.endMinutes -
+                                              positioned.entry.startMinutes) <=
+                                          75),
                             ),
                         ],
                       ),
@@ -752,7 +1044,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
         if (_hasScheduleRange(details.data)) _returnTaskToPending(details.data);
       },
       builder: (context, candidateData, rejectedData) {
-        final returning = candidateData.whereType<Task>().any(_hasScheduleRange);
+        final returning =
+            candidateData.whereType<Task>().any(_hasScheduleRange);
         return Container(
           width: double.infinity,
           padding: returning ? const EdgeInsets.all(10) : EdgeInsets.zero,
@@ -768,24 +1061,33 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: (theme.cardTint ?? theme.elevatedSurface).withOpacity(0.45),
+                    color: (theme.cardTint ?? theme.elevatedSurface)
+                        .withOpacity(0.45),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: theme.primary.withOpacity(0.16)),
                   ),
                   child: Text(
-                    returning ? 'Drop here to return this task to Pending Tasks.' : 'All pending tasks with schedule times are placed below.',
-                    style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800),
+                    returning
+                        ? 'Drop here to return this task to Pending Tasks.'
+                        : 'All pending tasks with schedule times are placed below.',
+                    style: TextStyle(
+                        color: theme.textMuted, fontWeight: FontWeight.w800),
                   ),
                 )
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Pending Tasks (Not Scheduled)', style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900)),
+                    Text('Pending Tasks (Not Scheduled)',
+                        style: TextStyle(
+                            color: theme.textPrimary,
+                            fontWeight: FontWeight.w900)),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: tasks.map((task) => _draggablePendingTaskCard(theme, task)).toList(),
+                      children: tasks
+                          .map((task) => _draggablePendingTaskCard(theme, task))
+                          .toList(),
                     ),
                   ],
                 ),
@@ -795,25 +1097,50 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   }
 
   Widget _draggablePendingTaskCard(DashboardThemeStyle theme, Task task) {
-    final instructionCount = widget.hiveService.getInstructions().where((instruction) => instruction.enabled && instruction.isLinkedToTask(task.task.trim())).length;
-    final duration = task.estimatedMinutes > 0 ? task.estimatedMinutes : _defaultScheduledDurationMinutes;
+    final instructionCount = widget.hiveService
+        .getInstructions()
+        .where((instruction) =>
+            instruction.enabled && instruction.isLinkedToTask(task.task.trim()))
+        .length;
+    final duration = task.estimatedMinutes > 0
+        ? task.estimatedMinutes
+        : _defaultScheduledDurationMinutes;
     final card = Container(
       width: 170,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: (theme.cardTint ?? theme.elevatedSurface).withOpacity(0.82),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.primary.withOpacity(0.34), style: BorderStyle.solid),
+        border: Border.all(
+            color: theme.primary.withOpacity(0.34), style: BorderStyle.solid),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(toTitleCase(task.task), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900)),
+          Text(toTitleCase(task.task),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: theme.textPrimary, fontWeight: FontWeight.w900)),
           const SizedBox(height: 4),
-          Text('${task.category} • ${task.priority}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700, fontSize: 12)),
-          Text('Instructions: $instructionCount', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700, fontSize: 12)),
-          Text('$duration min', style: TextStyle(color: theme.primary, fontWeight: FontWeight.w900, fontSize: 12)),
+          Text('${task.category} • ${task.priority}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: theme.textMuted,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12)),
+          Text('Instructions: $instructionCount',
+              style: TextStyle(
+                  color: theme.textMuted,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12)),
+          Text('$duration min',
+              style: TextStyle(
+                  color: theme.primary,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12)),
         ],
       ),
     );
@@ -828,7 +1155,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget _taskScheduleTile(DashboardThemeStyle theme, _DayScheduleEntry entry, {bool compact = false}) {
+  Widget _taskScheduleTile(DashboardThemeStyle theme, _DayScheduleEntry entry,
+      {bool compact = false}) {
     final task = entry.task!;
     final status = _scheduleStatusFor(task, entry);
     final color = _scheduleStatusColor(status, theme);
@@ -837,17 +1165,31 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     final tile = AnimatedBuilder(
       animation: _schedulePulseController,
       builder: (context, child) {
-        final pulse = active ? 0.35 + (_schedulePulseController.value * 0.35) : 0.20;
+        final pulse =
+            active ? 0.35 + (_schedulePulseController.value * 0.35) : 0.20;
         return InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () => _editTask(task),
           child: Container(
             padding: EdgeInsets.all(compact ? 4 : 12),
             decoration: BoxDecoration(
-              color: color.withOpacity(active ? 0.28 : status == _DayScheduleStatus.missed ? 0.10 : 0.15),
+              color: color.withOpacity(active
+                  ? 0.28
+                  : status == _DayScheduleStatus.missed
+                      ? 0.10
+                      : 0.15),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: color.withOpacity(active ? pulse : 0.36), width: active ? 2 : 1),
-              boxShadow: active ? [BoxShadow(color: color.withOpacity(pulse), blurRadius: 18, spreadRadius: 1)] : null,
+              border: Border.all(
+                  color: color.withOpacity(active ? pulse : 0.36),
+                  width: active ? 2 : 1),
+              boxShadow: active
+                  ? [
+                      BoxShadow(
+                          color: color.withOpacity(pulse),
+                          blurRadius: 18,
+                          spreadRadius: 1)
+                    ]
+                  : null,
             ),
             child: child,
           ),
@@ -861,74 +1203,148 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                     '${toTitleCase(task.task)} • ${_scheduleStatusLabel(status)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900, fontSize: 12),
+                    style: TextStyle(
+                        color: theme.textPrimary,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12),
                   ),
+                ),
+                IconButton(
+                  tooltip: 'Edit time',
+                  onPressed: () =>
+                      _editScheduledStart(task, entry.startMinutes),
+                  icon: const Icon(Icons.schedule, size: 18),
+                  visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints.tightFor(width: 32, height: 32),
+                  padding: EdgeInsets.zero,
                 ),
               ],
             )
           : Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (!compact) SizedBox(width: 72, child: Text(_formatScheduleTime(entry.startMinutes), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w900))),
-          Expanded(
-            child: ClipRect(
-              child: SingleChildScrollView(
-                physics: const NeverScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                if (active)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(999)),
-                    child: Text('Active Now', style: TextStyle(color: AppThemeColors.readableTextOn(color, theme), fontWeight: FontWeight.w900, fontSize: 11)),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!compact)
+                  SizedBox(
+                      width: 72,
+                      child: Text(_formatScheduleTime(entry.startMinutes),
+                          style: TextStyle(
+                              color: theme.textMuted,
+                              fontWeight: FontWeight.w900))),
+                Expanded(
+                  child: ClipRect(
+                    child: SingleChildScrollView(
+                      physics: const NeverScrollableScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (active)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                  color: color,
+                                  borderRadius: BorderRadius.circular(999)),
+                              child: Text('Active Now',
+                                  style: TextStyle(
+                                      color: AppThemeColors.readableTextOn(
+                                          color, theme),
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 11)),
+                            ),
+                          Text(toTitleCase(task.task),
+                              style: TextStyle(
+                                  color: theme.textPrimary,
+                                  fontWeight: FontWeight.w900)),
+                          if (!compact) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                                '${_formatScheduleTime(entry.startMinutes)} - ${_formatScheduleTime(entry.endMinutes)}',
+                                style: TextStyle(
+                                    color: theme.textMuted,
+                                    fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 3),
+                          ],
+                          Text(_scheduleStatusLabel(status),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  color: color, fontWeight: FontWeight.w900)),
+                          if (!compact)
+                            TextButton.icon(
+                              onPressed: () =>
+                                  _editScheduledStart(task, entry.startMinutes),
+                              icon: const Icon(Icons.schedule, size: 16),
+                              label: const Text('Edit time'),
+                              style: TextButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4)),
+                            ),
+                          if ((entry.endMinutes - entry.startMinutes) >=
+                              120) ...[
+                            const SizedBox(height: 4),
+                            _durationResizeControls(theme, task, entry),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                Text(toTitleCase(task.task), style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900)),
-                if (!compact) ...[
-                  const SizedBox(height: 3),
-                  Text('${_formatScheduleTime(entry.startMinutes)} - ${_formatScheduleTime(entry.endMinutes)}', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 3),
-                ],
-                Text(_scheduleStatusLabel(status), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: color, fontWeight: FontWeight.w900)),
-                if ((entry.endMinutes - entry.startMinutes) >= 120) ...[
-                  const SizedBox(height: 4),
-                  _durationResizeControls(theme, task, entry),
-                ],
-                  ],
                 ),
-              ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
     return Draggable<Task>(
       data: task,
-      feedback: Material(color: Colors.transparent, child: Opacity(opacity: 0.88, child: SizedBox(width: 180, child: tile))),
+      feedback: Material(
+          color: Colors.transparent,
+          child:
+              Opacity(opacity: 0.88, child: SizedBox(width: 180, child: tile))),
       childWhenDragging: Opacity(opacity: 0.35, child: tile),
       child: tile,
     );
   }
 
-  Widget _durationResizeControls(DashboardThemeStyle theme, Task task, _DayScheduleEntry entry) {
+  Widget _durationResizeControls(
+      DashboardThemeStyle theme, Task task, _DayScheduleEntry entry) {
     final duration = entry.endMinutes - entry.startMinutes;
-    final currentIndex = _scheduleDurationSteps.indexWhere((value) => value >= duration);
-    final resolvedIndex = currentIndex == -1 ? _scheduleDurationSteps.length - 1 : currentIndex;
+    final currentIndex =
+        _scheduleDurationSteps.indexWhere((value) => value >= duration);
+    final resolvedIndex =
+        currentIndex == -1 ? _scheduleDurationSteps.length - 1 : currentIndex;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         InkWell(
-          onTap: resolvedIndex <= 0 ? null : () => _resizeScheduledTask(task, _scheduleDurationSteps[resolvedIndex - 1]),
-          child: Icon(Icons.remove_circle_outline, size: 18, color: resolvedIndex <= 0 ? theme.textMuted.withOpacity(0.45) : theme.primary),
+          onTap: resolvedIndex <= 0
+              ? null
+              : () => _resizeScheduledTask(
+                  task, _scheduleDurationSteps[resolvedIndex - 1]),
+          child: Icon(Icons.remove_circle_outline,
+              size: 18,
+              color: resolvedIndex <= 0
+                  ? theme.textMuted.withOpacity(0.45)
+                  : theme.primary),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6),
-          child: Text('$duration min', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800, fontSize: 11)),
+          child: Text('$duration min',
+              style: TextStyle(
+                  color: theme.textMuted,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11)),
         ),
         InkWell(
-          onTap: resolvedIndex >= _scheduleDurationSteps.length - 1 ? null : () => _resizeScheduledTask(task, _scheduleDurationSteps[resolvedIndex + 1]),
-          child: Icon(Icons.add_circle_outline, size: 18, color: resolvedIndex >= _scheduleDurationSteps.length - 1 ? theme.textMuted.withOpacity(0.45) : theme.primary),
+          onTap: resolvedIndex >= _scheduleDurationSteps.length - 1
+              ? null
+              : () => _resizeScheduledTask(
+                  task, _scheduleDurationSteps[resolvedIndex + 1]),
+          child: Icon(Icons.add_circle_outline,
+              size: 18,
+              color: resolvedIndex >= _scheduleDurationSteps.length - 1
+                  ? theme.textMuted.withOpacity(0.45)
+                  : theme.primary),
         ),
       ],
     );
@@ -937,7 +1353,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   Widget _freeScheduleTile(DashboardThemeStyle theme, int start, int end) {
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () => showQuickAddTaskDialog(context, _currentDay, widget.hiveService),
+      onTap: () =>
+          showQuickAddTaskDialog(context, _currentDay, widget.hiveService),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -947,8 +1364,16 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
         ),
         child: Row(
           children: [
-            SizedBox(width: 72, child: Text(_formatScheduleTime(start), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800))),
-            Expanded(child: Text('${_formatScheduleTime(start)} - ${_formatScheduleTime(end)}\nFree Time', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w800))),
+            SizedBox(
+                width: 72,
+                child: Text(_formatScheduleTime(start),
+                    style: TextStyle(
+                        color: theme.textMuted, fontWeight: FontWeight.w800))),
+            Expanded(
+                child: Text(
+                    '${_formatScheduleTime(start)} - ${_formatScheduleTime(end)}\nFree Time',
+                    style: TextStyle(
+                        color: theme.textMuted, fontWeight: FontWeight.w800))),
             Icon(Icons.add_circle_outline, color: theme.primary),
           ],
         ),
@@ -964,6 +1389,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     required String suffix,
     required int decimals,
     required Color color,
+    required DashboardThemeStyle theme,
   }) {
     return SizedBox(
       width: width,
@@ -981,9 +1407,17 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('$emoji  $label', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w900, fontSize: 12)),
+              Text('$emoji  $label',
+                  style: TextStyle(
+                      color: theme.textMuted,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12)),
               const SizedBox(height: 7),
-              Text('${animatedValue.toStringAsFixed(decimals)}$suffix', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 19)),
+              Text('${animatedValue.toStringAsFixed(decimals)}$suffix',
+                  style: TextStyle(
+                      color: theme.textPrimary,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 19)),
             ],
           ),
         ),
@@ -997,6 +1431,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     required String label,
     required String value,
     required Color color,
+    required DashboardThemeStyle theme,
   }) {
     return SizedBox(
       width: width,
@@ -1010,9 +1445,19 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$emoji  $label', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w900, fontSize: 12)),
+            Text('$emoji  $label',
+                style: TextStyle(
+                    color: theme.textMuted,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12)),
             const SizedBox(height: 7),
-            Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 19)),
+            Text(value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: theme.textPrimary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 19)),
           ],
         ),
       ),
@@ -1027,6 +1472,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     required String keyPrefix,
     required Color color,
     required Map<String, double> matrix,
+    required DashboardThemeStyle theme,
   }) {
     final hours = matrix['${keyPrefix}Hours'] ?? 0;
     final percentage = matrix[keyPrefix] ?? 0;
@@ -1039,15 +1485,24 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
         curve: Curves.easeOutCubic,
         builder: (context, progress, child) => Opacity(
           opacity: progress,
-          child: Transform.translate(offset: Offset(0, 10 * (1 - progress)), child: child),
+          child: Transform.translate(
+              offset: Offset(0, 10 * (1 - progress)), child: child),
         ),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [color.withOpacity(0.18), Colors.white], begin: Alignment.topLeft, end: Alignment.bottomRight),
+            gradient: LinearGradient(
+                colors: [color.withOpacity(0.18), theme.surface],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(color: color.withOpacity(0.28)),
-            boxShadow: [BoxShadow(color: color.withOpacity(0.08), blurRadius: 14, offset: const Offset(0, 8))],
+            boxShadow: [
+              BoxShadow(
+                  color: color.withOpacity(0.08),
+                  blurRadius: 14,
+                  offset: const Offset(0, 8))
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1056,21 +1511,48 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: color.withOpacity(0.18), borderRadius: BorderRadius.circular(14)),
+                    decoration: BoxDecoration(
+                        color: color.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(14)),
                     child: Text(emoji, style: const TextStyle(fontSize: 18)),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+                  Expanded(
+                      child: Text(title,
+                          style: TextStyle(
+                              color: theme.textPrimary,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16))),
                 ],
               ),
               const SizedBox(height: 10),
-              Text(rate, style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w800)),
+              Text(rate,
+                  style: TextStyle(
+                      color: theme.textMuted, fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Expanded(child: _animatedSmallMetric(label: 'Hours', value: hours, suffix: 'h', decimals: 1)),
-                  Expanded(child: _animatedSmallMetric(label: 'Share', value: percentage, suffix: '%', decimals: 0)),
-                  Expanded(child: _animatedSmallMetric(label: 'Points', value: points, suffix: ' pts', decimals: 0)),
+                  Expanded(
+                      child: _animatedSmallMetric(
+                          label: 'Hours',
+                          value: hours,
+                          suffix: 'h',
+                          decimals: 1,
+                          theme: theme)),
+                  Expanded(
+                      child: _animatedSmallMetric(
+                          label: 'Share',
+                          value: percentage,
+                          suffix: '%',
+                          decimals: 0,
+                          theme: theme)),
+                  Expanded(
+                      child: _animatedSmallMetric(
+                          label: 'Points',
+                          value: points,
+                          suffix: ' pts',
+                          decimals: 0,
+                          theme: theme)),
                 ],
               ),
             ],
@@ -1080,7 +1562,12 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget _animatedSmallMetric({required String label, required double value, required String suffix, required int decimals}) {
+  Widget _animatedSmallMetric(
+      {required String label,
+      required double value,
+      required String suffix,
+      required int decimals,
+      required DashboardThemeStyle theme}) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: value),
       duration: const Duration(milliseconds: 700),
@@ -1088,8 +1575,16 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
       builder: (context, animatedValue, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${animatedValue.toStringAsFixed(decimals)}$suffix', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-          Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 10, fontWeight: FontWeight.w700)),
+          Text('${animatedValue.toStringAsFixed(decimals)}$suffix',
+              style: TextStyle(
+                  color: theme.textPrimary,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16)),
+          Text(label,
+              style: TextStyle(
+                  color: theme.textMuted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -1100,21 +1595,30 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     final importantOnlyHours = matrix['niHours'] ?? 0;
     final bothHours = matrix['uiHours'] ?? 0;
     final urgentOnlyHours = matrix['uuHours'] ?? 0;
-    if (neitherHours > 1) return 'Tip: Keep Neither below 1 hour and move low-value work into focused blocks.';
-    if (importantOnlyHours < 3 && bothHours < 6) return 'Tip: Increase Important Only work and keep Neither below 1 hour.';
-    if (urgentOnlyHours > bothHours + importantOnlyHours) return 'Tip: Reduce urgent-only firefighting by planning important work earlier.';
+    if (neitherHours > 1)
+      return 'Tip: Keep Neither below 1 hour and move low-value work into focused blocks.';
+    if (importantOnlyHours < 3 && bothHours < 6)
+      return 'Tip: Increase Important Only work and keep Neither below 1 hour.';
+    if (urgentOnlyHours > bothHours + importantOnlyHours)
+      return 'Tip: Reduce urgent-only firefighting by planning important work earlier.';
     return 'Tip: Great balance — protect deep work and keep low-value tasks capped.';
   }
 
   Widget _todayTasksPanel(List<Task> tasks, DashboardThemeStyle theme) {
-    final visibleTasks = tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
+    final visibleTasks =
+        tasks.where((task) => !task.repeatTask || task.routineEnabled).toList();
 
     return Container(
       decoration: BoxDecoration(
         color: theme.surface,
         border: Border.all(color: theme.primary.withOpacity(0.18)),
         borderRadius: BorderRadius.circular(22),
-        boxShadow: [BoxShadow(color: theme.primary.withOpacity(theme.dark ? 0.16 : 0.08), blurRadius: 16, offset: const Offset(0, 8))],
+        boxShadow: [
+          BoxShadow(
+              color: theme.primary.withOpacity(theme.dark ? 0.16 : 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 8))
+        ],
       ),
       child: Column(
         children: [
@@ -1125,20 +1629,41 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
               width: double.infinity,
               decoration: BoxDecoration(
                 color: theme.primary.withOpacity(theme.dark ? 0.34 : 0.18),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(22)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
-                      "TODAY'S TASKS",
+                      'Tasks for this day',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: theme.textPrimary, letterSpacing: 4, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                          color: theme.textPrimary,
+                          letterSpacing: 4,
+                          fontWeight: FontWeight.w700),
                     ),
                   ),
-                  Icon(_showTodayTasks ? Icons.expand_more : Icons.chevron_right, color: theme.primary),
+                  Icon(
+                      _showTodayTasks ? Icons.expand_more : Icons.chevron_right,
+                      color: theme.primary),
                 ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => showQuickAddTaskDialog(
+                  context,
+                  _currentDay,
+                  widget.hiveService,
+                ),
+                icon: const Icon(Icons.add),
+                label: const Text('Add task'),
               ),
             ),
           ),
@@ -1147,26 +1672,39 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
               width: double.infinity,
               color: theme.cardTint?.withOpacity(0.55) ?? theme.elevatedSurface,
               padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text('TASK', textAlign: TextAlign.center, style: TextStyle(color: theme.textPrimary, letterSpacing: 3, fontWeight: FontWeight.w700)),
+              child: Text('TASK',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: theme.textPrimary,
+                      letterSpacing: 3,
+                      fontWeight: FontWeight.w700)),
             ),
-            SizedBox(
-              height: 170,
-              child: visibleTasks.isEmpty
-                  ? Center(child: Text('Nothing for Today, Great Job !', style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700)))
-                  : ListView.separated(
-                      itemCount: visibleTasks.length,
-                      separatorBuilder: (context, index) => Divider(height: 1, color: theme.primary.withOpacity(0.14)),
-                      itemBuilder: (context, index) {
-                        final task = visibleTasks[index];
-                        return ListTile(
-                          dense: true,
-                          onTap: () => _editTask(task),
-                          title: Text(toTitleCase(task.task), style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w800)),
-                          subtitle: Text(_taskSubtitle(task), style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w600)),
-                        );
-                      },
-                    ),
-            ),
+            if (visibleTasks.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'No tasks planned for this day.',
+                  style: TextStyle(
+                    color: theme.textMuted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              )
+            else
+              ...visibleTasks.indexed.expand((entry) sync* {
+                final (index, task) = entry;
+                if (index > 0) {
+                  yield Divider(
+                      height: 1, color: theme.primary.withOpacity(0.14));
+                }
+                yield TaskRow(
+                  task: task,
+                  date: _currentDay,
+                  service: widget.hiveService,
+                  onEdit: () => _editTask(task),
+                  details: taskSteps(task).isEmpty ? null : _taskSubtitle(task),
+                );
+              }),
           ],
         ],
       ),
@@ -1174,7 +1712,7 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
   }
 
   String _taskSubtitle(Task task) {
-    final phases = parseTaskPhases(task.description);
+    final phases = taskSteps(task);
     if (!task.repeatTask && phases.isNotEmpty) {
       final completed = phases.where((phase) => phase.isCompleted).length;
       TaskPhaseInfo? nextPhase;
@@ -1192,7 +1730,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
     return '${task.priority} • ${task.status} • ${taskPlannedMinutes(task)} min';
   }
 
-  Widget _journalReflectionPanel(DashboardThemeStyle theme, JournalEntry? entry) {
+  Widget _journalReflectionPanel(
+      DashboardThemeStyle theme, JournalEntry? entry) {
     final hasEntry = entry != null && entry.reflection.trim().isNotEmpty;
     return Container(
       width: double.infinity,
@@ -1201,7 +1740,12 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
         color: theme.surface,
         border: Border.all(color: theme.primary.withOpacity(0.18)),
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: theme.primary.withOpacity(theme.dark ? 0.16 : 0.08), blurRadius: 16, offset: const Offset(0, 8))],
+        boxShadow: [
+          BoxShadow(
+              color: theme.primary.withOpacity(theme.dark ? 0.16 : 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 8))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1213,15 +1757,21 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
               Expanded(
                 child: Text(
                   'Journal & Reflection',
-                  style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w900, fontSize: 18),
+                  style: TextStyle(
+                      color: theme.textPrimary,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
-            hasEntry ? 'Saved mood: ${entry.mood}' : 'No reflection saved for this day yet.',
-            style: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700),
+            hasEntry
+                ? 'Saved mood: ${entry.mood}'
+                : 'No reflection saved for this day yet.',
+            style:
+                TextStyle(color: theme.textMuted, fontWeight: FontWeight.w700),
           ),
           if (hasEntry) ...[
             const SizedBox(height: 8),
@@ -1229,7 +1779,8 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: (theme.cardTint ?? theme.elevatedSurface).withOpacity(theme.dark ? 0.34 : 0.58),
+                color: (theme.cardTint ?? theme.elevatedSurface)
+                    .withOpacity(theme.dark ? 0.34 : 0.58),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: theme.primary.withOpacity(0.14)),
               ),
@@ -1237,7 +1788,10 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
                 entry.reflection,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w700, height: 1.25),
+                style: TextStyle(
+                    color: theme.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    height: 1.25),
               ),
             ),
           ],
@@ -1246,8 +1800,12 @@ class _DayViewState extends State<DayView> with SingleTickerProviderStateMixin {
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: () => _openJournalForDate(_currentDay),
-              icon: Icon(hasEntry ? Icons.auto_stories_rounded : Icons.edit_note_rounded),
-              label: Text(hasEntry ? 'Open Journal & Reflection' : 'Write Journal & Reflection'),
+              icon: Icon(hasEntry
+                  ? Icons.auto_stories_rounded
+                  : Icons.edit_note_rounded),
+              label: Text(hasEntry
+                  ? 'Open Journal & Reflection'
+                  : 'Write Journal & Reflection'),
             ),
           ),
         ],

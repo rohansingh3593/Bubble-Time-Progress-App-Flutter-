@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/recoverable_delete.dart';
 
 import '../constants/dashboard_themes.dart';
 import '../models/motivation_motto.dart';
@@ -15,7 +16,7 @@ class MotivationMottoDashboardView extends StatefulWidget {
 
 class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardView> {
   static const categories = ['Focus', 'Discipline', 'Health', 'Study', 'Work', 'Confidence', 'No Smoking', 'Fitness', 'Spiritual', 'Custom'];
-  static const frequencies = [0, 15, 30, 60, 120];
+  static const frequencies = [15, 30, 60, 120];
 
   DashboardThemeStyle get style => DashboardThemeStyle.of(widget.hiveService.getDashboardTheme(), palette: widget.hiveService.getDashboardPalette());
 
@@ -46,7 +47,7 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
             children: [
               _heroCard(featured),
               const SizedBox(height: 12),
-              _settingsCard(),
+              ExpansionTile(title: const Text('Reminder settings'), children: [_settingsCard()]),
               const SizedBox(height: 14),
               Text('Quote Cards', style: TextStyle(color: style.textPrimary, fontSize: 20, fontWeight: FontWeight.w900)),
               const SizedBox(height: 8),
@@ -128,7 +129,7 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
             ButtonBar(children: [
               TextButton(onPressed: () => _showMottoEditor(motto: motto), child: const Text('Edit')),
               TextButton(onPressed: () => widget.hiveService.setMotivationMottoFlag(motto.id, enabled: !motto.enabled), child: Text(motto.enabled ? 'Disable' : 'Enable')),
-              TextButton(onPressed: () => widget.hiveService.deleteMotivationMotto(motto.id), child: const Text('Delete')),
+              TextButton(onPressed: () => recoverableDelete(context, label: 'quote', remove: () => widget.hiveService.deleteMotivationMotto(motto.id), restore: () => widget.hiveService.saveMotivationMotto(motto)), child: const Text('Delete')),
             ]),
           ]),
         ),
@@ -137,37 +138,45 @@ class _MotivationMottoDashboardViewState extends State<MotivationMottoDashboardV
   Widget _premiumQuoteBlock(MotivationMotto motto, {double quoteFontSize = 18}) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(toTitleCase(motto.quote), style: TextStyle(color: style.textPrimary, fontSize: quoteFontSize, fontWeight: FontWeight.w700, height: 1.18)),
+          Text(motto.quote, style: TextStyle(color: style.textPrimary, fontSize: quoteFontSize, fontWeight: FontWeight.w700, height: 1.18)),
           if (motto.author.trim().isNotEmpty)
             Text('— ${toTitleCase(motto.author.trim())}', style: TextStyle(color: style.textMuted, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700)),
         ],
       );
 
   Future<void> _showMottoEditor({MotivationMotto? motto}) async {
+    bool saving = false;
+    String? error;
     final title = TextEditingController(text: motto?.title ?? motto?.description ?? '');
     final quote = TextEditingController(text: motto?.quote ?? '');
     final author = TextEditingController(text: motto?.author ?? '');
     final mood = TextEditingController(text: motto?.mood ?? '');
     var category = categories.contains(motto?.category) ? motto!.category : 'Focus';
     var enabled = motto?.enabled ?? true;
-    await showDialog<void>(context: context, builder: (context) => StatefulBuilder(builder: (context, setDialogState) => AlertDialog(
+    await showDialog<void>(context: context, barrierDismissible: false, builder: (context) => StatefulBuilder(builder: (context, setDialogState) => AlertDialog(
       title: Text(motto == null ? 'Add Motivation Motto' : 'Edit Motivation Motto'),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         TextField(controller: title, decoration: const InputDecoration(labelText: 'Title (Optional)')),
-        TextField(controller: quote, maxLines: 3, decoration: const InputDecoration(labelText: 'Quote / Motto *')),
+        TextField(controller: quote, maxLines: 3, decoration: InputDecoration(labelText: 'Quote / Motto *', errorText: error)),
         TextField(controller: author, decoration: const InputDecoration(labelText: 'Author / Source (Optional)')),
         DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'Category'), items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(), onChanged: (v) => setDialogState(() => category = v ?? category)),
         TextField(controller: mood, decoration: const InputDecoration(labelText: 'Mood')),
         SwitchListTile(value: enabled, title: const Text('Enable'), onChanged: (v) => setDialogState(() => enabled = v)),
       ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), ElevatedButton(onPressed: () async {
-        if (quote.text.trim().isEmpty) return;
+      actions: [TextButton(onPressed: saving ? null : () => Navigator.pop(context), child: const Text('Cancel')), ElevatedButton(onPressed: saving ? null : () async {
+        if (quote.text.trim().isEmpty) { setDialogState(() => error = 'Enter a quote'); return; }
+        setDialogState(() { saving = true; error = null; });
         final titleText = title.text.trim();
-        final saved = (motto ?? MotivationMotto.create(quote: toTitleCase(quote.text.trim()))).copyWith(quote: toTitleCase(quote.text.trim()), title: toTitleCase(titleText), description: toTitleCase(titleText), category: toTitleCase(category), mood: toTitleCase(mood.text.trim()), author: toTitleCase(author.text.trim()), enabled: enabled);
-        await widget.hiveService.saveMotivationMotto(saved);
-        if (mounted) Navigator.pop(context);
+        final saved = (motto ?? MotivationMotto.create(quote: quote.text.trim())).copyWith(quote: quote.text.trim(), title: titleText, description: titleText, category: toTitleCase(category), mood: toTitleCase(mood.text.trim()), author: author.text.trim(), enabled: enabled);
+        try {
+          await widget.hiveService.saveMotivationMotto(saved);
+          if (context.mounted) Navigator.pop(context);
+        } catch (_) {
+          if (context.mounted) setDialogState(() { saving = false; error = 'Could not save. Please retry.'; });
+        }
       }, child: const Text('Save'))],
     )));
+    await Future<void>.delayed(const Duration(milliseconds: 350));
     title.dispose();
     quote.dispose();
     author.dispose();

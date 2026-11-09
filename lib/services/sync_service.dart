@@ -2,18 +2,27 @@ import 'dart:convert';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'api_client.dart';
+
 class SyncService {
-  SyncService({this.websocketUrl = 'ws://192.168.1.10:8000/ws'});
+  SyncService({
+    this.websocketUrl = 'wss://api.momentum.com/ws',
+    this.userId = 'dev-user',
+    ApiClient? apiClient,
+  }) : _apiClient = apiClient ?? ApiClient(userId: userId);
 
   final String websocketUrl;
+  final String userId;
+  final ApiClient _apiClient;
   WebSocketChannel? _channel;
 
   Stream<Map<String, dynamic>>? get events => _channel?.stream.map(
         (message) => jsonDecode(message as String) as Map<String, dynamic>,
       );
 
-  void connect({void Function(String event, Map<String, dynamic> data)? onEvent}) {
-    final channel = WebSocketChannel.connect(Uri.parse(websocketUrl));
+  void connect(
+      {void Function(String event, Map<String, dynamic> data)? onEvent}) {
+    final channel = WebSocketChannel.connect(_websocketUri());
     _channel = channel;
 
     channel.stream.listen((message) {
@@ -25,46 +34,36 @@ class SyncService {
     });
   }
 
-  void updateTaskTime({
+  Future<void> updateTaskTime({
     required String taskId,
     required String title,
     required String startTime,
     required String endTime,
-  }) {
-    _send({
-      'event': 'task_updated',
-      'data': {
-        'task_id': taskId,
-        'title': title,
-        'start_time': startTime,
-        'end_time': endTime,
-        'status': 'scheduled',
-      },
-    });
+  }) async {
+    await _apiClient.updateTaskTime(
+      taskId: taskId,
+      title: title,
+      startTime: startTime,
+      endTime: endTime,
+    );
   }
 
-  void completeTask(String taskId) {
-    _send({
-      'event': 'task_completed',
-      'data': {
-        'task_id': taskId,
-        'status': 'completed',
-        'done': true,
-      },
-    });
+  Future<void> completeTask(String taskId) async {
+    await _apiClient.completeTask(taskId);
   }
 
   void dispose() {
     _channel?.sink.close();
     _channel = null;
+    _apiClient.close();
   }
 
-  void _send(Map<String, dynamic> message) {
-    final channel = _channel;
-    if (channel == null) {
-      throw StateError('SyncService.connect() must be called before sending events.');
-    }
-
-    channel.sink.add(jsonEncode(message));
+  Uri _websocketUri() {
+    final uri = Uri.parse(websocketUrl);
+    if (uri.queryParameters.containsKey('user_id')) return uri;
+    return uri.replace(queryParameters: {
+      ...uri.queryParameters,
+      'user_id': userId,
+    });
   }
 }

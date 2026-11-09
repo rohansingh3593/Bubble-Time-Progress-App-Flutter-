@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/recoverable_delete.dart';
 
 import '../constants/colors.dart';
 import '../models/journal_entry.dart';
@@ -11,19 +12,18 @@ import '../utils/text_formatters.dart';
 class JourneyTimelineView extends StatelessWidget {
   final HiveService hiveService;
 
-  const JourneyTimelineView({super.key, required this.hiveService});
+  JourneyTimelineView({super.key, required this.hiveService});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Journey Timeline')),
+      appBar: AppBar(title: Text('Journey Timeline')),
       body: ValueListenableBuilder(
         valueListenable: hiveService.getBoxListenable(),
         builder: (context, box, _) {
           final manualEntries = hiveService.getAllJourneyEntries();
           final tasksByDate = hiveService.getAllTasksByDate();
           final journalEntries = hiveService.getAllJournalEntries();
-          final allTasks = tasksByDate.values.expand((tasks) => tasks).toList();
           final dailyJourneys = _DailyJourney.build(
             tasksByDate: tasksByDate,
             journalEntries: journalEntries,
@@ -41,47 +41,60 @@ class JourneyTimelineView extends StatelessWidget {
             timelineWidgets.add(
               _DailyJourneyCard(
                 journey: journey,
-                onDeleteEntry: hiveService.deleteJourneyEntry,
+                onDeleteEntry: (id) async {
+                  final entry =
+                      manualEntries.firstWhere((entry) => entry.id == id);
+                  await recoverableDelete(context,
+                      label: 'journey entry',
+                      remove: () => hiveService.deleteJourneyEntry(id),
+                      restore: () => hiveService.saveJourneyEntry(entry));
+                },
               ),
             );
           }
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+            padding: EdgeInsets.all(16),
             children: [
-              _JourneyHero(onAdd: () => _showEntryDialog(context, allTasks), hiveService: hiveService),
-              const SizedBox(height: 14),
+              Text('Your activity and reflections',
+                  style: Theme.of(context).textTheme.titleMedium),
+              SizedBox(height: 14),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: () => _showEntryDialog(
+                    context,
+                    hiveService
+                        .getAllTasksByDate()
+                        .values
+                        .expand((tasks) => tasks)
+                        .toList(),
+                  ),
+                  icon: const Icon(Icons.add_photo_alternate),
+                  label: const Text('Log journey'),
+                ),
+              ),
+              SizedBox(height: 14),
               if (dailyJourneys.isEmpty)
-                const _EmptyJourneyState()
+                _EmptyJourneyState()
               else
                 ...timelineWidgets,
             ],
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showEntryDialog(
-          context,
-          hiveService.getAllTasksByDate().values.expand((tasks) => tasks).toList(),
-        ),
-        icon: const Icon(Icons.add_photo_alternate),
-        label: const Text('Log journey'),
-      ),
     );
   }
 
   Future<void> _showEntryDialog(BuildContext context, List<Task> tasks) async {
-    final created = await showDialog<JourneyEntry>(
+    await showDialog<JourneyEntry>(
       context: context,
-      builder: (context) => _JourneyEntryDialog(tasks: tasks),
+      barrierDismissible: false,
+      builder: (context) => _JourneyEntryDialog(
+          tasks: tasks, onSave: hiveService.saveJourneyEntry),
     );
-
-    if (created != null) {
-      await hiveService.saveJourneyEntry(created);
-    }
   }
 }
-
 
 class _DailyJourney {
   final DateTime date;
@@ -89,7 +102,7 @@ class _DailyJourney {
   final JournalEntry? journalEntry;
   final List<JourneyEntry> manualEntries;
 
-  const _DailyJourney({
+  _DailyJourney({
     required this.date,
     required this.tasks,
     required this.journalEntry,
@@ -110,15 +123,13 @@ class _DailyJourney {
     }).toList();
   }
 
-
   bool get hasActivity {
-    return tasks.isNotEmpty ||
-        journalEntry != null ||
-        manualEntries.isNotEmpty;
+    return tasks.isNotEmpty || journalEntry != null || manualEntries.isNotEmpty;
   }
 
   Color get accentColor {
-    if (completedTasks.isNotEmpty) return Color(completedTasks.first.colorValue);
+    if (completedTasks.isNotEmpty)
+      return Color(completedTasks.first.colorValue);
     if (habitUpdates.isNotEmpty) return Color(habitUpdates.first.colorValue);
     if (tasks.isNotEmpty) return Color(tasks.first.colorValue);
     if (manualEntries.isNotEmpty) return Color(manualEntries.first.colorValue);
@@ -148,39 +159,47 @@ class _DailyJourney {
       manualByDate.putIfAbsent(date, () => <JourneyEntry>[]).add(entry);
     }
 
-    final journeys = dates.map((date) {
-      final entries = (manualByDate[date] ?? const <JourneyEntry>[]).toList()
-        ..sort((a, b) {
-          if (a.isAutoDailySummary != b.isAutoDailySummary) return a.isAutoDailySummary ? -1 : 1;
-          return b.date.compareTo(a.date);
-        });
-      return _DailyJourney(
-        date: date,
-        tasks: tasksByDate[date] ?? const <Task>[],
-        journalEntry: journalsByDate[date],
-        manualEntries: entries,
-      );
-    }).where((journey) => journey.hasActivity).toList()
+    final journeys = dates
+        .map((date) {
+          final entries = (manualByDate[date] ?? <JourneyEntry>[]).toList()
+            ..sort((a, b) {
+              if (a.isAutoDailySummary != b.isAutoDailySummary)
+                return a.isAutoDailySummary ? -1 : 1;
+              return b.date.compareTo(a.date);
+            });
+          return _DailyJourney(
+            date: date,
+            tasks: tasksByDate[date] ?? <Task>[],
+            journalEntry: journalsByDate[date],
+            manualEntries: entries,
+          );
+        })
+        .where((journey) => journey.hasActivity)
+        .toList()
       ..sort((a, b) => b.date.compareTo(a.date));
 
     return journeys;
   }
 
-  static bool _isCompletedTask(Task task) => task.done || task.status.trim().toLowerCase() == 'completed';
+  static bool _isCompletedTask(Task task) =>
+      task.done || task.status.trim().toLowerCase() == 'completed';
 }
 
 class _TimelineSectionHeader extends StatelessWidget {
   final String label;
 
-  const _TimelineSectionHeader({required this.label});
+  _TimelineSectionHeader({required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 6, bottom: 8),
+      padding: EdgeInsets.only(top: 6, bottom: 8),
       child: Text(
         label,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.textPrimary),
+        style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSurface),
       ),
     );
   }
@@ -190,7 +209,7 @@ class _DailyJourneyCard extends StatelessWidget {
   final _DailyJourney journey;
   final Future<void> Function(String id) onDeleteEntry;
 
-  const _DailyJourneyCard({required this.journey, required this.onDeleteEntry});
+  _DailyJourneyCard({required this.journey, required this.onDeleteEntry});
 
   @override
   Widget build(BuildContext context) {
@@ -198,8 +217,8 @@ class _DailyJourneyCard extends StatelessWidget {
     final journal = journey.journalEntry;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(14),
+      margin: EdgeInsets.only(bottom: 14),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: accent.withOpacity(0.09),
         borderRadius: BorderRadius.circular(24),
@@ -208,7 +227,7 @@ class _DailyJourneyCard extends StatelessWidget {
           BoxShadow(
             color: accent.withOpacity(0.06),
             blurRadius: 12,
-            offset: const Offset(0, 6),
+            offset: Offset(0, 6),
           ),
         ],
       ),
@@ -226,26 +245,30 @@ class _DailyJourneyCard extends StatelessWidget {
                 ),
                 child: Icon(Icons.timeline, color: accent),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_friendlyDate(journey.date), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 2),
+                    Text(_friendlyDate(journey.date),
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w600)),
+                    SizedBox(height: 2),
                     Text(
                       '${journey.completedTasks.length} completed • ${journey.habitUpdates.length} habit updates • ${journal?.mood ?? 'No mood'}',
-                      style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           if (journal != null) _MoodReflectionPanel(journal: journal),
           if (journey.completedTasks.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             _TaskWrap(
               title: 'Completed tasks',
               tasks: journey.completedTasks,
@@ -253,7 +276,7 @@ class _DailyJourneyCard extends StatelessWidget {
             ),
           ],
           if (journey.habitUpdates.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             _TaskWrap(
               title: 'Habit updates',
               tasks: journey.habitUpdates,
@@ -261,7 +284,7 @@ class _DailyJourneyCard extends StatelessWidget {
             ),
           ],
           if (journey.manualEntries.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             ...journey.manualEntries.map(
               (entry) => _JourneyEntryCard(
                 entry: entry,
@@ -280,7 +303,7 @@ class _DailyJourneyCard extends StatelessWidget {
 class _MoodReflectionPanel extends StatelessWidget {
   final JournalEntry journal;
 
-  const _MoodReflectionPanel({required this.journal});
+  _MoodReflectionPanel({required this.journal});
 
   @override
   Widget build(BuildContext context) {
@@ -288,7 +311,7 @@ class _MoodReflectionPanel extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(18),
@@ -299,16 +322,18 @@ class _MoodReflectionPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(_moodEmoji(journal.mood), style: const TextStyle(fontSize: 22)),
-              const SizedBox(width: 8),
-              Text(journal.mood, style: const TextStyle(fontWeight: FontWeight.w900)),
-              const Spacer(),
-              Text('${journal.productivityScore}%', style: TextStyle(color: color, fontWeight: FontWeight.w900)),
+              Text(_moodEmoji(journal.mood), style: TextStyle(fontSize: 22)),
+              SizedBox(width: 8),
+              Text(journal.mood, style: TextStyle(fontWeight: FontWeight.w600)),
+              Spacer(),
+              Text('${journal.productivityScore}%',
+                  style: TextStyle(color: color, fontWeight: FontWeight.w600)),
             ],
           ),
           if (journal.reflection.trim().isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(journal.reflection.trim(), maxLines: 4, overflow: TextOverflow.ellipsis),
+            SizedBox(height: 8),
+            Text(journal.reflection.trim(),
+                maxLines: 4, overflow: TextOverflow.ellipsis),
           ],
         ],
       ),
@@ -321,19 +346,22 @@ class _TaskWrap extends StatelessWidget {
   final List<Task> tasks;
   final IconData icon;
 
-  const _TaskWrap({required this.title, required this.tasks, required this.icon});
+  _TaskWrap({required this.title, required this.tasks, required this.icon});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-        const SizedBox(height: 8),
+        Text(title, style: TextStyle(fontWeight: FontWeight.w600)),
+        SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: tasks.map((task) => _JourneyChip(label: task.task, icon: icon, color: Color(task.colorValue))).toList(),
+          children: tasks
+              .map((task) => _JourneyChip(
+                  label: task.task, icon: icon, color: Color(task.colorValue)))
+              .toList(),
         ),
       ],
     );
@@ -344,14 +372,14 @@ class _JourneyHero extends StatelessWidget {
   final VoidCallback onAdd;
   final HiveService hiveService;
 
-  const _JourneyHero({required this.onAdd, required this.hiveService});
+  _JourneyHero({required this.onAdd, required this.hiveService});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           colors: [Color(0xFF7E57C2), Color(0xFF1E88E5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -361,7 +389,7 @@ class _JourneyHero extends StatelessWidget {
           BoxShadow(
             color: AppColors.accent.withOpacity(0.18),
             blurRadius: 18,
-            offset: const Offset(0, 10),
+            offset: Offset(0, 10),
           ),
         ],
       ),
@@ -370,26 +398,35 @@ class _JourneyHero extends StatelessWidget {
         children: [
           Row(
             children: [
-              ProfileAvatar(profile: hiveService.getUserProfile(), radius: 24, accentColor: AppColors.accent, showGlow: false),
-              const SizedBox(width: 10),
-              const Expanded(
+              ProfileAvatar(
+                  profile: hiveService.getUserProfile(),
+                  radius: 24,
+                  accentColor: AppColors.accent,
+                  showGlow: false),
+              SizedBox(width: 10),
+              Expanded(
                 child: Text(
                   'Personal Journey Timeline',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20),
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 20),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             'Log habit progress, milestone wins, reflections, routines, and optional progress images in one personal growth feed.',
-            style: TextStyle(color: Colors.white.withOpacity(0.88), fontWeight: FontWeight.w600),
+            style: TextStyle(
+                color: Colors.white.withOpacity(0.88),
+                fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           ElevatedButton.icon(
             onPressed: onAdd,
-            icon: const Icon(Icons.add),
-            label: const Text('Add journey entry'),
+            icon: Icon(Icons.add),
+            label: Text('Add journey entry'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
               foregroundColor: AppColors.accent,
@@ -405,15 +442,15 @@ class _JourneyEntryCard extends StatelessWidget {
   final JourneyEntry entry;
   final VoidCallback onDelete;
 
-  const _JourneyEntryCard({required this.entry, required this.onDelete});
+  _JourneyEntryCard({required this.entry, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
     final accent = Color(entry.colorValue);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      margin: EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: accent.withOpacity(0.10),
         borderRadius: BorderRadius.circular(22),
@@ -434,16 +471,20 @@ class _JourneyEntryCard extends StatelessWidget {
                 ),
                 child: Icon(_iconForType(entry.type), color: accent),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(entry.title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-                    const SizedBox(height: 2),
+                    Text(entry.title,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 16)),
+                    SizedBox(height: 2),
                     Text(
                       '${entry.date.month}/${entry.date.day}/${entry.date.year} • ${entry.type}',
-                      style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
@@ -451,21 +492,27 @@ class _JourneyEntryCard extends StatelessWidget {
               if (!entry.isAutoDailySummary)
                 IconButton(
                   tooltip: 'Delete entry',
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  icon: Icon(Icons.delete_outline, color: Colors.redAccent),
                   onPressed: onDelete,
                 ),
             ],
           ),
           if (entry.description.trim().isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(entry.description, style: const TextStyle(color: Colors.black87, height: 1.3)),
+            SizedBox(height: 10),
+            Text(entry.description,
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    height: 1.3)),
           ],
           if (entry.relatedTaskName != null) ...[
-            const SizedBox(height: 10),
-            _JourneyChip(label: entry.relatedTaskName!, icon: Icons.repeat, color: accent),
+            SizedBox(height: 10),
+            _JourneyChip(
+                label: entry.relatedTaskName!,
+                icon: Icons.repeat,
+                color: accent),
           ],
           if (entry.hasImage) ...[
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             _JourneyImagePreview(imageUrl: entry.imageUrl!, color: accent),
           ],
         ],
@@ -495,7 +542,7 @@ class _RelatedTaskDropdownItem extends StatelessWidget {
   final Task task;
   final bool compact;
 
-  const _RelatedTaskDropdownItem({required this.task, this.compact = false});
+  _RelatedTaskDropdownItem({required this.task, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -507,10 +554,13 @@ class _RelatedTaskDropdownItem extends StatelessWidget {
           Container(
             width: 10,
             height: 10,
-            decoration: BoxDecoration(color: Color(task.colorValue), shape: BoxShape.circle),
+            decoration: BoxDecoration(
+                color: Color(task.colorValue), shape: BoxShape.circle),
           ),
-          const SizedBox(width: 8),
-          Flexible(child: Text(toTitleCase(task.task), overflow: TextOverflow.ellipsis, maxLines: 1)),
+          SizedBox(width: 8),
+          Flexible(
+              child: Text(toTitleCase(task.task),
+                  overflow: TextOverflow.ellipsis, maxLines: 1)),
         ],
       ),
     );
@@ -522,14 +572,14 @@ class _JourneyChip extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  const _JourneyChip({required this.label, required this.icon, required this.color});
+  _JourneyChip({required this.label, required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.78),
+        color: Theme.of(context).colorScheme.surface.withOpacity(0.78),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withOpacity(0.22)),
       ),
@@ -537,8 +587,9 @@ class _JourneyChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 14, color: color),
-          const SizedBox(width: 5),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+          SizedBox(width: 5),
+          Text(label,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -549,27 +600,30 @@ class _JourneyImagePreview extends StatelessWidget {
   final String imageUrl;
   final Color color;
 
-  const _JourneyImagePreview({required this.imageUrl, required this.color});
+  _JourneyImagePreview({required this.imageUrl, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    final isNetworkImage = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+    final isNetworkImage =
+        imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Container(
         width: double.infinity,
-        constraints: const BoxConstraints(minHeight: 72),
+        constraints: BoxConstraints(minHeight: 72),
         color: Colors.white.withOpacity(0.68),
         child: isNetworkImage
             ? Image.network(imageUrl, fit: BoxFit.cover)
             : Padding(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(12),
                 child: Row(
                   children: [
                     Icon(Icons.image, color: color),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(imageUrl, style: const TextStyle(fontWeight: FontWeight.w700))),
+                    SizedBox(width: 8),
+                    Expanded(
+                        child: Text(imageUrl,
+                            style: TextStyle(fontWeight: FontWeight.w700))),
                   ],
                 ),
               ),
@@ -579,27 +633,29 @@ class _JourneyImagePreview extends StatelessWidget {
 }
 
 class _EmptyJourneyState extends StatelessWidget {
-  const _EmptyJourneyState();
+  _EmptyJourneyState();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.black12),
       ),
-      child: const Column(
+      child: Column(
         children: [
           Icon(Icons.auto_awesome, color: AppColors.accent, size: 32),
           SizedBox(height: 8),
-          Text('No journey entries yet', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+          Text('No journey entries yet',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
           SizedBox(height: 4),
           Text(
             'Add your first habit progress moment, reflection, milestone, or photo to start building your growth story.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.black54),
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -610,7 +666,8 @@ class _EmptyJourneyState extends StatelessWidget {
 class _JourneyEntryDialog extends StatefulWidget {
   final List<Task> tasks;
 
-  const _JourneyEntryDialog({required this.tasks});
+  final Future<void> Function(JourneyEntry) onSave;
+  _JourneyEntryDialog({required this.tasks, required this.onSave});
 
   @override
   State<_JourneyEntryDialog> createState() => _JourneyEntryDialogState();
@@ -623,6 +680,9 @@ class _JourneyEntryDialogState extends State<_JourneyEntryDialog> {
 
   DateTime _date = DateTime.now();
   String _type = 'Habit progress';
+  bool _saving = false;
+  String? _error;
+  final String _entryId = DateTime.now().microsecondsSinceEpoch.toString();
   Task? _relatedTask;
 
   static const _types = [
@@ -647,7 +707,7 @@ class _JourneyEntryDialogState extends State<_JourneyEntryDialog> {
     final accent = Color(_relatedTask?.colorValue ?? AppColors.accent.value);
 
     return AlertDialog(
-      title: const Text('Add journey entry'),
+      title: Text('Add journey entry'),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       content: SingleChildScrollView(
         child: Column(
@@ -658,33 +718,42 @@ class _JourneyEntryDialogState extends State<_JourneyEntryDialog> {
               autofocus: true,
               decoration: InputDecoration(
                 labelText: 'Title *',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                errorText: _error,
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _type,
               decoration: InputDecoration(
                 labelText: 'Entry type',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
               ),
-              items: _types.map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
+              items: _types
+                  .map((type) =>
+                      DropdownMenuItem(value: type, child: Text(type)))
+                  .toList(),
               onChanged: (value) => setState(() => _type = value ?? _type),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             DropdownButtonFormField<Task?>(
               value: _relatedTask,
               isExpanded: true,
               decoration: InputDecoration(
                 labelText: 'Related habit/task',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
               ),
               selectedItemBuilder: (context) => [
-                const Text('No related task', overflow: TextOverflow.ellipsis),
-                ...taskOptions.map((task) => _RelatedTaskDropdownItem(task: task, compact: true)),
+                Text('No related task', overflow: TextOverflow.ellipsis),
+                ...taskOptions.map((task) =>
+                    _RelatedTaskDropdownItem(task: task, compact: true)),
               ],
               items: [
-                const DropdownMenuItem<Task?>(value: null, child: Text('No related task')),
+                DropdownMenuItem<Task?>(
+                    value: null, child: Text('No related task')),
                 ...taskOptions.map(
                   (task) => DropdownMenuItem<Task?>(
                     value: task,
@@ -694,10 +763,10 @@ class _JourneyEntryDialogState extends State<_JourneyEntryDialog> {
               ],
               onChanged: (value) => setState(() => _relatedTask = value),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: accent.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(14),
@@ -705,12 +774,14 @@ class _JourneyEntryDialogState extends State<_JourneyEntryDialog> {
               ),
               child: Row(
                 children: [
-                  Expanded(child: Text('Date: ${_date.month}/${_date.day}/${_date.year}')),
-                  TextButton(onPressed: _pickDate, child: const Text('Select')),
+                  Expanded(
+                      child: Text(
+                          'Date: ${_date.month}/${_date.day}/${_date.year}')),
+                  TextButton(onPressed: _pickDate, child: Text('Select')),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             TextField(
               controller: _descriptionController,
               minLines: 3,
@@ -718,26 +789,29 @@ class _JourneyEntryDialogState extends State<_JourneyEntryDialog> {
               decoration: InputDecoration(
                 labelText: 'Reflection / Description',
                 hintText: 'What changed, improved, or motivated you?',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             TextField(
               controller: _imageController,
               decoration: InputDecoration(
                 labelText: 'Optional image URL or path',
                 hintText: 'Progress photo, screenshot, setup image...',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(context), child: Text('Cancel')),
         ElevatedButton(
-          onPressed: _save,
-          child: const Text('Save entry'),
+          onPressed: _saving ? null : _save,
+          child: Text('Save entry'),
         ),
       ],
     );
@@ -754,31 +828,46 @@ class _JourneyEntryDialogState extends State<_JourneyEntryDialog> {
     if (picked != null) setState(() => _date = picked);
   }
 
-  void _save() {
+  Future<void> _save() async {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Journey title is required')));
+      setState(() => _error = 'Enter a journey title');
       return;
     }
 
     final entry = JourneyEntry(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      id: _entryId,
       date: _date,
       type: _type,
       title: title,
       description: _descriptionController.text.trim(),
       relatedTaskName: _relatedTask?.task,
       colorValue: _relatedTask?.colorValue ?? AppColors.accent.value,
-      imageUrl: _imageController.text.trim().isEmpty ? null : _imageController.text.trim(),
+      imageUrl: _imageController.text.trim().isEmpty
+          ? null
+          : _imageController.text.trim(),
     );
 
-    Navigator.pop(context, entry);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onSave(entry);
+      if (mounted) Navigator.pop(context, entry);
+    } catch (_) {
+      if (mounted)
+        setState(() {
+          _saving = false;
+          _error = 'Could not save. Please retry.';
+        });
+    }
   }
 
   List<Task> _uniqueTaskOptions(List<Task> tasks) {
     final byName = <String, Task>{};
     for (final task in tasks) {
-      final key = task.task.trim().toLowerCase();
+      final key = task.id;
       if (key.isEmpty) continue;
       byName.putIfAbsent(key, () => task);
     }
@@ -786,13 +875,12 @@ class _JourneyEntryDialogState extends State<_JourneyEntryDialog> {
   }
 }
 
-
 DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
 String _sectionLabelForDate(DateTime date) {
   final now = DateTime.now();
   final today = _dateOnly(now);
-  final yesterday = today.subtract(const Duration(days: 1));
+  final yesterday = today.subtract(Duration(days: 1));
   final weekStart = today.subtract(Duration(days: today.weekday - 1));
 
   if (_isSameDate(date, today)) return "Today's Activity";
@@ -807,22 +895,23 @@ String _friendlyDate(DateTime date) {
   return '${date.month}/${date.day}/${date.year}';
 }
 
-bool _isSameDate(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+bool _isSameDate(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
 
 Color _moodColor(String? mood) {
   switch (mood) {
     case 'Happy':
-      return const Color(0xFFFFC857);
+      return Color(0xFFFFC857);
     case 'Good':
-      return const Color(0xFF7BC96F);
+      return Color(0xFF7BC96F);
     case 'Sad':
-      return const Color(0xFF64B5F6);
+      return Color(0xFF64B5F6);
     case 'Angry':
-      return const Color(0xFFE57373);
+      return Color(0xFFE57373);
     case 'Anxious':
-      return const Color(0xFFFFB74D);
+      return Color(0xFFFFB74D);
     case 'Neutral':
-      return const Color(0xFF90A4AE);
+      return Color(0xFF90A4AE);
     default:
       return AppColors.accent;
   }

@@ -2,19 +2,30 @@ import 'package:flutter/material.dart';
 import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/period_progress_bubble_map.dart';
+import '../widgets/period_task_agenda.dart';
 import '../services/hive_service.dart';
-import '../constants/colors.dart';
 import '../constants/dashboard_themes.dart';
 import '../models/task_model.dart';
 import '../models/productivity_snapshot.dart';
 import 'journal_view.dart';
+import 'day_view.dart';
 import '../utils/text_formatters.dart';
 import '../widgets/app_text.dart';
 
 class WeekView extends StatefulWidget {
   final HiveService hiveService;
+  final DateTime? initialDate;
+  final ValueChanged<DateTime>? onDateChanged;
+  final ValueChanged<DateTime>? onOpenDate;
+  final bool showPeriodControls;
 
-  const WeekView({super.key, required this.hiveService});
+  const WeekView(
+      {super.key,
+      required this.hiveService,
+      this.initialDate,
+      this.onDateChanged,
+      this.onOpenDate,
+      this.showPeriodControls = true});
 
   @override
   State<WeekView> createState() => _WeekViewState();
@@ -25,9 +36,18 @@ class _WeekViewState extends State<WeekView> {
   bool _showWeeklyTasks = true;
 
   @override
+  void didUpdateWidget(covariant WeekView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialDate != null &&
+        widget.initialDate != oldWidget.initialDate) {
+      _currentWeekStart = _getWeekStart(widget.initialDate!);
+    }
+  }
+
+  @override
   void initState() {
     super.initState();
-    _currentWeekStart = _getWeekStart(DateTime.now());
+    _currentWeekStart = _getWeekStart(widget.initialDate ?? DateTime.now());
   }
 
   DateTime _getWeekStart(DateTime date) {
@@ -39,13 +59,27 @@ class _WeekViewState extends State<WeekView> {
 
   void _openJournalForTask(Task task) {
     Navigator.of(context).push(
-      JournalView.route(hiveService: widget.hiveService, initialDate: task.dueDate),
+      JournalView.route(
+          hiveService: widget.hiveService, initialDate: task.dueDate),
     );
   }
 
+  void _openAgendaDate(DateTime date) {
+    if (widget.onOpenDate != null) {
+      widget.onOpenDate!(date);
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) =>
+          DayView(hiveService: widget.hiveService, initialDate: date),
+    ));
+  }
+
   Future<void> _editTask(Task task) async {
-    if (isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task)) {
-      final action = await showRoutineOccurrenceDialog(context: context, task: task, hiveService: widget.hiveService);
+    if (isRoutineTask(task) ||
+        hasTaskLinkedInstructions(widget.hiveService, task)) {
+      final action = await showRoutineOccurrenceDialog(
+          context: context, task: task, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {
@@ -53,47 +87,45 @@ class _WeekViewState extends State<WeekView> {
           _openJournalForTask(task);
           return;
         case RoutineOccurrenceAction.disableRoutine:
-          await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
+          await widget.hiveService
+              .setRecurringTaskEnabledByReference(task, false);
           return;
         case RoutineOccurrenceAction.editDetails:
-          final edited = await showTaskFormDialog(
+          await showTaskFormDialog(
             context,
             date: task.dueDate,
             initialTask: task,
-            title: isRoutineTask(task) ? 'Edit Routine Details' : 'View Task Details',
+            title: isRoutineTask(task)
+                ? 'Edit Routine Details'
+                : 'View Task Details',
             actionLabel: isRoutineTask(task) ? 'Save Routine' : 'Save Task',
+            onSave: (edited) =>
+                widget.hiveService.saveTaskChanges(task, edited),
           );
-          if (edited != null) {
-            if (isRoutineTask(task)) {
-              await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
-            } else {
-              await widget.hiveService.updateTaskByReference(task, edited);
-            }
-          }
           return;
         case RoutineOccurrenceAction.missOccurrence:
-          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: false, status: 'Missed'));
+          await widget.hiveService.updateTaskByReference(
+              task, task.copyWith(done: false, status: 'Missed'));
           return;
         case RoutineOccurrenceAction.completeOccurrence:
-          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed'));
+          await widget.hiveService.updateTaskByReference(
+              task, task.copyWith(done: true, status: 'Completed'));
           return;
         case RoutineOccurrenceAction.close:
           return;
       }
     }
 
-    final updated = await showTaskFormDialog(
+    await showTaskFormDialog(
       context,
       date: task.dueDate,
       initialTask: task,
       title: 'Update Task',
       actionLabel: 'Save Task',
+      onSave: (updated) => widget.hiveService.saveTaskChanges(task, updated),
+      onRestore: () => widget.hiveService.addTask(task.dueDate, task),
       onDelete: () => widget.hiveService.deleteTaskByReference(task),
     );
-
-    if (updated != null) {
-      await widget.hiveService.updateTaskByReference(task, updated);
-    }
   }
 
   List<String> _getDayLabels() {
@@ -102,40 +134,47 @@ class _WeekViewState extends State<WeekView> {
 
   String _formatWeekRange(DateTime start) {
     final end = start.add(const Duration(days: 6));
-    final startStr = '${start.month}/${start.day}';
-    final endStr = '${end.month}/${end.day}';
+    final startStr = MaterialLocalizations.of(context).formatShortDate(start);
+    final endStr = MaterialLocalizations.of(context).formatShortDate(end);
     return '$startStr - $endStr';
   }
 
   List<Task> _getWeeklyRepeatingTasks() {
     final allTasksByDate = widget.hiveService.getAllTasksByDate();
-    final weekStart = DateTime(_currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day);
+    final weekStart = DateTime(
+        _currentWeekStart.year, _currentWeekStart.month, _currentWeekStart.day);
     final weekEnd = weekStart.add(const Duration(days: 6));
 
-    return allTasksByDate.values
-        .expand((tasks) => tasks)
-        .where((task) {
-          final dueDate = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-          return task.repeatTask &&
-              task.repeatFrequency == 'Weekly' &&
-              !dueDate.isBefore(weekStart) &&
-              !dueDate.isAfter(weekEnd);
-        })
-        .toList();
+    return allTasksByDate.values.expand((tasks) => tasks).where((task) {
+      final dueDate =
+          DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+      return task.repeatTask &&
+          task.repeatFrequency == 'Weekly' &&
+          !dueDate.isBefore(weekStart) &&
+          !dueDate.isAfter(weekEnd);
+    }).toList();
   }
 
   _WeeklyProductivityStats _weeklyProductivityStats(List<DateTime> days) {
     final snapshots = days
-        .map((date) => widget.hiveService.calculateProductivitySnapshotForDate(date))
+        .map((date) =>
+            widget.hiveService.calculateProductivitySnapshotForDate(date))
         .toList();
-    final weekTasks = days.expand((date) => widget.hiveService.getTasksForDate(date)).toList();
+    final weekTasks = days
+        .expand((date) => widget.hiveService.getTasksForDate(date))
+        .toList();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final completedTasks = weekTasks.where(_isCompletedTask).length;
-    final pendingTasks = weekTasks.where((task) => !_isCompletedTask(task) && task.status != 'Cancelled').length;
+    final pendingTasks = weekTasks
+        .where((task) => !_isCompletedTask(task) && task.status != 'Cancelled')
+        .length;
     final overdueTasks = weekTasks.where((task) {
-      final due = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-      return due.isBefore(today) && !_isCompletedTask(task) && task.status != 'Cancelled';
+      final due =
+          DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+      return due.isBefore(today) &&
+          !_isCompletedTask(task) &&
+          task.status != 'Cancelled';
     }).length;
     return _WeeklyProductivityStats(
       weekStart: days.first,
@@ -156,19 +195,20 @@ class _WeekViewState extends State<WeekView> {
     return '${hours.toStringAsFixed(1)} hrs';
   }
 
-  Widget _weeklyProductivitySection(_WeeklyProductivityStats stats) {
+  Widget _weeklyProductivitySection(
+      _WeeklyProductivityStats stats, DashboardThemeStyle theme) {
     final score = stats.productivityScore;
     final rating = ProductivitySnapshot.ratingForScore(score);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.surface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.primary.withOpacity(0.18)),
+        border: Border.all(color: theme.primary.withValues(alpha: 0.18)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: theme.primary.withValues(alpha: theme.dark ? 0.16 : 0.06),
             blurRadius: 14,
             offset: const Offset(0, 8),
           ),
@@ -183,9 +223,13 @@ class _WeekViewState extends State<WeekView> {
                 '📆 Weekly Productivity',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: responsiveFont(context, 20), fontWeight: FontWeight.w900, color: AppColors.textPrimary),
+                style: TextStyle(
+                    fontSize: responsiveFont(context, 20),
+                    fontWeight: FontWeight.w900,
+                    color: theme.textPrimary),
               );
-              final badge = _ScoreBadge(score: score, rating: rating);
+              final badge =
+                  _ScoreBadge(score: score, rating: rating, theme: theme);
               if (constraints.maxWidth < 300) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,20 +250,65 @@ class _WeekViewState extends State<WeekView> {
             spacing: 10,
             runSpacing: 10,
             children: [
-              _WeekMetricCard(label: 'Score', value: '${score.round()}%', icon: Icons.insights),
-              _WeekMetricCard(label: 'Rating', value: rating, icon: Icons.emoji_events_outlined),
-              _WeekMetricCard(label: 'Total Points', value: '${stats.totalPoints} / ${_WeeklyProductivityStats.maximumWeeklyPoints}', icon: Icons.stars_outlined),
-              _WeekMetricCard(label: 'Hours Recorded', value: _formatHours(stats.totalHours), icon: Icons.timer_outlined),
-              _WeekMetricCard(label: 'Completed Tasks', value: '${stats.completedTasks}', icon: Icons.check_circle_outline),
-              _WeekMetricCard(label: 'Pending Tasks', value: '${stats.pendingTasks}', icon: Icons.pending_actions_outlined),
-              _WeekMetricCard(label: 'Overdue Tasks', value: '${stats.overdueTasks}', icon: Icons.warning_amber_rounded),
-              _WeekMetricCard(label: 'Average Daily Score', value: '${stats.averageDailyScore.round()}%', icon: Icons.show_chart),
-              _WeekMetricCard(label: 'Best Day', value: stats.bestDayLabel(_getDayLabels()), icon: Icons.arrow_upward_rounded),
-              _WeekMetricCard(label: 'Lowest Day', value: stats.lowestDayLabel(_getDayLabels()), icon: Icons.arrow_downward_rounded),
+              _WeekMetricCard(
+                  label: 'Score',
+                  value: '${score.round()}%',
+                  icon: Icons.insights,
+                  theme: theme),
+              _WeekMetricCard(
+                  label: 'Rating',
+                  value: rating,
+                  icon: Icons.emoji_events_outlined,
+                  theme: theme),
+              _WeekMetricCard(
+                  label: 'Total Points',
+                  value:
+                      '${stats.totalPoints} / ${_WeeklyProductivityStats.maximumWeeklyPoints}',
+                  icon: Icons.stars_outlined,
+                  theme: theme),
+              _WeekMetricCard(
+                  label: 'Hours Recorded',
+                  value: _formatHours(stats.totalHours),
+                  icon: Icons.timer_outlined,
+                  theme: theme),
+              _WeekMetricCard(
+                  label: 'Completed Tasks',
+                  value: '${stats.completedTasks}',
+                  icon: Icons.check_circle_outline,
+                  theme: theme),
+              _WeekMetricCard(
+                  label: 'Pending Tasks',
+                  value: '${stats.pendingTasks}',
+                  icon: Icons.pending_actions_outlined,
+                  theme: theme),
+              _WeekMetricCard(
+                  label: 'Overdue Tasks',
+                  value: '${stats.overdueTasks}',
+                  icon: Icons.warning_amber_rounded,
+                  theme: theme),
+              _WeekMetricCard(
+                  label: 'Average Daily Score',
+                  value: '${stats.averageDailyScore.round()}%',
+                  icon: Icons.show_chart,
+                  theme: theme),
+              _WeekMetricCard(
+                  label: 'Best Day',
+                  value: stats.bestDayLabel(_getDayLabels()),
+                  icon: Icons.arrow_upward_rounded,
+                  theme: theme),
+              _WeekMetricCard(
+                  label: 'Lowest Day',
+                  value: stats.lowestDayLabel(_getDayLabels()),
+                  icon: Icons.arrow_downward_rounded,
+                  theme: theme),
             ],
           ),
           const SizedBox(height: 16),
-          const Text('Weekly Breakdown', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+          Text('Weekly Breakdown',
+              style: TextStyle(
+                  color: theme.textPrimary,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16)),
           const SizedBox(height: 8),
           _categoryBreakdown(stats),
           const SizedBox(height: 16),
@@ -230,7 +319,9 @@ class _WeekViewState extends State<WeekView> {
                   children: [
                     _weeklyBarChart(stats),
                     const SizedBox(height: 12),
-                    SizedBox(width: double.infinity, child: _completedPendingDonut(stats)),
+                    SizedBox(
+                        width: double.infinity,
+                        child: _completedPendingDonut(stats)),
                   ],
                 );
               }
@@ -268,8 +359,13 @@ class _WeekViewState extends State<WeekView> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    Expanded(child: Text(item.$1, style: const TextStyle(fontWeight: FontWeight.w700))),
-                    Text(_formatHours(item.$2), style: TextStyle(color: item.$3, fontWeight: FontWeight.w900)),
+                    Expanded(
+                        child: Text(item.$1,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w700))),
+                    Text(_formatHours(item.$2),
+                        style: TextStyle(
+                            color: item.$3, fontWeight: FontWeight.w900)),
                   ],
                 ),
               ))
@@ -279,14 +375,17 @@ class _WeekViewState extends State<WeekView> {
 
   Widget _weeklyBarChart(_WeeklyProductivityStats stats) {
     final labels = _getDayLabels();
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       height: 150,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFF8F4EC), borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(
+          color: colorScheme.surface, borderRadius: BorderRadius.circular(18)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: List.generate(stats.snapshots.length, (index) {
-          final value = stats.snapshots[index].productivityScore.clamp(0, 100).toDouble();
+          final value =
+              stats.snapshots[index].productivityScore.clamp(0, 100).toDouble();
           return Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 3),
@@ -301,7 +400,7 @@ class _WeekViewState extends State<WeekView> {
                         child: Container(
                           width: 18,
                           decoration: BoxDecoration(
-                            color: AppColors.primary,
+                            color: colorScheme.primary,
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
@@ -309,7 +408,11 @@ class _WeekViewState extends State<WeekView> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(labels[index], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  Text(labels[index],
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.onSurfaceVariant)),
                 ],
               ),
             ),
@@ -320,20 +423,30 @@ class _WeekViewState extends State<WeekView> {
   }
 
   Widget _dailyScoreLineChart(_WeeklyProductivityStats stats) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       height: 150,
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFF8F4EC), borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(
+          color: colorScheme.surface, borderRadius: BorderRadius.circular(18)),
       child: CustomPaint(
-        painter: _WeeklyScoreLinePainter(stats.snapshots.map((snapshot) => snapshot.productivityScore).toList()),
+        painter: _WeeklyScoreLinePainter(
+          stats.snapshots
+              .map((snapshot) => snapshot.productivityScore)
+              .toList(),
+          colorScheme.primary,
+          colorScheme.outlineVariant,
+        ),
         child: const SizedBox.expand(),
       ),
     );
   }
 
   Widget _completedPendingDonut(_WeeklyProductivityStats stats) {
-    final total = stats.completedTasks + stats.pendingTasks + stats.overdueTasks;
+    final colorScheme = Theme.of(context).colorScheme;
+    final total =
+        stats.completedTasks + stats.pendingTasks + stats.overdueTasks;
     final completedRatio = total == 0 ? 0.0 : stats.completedTasks / total;
     return Column(
       children: [
@@ -346,15 +459,18 @@ class _WeekViewState extends State<WeekView> {
               CircularProgressIndicator(
                 value: completedRatio,
                 strokeWidth: 12,
-                color: AppColors.taskCompleted,
-                backgroundColor: AppColors.taskPending.withOpacity(0.25),
+                color: colorScheme.primary,
+                backgroundColor: colorScheme.surfaceContainerHighest,
               ),
-              Text('${(completedRatio * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.w900)),
+              Text('${(completedRatio * 100).round()}%',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
             ],
           ),
         ),
         const SizedBox(height: 8),
-        const Text('Completed vs Pending', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+        const Text('Completed vs Pending',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
       ],
     );
   }
@@ -364,12 +480,18 @@ class _WeekViewState extends State<WeekView> {
       ('Urgent Only', stats.urgentHours, '50 pts/hr', const Color(0xFFFFF8E1)),
       ('Both', stats.bothHours, '100 pts/hr', const Color(0xFFFFEBEE)),
       ('Neither', stats.neitherHours, '10 pts/hr', const Color(0xFFF5F5F5)),
-      ('Important Only', stats.importantHours, '80 pts/hr', const Color(0xFFE3F2FD)),
+      (
+        'Important Only',
+        stats.importantHours,
+        '80 pts/hr',
+        const Color(0xFFE3F2FD)
+      ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Important / Urgent Matrix Summary', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+        const Text('Important / Urgent Matrix Summary',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
         const SizedBox(height: 8),
         GridView.builder(
           shrinkWrap: true,
@@ -385,7 +507,10 @@ class _WeekViewState extends State<WeekView> {
             final cell = cells[index];
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              decoration: BoxDecoration(color: cell.$4, border: Border.all(color: Colors.black26), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                  color: cell.$4,
+                  border: Border.all(color: Colors.black26),
+                  borderRadius: BorderRadius.circular(12)),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
@@ -393,21 +518,34 @@ class _WeekViewState extends State<WeekView> {
                   Flexible(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text(cell.$1, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                      child: Text(cell.$1,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w900, fontSize: 15)),
                     ),
                   ),
                   const SizedBox(height: 3),
                   Flexible(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text(_formatHours(cell.$2), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                      child: Text(_formatHours(cell.$2),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 13)),
                     ),
                   ),
                   const SizedBox(height: 2),
                   Flexible(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text(cell.$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                      child: Text(cell.$3,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.black54)),
                     ),
                   ),
                 ],
@@ -424,23 +562,40 @@ class _WeekViewState extends State<WeekView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Daily Breakdown', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+        const Text('Daily Breakdown',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
         const SizedBox(height: 8),
         ...List.generate(stats.snapshots.length, (index) {
           final snapshot = stats.snapshots[index];
-          final recorded = snapshot.productivityScore > 0 || snapshot.totalPoints > 0;
+          final recorded =
+              snapshot.productivityScore > 0 || snapshot.totalPoints > 0;
           return Container(
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: recorded ? AppColors.primary.withOpacity(0.08) : Colors.grey.withOpacity(0.10),
+              color: recorded
+                  ? Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.08)
+                  : Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
               children: [
-                SizedBox(width: 42, child: Text(labels[index], style: const TextStyle(fontWeight: FontWeight.w900))),
-                Expanded(child: Text(recorded ? '${snapshot.productivityScore.round()}% ${snapshot.rating}' : '0% Not Recorded')),
-                Text('${snapshot.totalPoints} pts', style: const TextStyle(fontWeight: FontWeight.w800)),
+                SizedBox(
+                    width: 42,
+                    child: Text(labels[index],
+                        style: const TextStyle(fontWeight: FontWeight.w900))),
+                Expanded(
+                    child: Text(recorded
+                        ? '${snapshot.productivityScore.round()}% ${snapshot.rating}'
+                        : '0% Not Recorded')),
+                Text('${snapshot.totalPoints} pts',
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
               ],
             ),
           );
@@ -452,8 +607,8 @@ class _WeekViewState extends State<WeekView> {
   Widget _weeklyTasksPanel(List<Task> tasks) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFECE8E6),
-        border: Border.all(color: Colors.black38),
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -462,8 +617,8 @@ class _WeekViewState extends State<WeekView> {
             onTap: () => setState(() => _showWeeklyTasks = !_showWeeklyTasks),
             child: Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
-                color: Color(0xFFAED9AE),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -471,34 +626,35 @@ class _WeekViewState extends State<WeekView> {
                 children: [
                   const Expanded(
                     child: Text(
-                      "WEEKLY TASKS",
+                      "Weekly routines",
                       textAlign: TextAlign.center,
-                      style: TextStyle(letterSpacing: 4, fontWeight: FontWeight.w600),
+                      style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
-                  Icon(_showWeeklyTasks ? Icons.expand_more : Icons.chevron_right, color: Colors.green[800]),
+                  Icon(
+                      _showWeeklyTasks
+                          ? Icons.expand_more
+                          : Icons.chevron_right,
+                      color: Theme.of(context).colorScheme.primary),
                 ],
               ),
             ),
           ),
           if (_showWeeklyTasks)
-            SizedBox(
-              height: 140,
-              child: tasks.isEmpty
-                  ? const Center(child: Text('Nothing for this week, Great Job !'))
-                  : ListView.builder(
-                      itemCount: tasks.length,
-                      itemBuilder: (context, index) {
-                        final task = tasks[index];
-                        return ListTile(
-                          dense: true,
-                          onTap: () => _editTask(task),
-                          title: Text(toTitleCase(task.task)),
-                          subtitle: Text('${task.priority} • ${task.status}'),
-                        );
-                      },
-                    ),
-            ),
+            if (tasks.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(14),
+                child: Text('No weekly routines for this period.'),
+              )
+            else
+              ...tasks.map(
+                (task) => ListTile(
+                  dense: true,
+                  onTap: () => _editTask(task),
+                  title: Text(toTitleCase(task.task)),
+                  subtitle: Text('${task.priority} • ${task.status}'),
+                ),
+              ),
         ],
       ),
     );
@@ -511,14 +667,25 @@ class _WeekViewState extends State<WeekView> {
     );
   }
 
-  Widget _weekDayProgressMap(DashboardThemeStyle theme, List<DateTime> weekDays, DateTime todayStart) {
+  Widget _weekDayProgressMap(
+      DashboardThemeStyle theme, List<DateTime> weekDays, DateTime todayStart) {
     final weekEnd = _currentWeekStart.add(const Duration(days: 6));
-    final isCurrentWeek = !todayStart.isBefore(_currentWeekStart) && !todayStart.isAfter(weekEnd);
+    final isCurrentWeek =
+        !todayStart.isBefore(_currentWeekStart) && !todayStart.isAfter(weekEnd);
     final isPastWeek = weekEnd.isBefore(todayStart);
     final isFutureWeek = _currentWeekStart.isAfter(todayStart);
-    final todayIndex = isCurrentWeek ? todayStart.difference(_currentWeekStart).inDays : -1;
-    final passedDays = isPastWeek ? 7 : isFutureWeek ? 0 : todayIndex.clamp(0, 7).toInt();
-    final remainingDays = isPastWeek ? 0 : isFutureWeek ? 7 : (7 - passedDays - 1).clamp(0, 7).toInt();
+    final todayIndex =
+        isCurrentWeek ? todayStart.difference(_currentWeekStart).inDays : -1;
+    final passedDays = isPastWeek
+        ? 7
+        : isFutureWeek
+            ? 0
+            : todayIndex.clamp(0, 7).toInt();
+    final remainingDays = isPastWeek
+        ? 0
+        : isFutureWeek
+            ? 7
+            : (7 - passedDays - 1).clamp(0, 7).toInt();
     return PeriodProgressBubbleMap(
       theme: theme,
       title: 'Week Day Progress',
@@ -542,58 +709,16 @@ class _WeekViewState extends State<WeekView> {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
-    final weekDays = List.generate(7, (i) => _currentWeekStart.add(Duration(days: i)));
+    final weekDays =
+        List.generate(7, (i) => _currentWeekStart.add(Duration(days: i)));
     final isCurrentWeek = _currentWeekStart.isBefore(todayStart) &&
         todayStart.isBefore(_currentWeekStart.add(const Duration(days: 7)));
     final fabTargetDate = isCurrentWeek ? todayStart : _currentWeekStart;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Weekly Progress'),
+        title: const Text('Week'),
         automaticallyImplyLeading: false,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(80.0),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Column(
-              children: [
-                Text(
-                  _formatWeekRange(_currentWeekStart),
-                  style: const TextStyle(fontSize: 18.0, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8.0),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.chevron_left, size: 18),
-                        label: const Text('Prev'),
-                        onPressed: () {
-                          setState(() {
-                            _currentWeekStart = _currentWeekStart.subtract(const Duration(days: 7));
-                          });
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.chevron_right, size: 18),
-                        label: const Text('Next'),
-                        onPressed: () {
-                          setState(() {
-                            _currentWeekStart = _currentWeekStart.add(const Duration(days: 7));
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
       body: ValueListenableBuilder(
         valueListenable: widget.hiveService.getBoxListenable(),
@@ -606,21 +731,60 @@ class _WeekViewState extends State<WeekView> {
           return ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
-              _weekDayProgressMap(selectedDashboardTheme, weekDays, todayStart),
+              if (widget.showPeriodControls)
+                Row(children: [
+                  IconButton(
+                      tooltip: 'Previous week',
+                      icon: const Icon(Icons.chevron_left),
+                      onPressed: () {
+                        setState(() => _currentWeekStart = _currentWeekStart
+                            .subtract(const Duration(days: 7)));
+                        widget.onDateChanged?.call(_currentWeekStart);
+                      }),
+                  Expanded(
+                      child: Text(_formatWeekRange(_currentWeekStart),
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium)),
+                  IconButton(
+                      tooltip: 'Next week',
+                      icon: const Icon(Icons.chevron_right),
+                      onPressed: () {
+                        setState(() => _currentWeekStart =
+                            _currentWeekStart.add(const Duration(days: 7)));
+                        widget.onDateChanged?.call(_currentWeekStart);
+                      }),
+                ]),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    await showQuickAddTaskDialog(
+                      context,
+                      fabTargetDate,
+                      widget.hiveService,
+                    );
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add task'),
+                ),
+              ),
               const SizedBox(height: 12),
-              _weeklyProductivitySection(weeklyStats),
+              PeriodTaskAgenda(
+                hiveService: widget.hiveService,
+                dates: weekDays,
+                onOpenDate: _openAgendaDate,
+              ),
               const SizedBox(height: 12),
               _weeklyTasksPanel(weeklyTasks),
+              const SizedBox(height: 12),
+              _weekDayProgressMap(selectedDashboardTheme, weekDays, todayStart),
+              const SizedBox(height: 12),
+              ExpansionTile(title: const Text('Week summary'), children: [
+                _weeklyProductivitySection(weeklyStats, selectedDashboardTheme)
+              ]),
             ],
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          await showQuickAddTaskDialog(context, fabTargetDate, widget.hiveService);
-        },
-        tooltip: isCurrentWeek ? 'Add task for today' : 'Add task for week',
-        child: const Icon(Icons.add),
       ),
     );
   }
@@ -643,20 +807,32 @@ class _WeeklyProductivityStats {
     required this.overdueTasks,
   });
 
-  int get totalPoints => snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.totalPoints);
-  double get bothHours => snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.bothHours);
-  double get importantHours => snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.importantHours);
-  double get urgentHours => snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.urgentHours);
-  double get neitherHours => snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.neitherHours);
-  double get totalHours => snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.totalHours);
-  double get productivityScore => (totalPoints / maximumWeeklyPoints * 100).clamp(0.0, 100.0).toDouble();
-  double get averageDailyScore => snapshots.isEmpty ? 0 : snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.productivityScore) / snapshots.length;
+  int get totalPoints =>
+      snapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.totalPoints);
+  double get bothHours =>
+      snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.bothHours);
+  double get importantHours => snapshots.fold<double>(
+      0, (sum, snapshot) => sum + snapshot.importantHours);
+  double get urgentHours =>
+      snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.urgentHours);
+  double get neitherHours =>
+      snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.neitherHours);
+  double get totalHours =>
+      snapshots.fold<double>(0, (sum, snapshot) => sum + snapshot.totalHours);
+  double get productivityScore =>
+      (totalPoints / maximumWeeklyPoints * 100).clamp(0.0, 100.0).toDouble();
+  double get averageDailyScore => snapshots.isEmpty
+      ? 0
+      : snapshots.fold<double>(
+              0, (sum, snapshot) => sum + snapshot.productivityScore) /
+          snapshots.length;
 
   int get bestDayIndex {
     if (snapshots.isEmpty) return 0;
     var index = 0;
     for (var i = 1; i < snapshots.length; i++) {
-      if (snapshots[i].productivityScore > snapshots[index].productivityScore) index = i;
+      if (snapshots[i].productivityScore > snapshots[index].productivityScore)
+        index = i;
     }
     return index;
   }
@@ -665,7 +841,8 @@ class _WeeklyProductivityStats {
     if (snapshots.isEmpty) return 0;
     var index = 0;
     for (var i = 1; i < snapshots.length; i++) {
-      if (snapshots[i].productivityScore < snapshots[index].productivityScore) index = i;
+      if (snapshots[i].productivityScore < snapshots[index].productivityScore)
+        index = i;
     }
     return index;
   }
@@ -687,8 +864,13 @@ class _WeekMetricCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
+  final DashboardThemeStyle theme;
 
-  const _WeekMetricCard({required this.label, required this.value, required this.icon});
+  const _WeekMetricCard(
+      {required this.label,
+      required this.value,
+      required this.icon,
+      required this.theme});
 
   @override
   Widget build(BuildContext context) {
@@ -696,19 +878,31 @@ class _WeekMetricCard extends StatelessWidget {
       width: 156,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F4EC),
+        color: theme.elevatedSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary.withOpacity(0.12)),
+        border: Border.all(color: theme.primary.withValues(alpha: 0.12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: AppColors.primary, size: 18),
+          Icon(icon, color: theme.primary, size: 18),
           const SizedBox(height: 8),
-          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: responsiveFont(context, 11), color: Colors.black54, fontWeight: FontWeight.w700)),
+          Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: responsiveFont(context, 11),
+                  color: theme.textMuted,
+                  fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text(value, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: responsiveFont(context, 15), fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+          Text(value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: responsiveFont(context, 15),
+                  fontWeight: FontWeight.w900,
+                  color: theme.textPrimary)),
         ],
       ),
     );
@@ -718,39 +912,50 @@ class _WeekMetricCard extends StatelessWidget {
 class _ScoreBadge extends StatelessWidget {
   final double score;
   final String rating;
+  final DashboardThemeStyle theme;
 
-  const _ScoreBadge({required this.score, required this.rating});
+  const _ScoreBadge(
+      {required this.score, required this.rating, required this.theme});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.taskCompleted.withOpacity(0.14),
+        color: (theme.success ?? theme.primary).withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.taskCompleted.withOpacity(0.36)),
+        border: Border.all(
+            color: (theme.success ?? theme.primary).withValues(alpha: 0.36)),
       ),
-      child: Text('${score.round()}% • $rating', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: responsiveFont(context, 13), fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+      child: Text('${score.round()}% • $rating',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+              fontSize: responsiveFont(context, 13),
+              fontWeight: FontWeight.w900,
+              color: theme.textPrimary)),
     );
   }
 }
 
 class _WeeklyScoreLinePainter extends CustomPainter {
   final List<double> scores;
+  final Color primary;
+  final Color axisColor;
 
-  const _WeeklyScoreLinePainter(this.scores);
+  const _WeeklyScoreLinePainter(this.scores, this.primary, this.axisColor);
 
   @override
   void paint(Canvas canvas, Size size) {
     final axisPaint = Paint()
-      ..color = Colors.black.withOpacity(0.16)
+      ..color = axisColor
       ..strokeWidth = 1;
     final linePaint = Paint()
-      ..color = AppColors.primary
+      ..color = primary
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-    final dotPaint = Paint()..color = AppColors.primaryDark;
+    final dotPaint = Paint()..color = primary;
 
     for (var i = 0; i <= 4; i++) {
       final y = size.height * i / 4;
@@ -760,7 +965,9 @@ class _WeeklyScoreLinePainter extends CustomPainter {
     if (scores.isEmpty) return;
     final points = <Offset>[];
     for (var i = 0; i < scores.length; i++) {
-      final x = scores.length == 1 ? size.width / 2 : size.width * i / (scores.length - 1);
+      final x = scores.length == 1
+          ? size.width / 2
+          : size.width * i / (scores.length - 1);
       final clampedScore = scores[i].clamp(0.0, 100.0).toDouble();
       final y = size.height - (clampedScore / 100 * size.height);
       points.add(Offset(x, y));
@@ -778,6 +985,9 @@ class _WeeklyScoreLinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _WeeklyScoreLinePainter oldDelegate) {
+    if (oldDelegate.primary != primary || oldDelegate.axisColor != axisColor) {
+      return true;
+    }
     if (oldDelegate.scores.length != scores.length) return true;
     for (var i = 0; i < scores.length; i++) {
       if (oldDelegate.scores[i] != scores[i]) return true;

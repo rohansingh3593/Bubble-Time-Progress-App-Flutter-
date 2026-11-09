@@ -194,9 +194,9 @@ class RankTier {
   });
 
   static const tiers = [
-    RankTier(name: 'Fragmented', emoji: '⚪', minimumLevel: 1, colorValue: 0xFF78909C),
-    RankTier(name: 'Fogged', emoji: '🌫️', minimumLevel: 3, colorValue: 0xFF90A4AE),
-    RankTier(name: 'Blocked', emoji: '🧱', minimumLevel: 5, colorValue: 0xFF8D6E63),
+    RankTier(name: 'Getting started', emoji: '⚪', minimumLevel: 1, colorValue: 0xFF78909C),
+    RankTier(name: 'Building momentum', emoji: '🌫️', minimumLevel: 3, colorValue: 0xFF90A4AE),
+    RankTier(name: 'Finding a rhythm', emoji: '🧱', minimumLevel: 5, colorValue: 0xFF8D6E63),
     RankTier(name: 'Writer', emoji: '📝', minimumLevel: 8, colorValue: 0xFF42A5F5),
     RankTier(name: 'Reflector', emoji: '🪞', minimumLevel: 11, colorValue: 0xFF5C6BC0),
     RankTier(name: 'Explorer', emoji: '🔵', minimumLevel: 14, colorValue: 0xFF1E88E5),

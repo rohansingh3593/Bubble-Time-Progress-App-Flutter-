@@ -3,18 +3,29 @@ import '../widgets/quick_add_task_dialog.dart';
 import '../widgets/routine_occurrence_dialog.dart';
 import '../widgets/productivity_period_summary.dart';
 import '../widgets/period_progress_bubble_map.dart';
+import '../widgets/period_task_agenda.dart';
 import '../services/hive_service.dart';
-import '../constants/colors.dart';
 import '../constants/dashboard_themes.dart';
 import '../models/task_model.dart';
 import '../models/productivity_snapshot.dart';
 import 'journal_view.dart';
+import 'day_view.dart';
 import '../utils/text_formatters.dart';
 
 class MonthView extends StatefulWidget {
   final HiveService hiveService;
+  final DateTime? initialDate;
+  final ValueChanged<DateTime>? onDateChanged;
+  final ValueChanged<DateTime>? onOpenDate;
+  final bool showPeriodControls;
 
-  const MonthView({super.key, required this.hiveService});
+  const MonthView(
+      {super.key,
+      required this.hiveService,
+      this.initialDate,
+      this.onDateChanged,
+      this.onOpenDate,
+      this.showPeriodControls = true});
 
   @override
   State<MonthView> createState() => _MonthViewState();
@@ -26,9 +37,19 @@ class _MonthViewState extends State<MonthView> {
   bool _showMonthlyTasks = true;
 
   @override
+  void didUpdateWidget(covariant MonthView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialDate != null &&
+        widget.initialDate != oldWidget.initialDate) {
+      _currentMonth = widget.initialDate!;
+      _centerSelectedMonthAfterLayout();
+    }
+  }
+
+  @override
   void initState() {
     super.initState();
-    _currentMonth = DateTime.now();
+    _currentMonth = widget.initialDate ?? DateTime.now();
     _centerSelectedMonthAfterLayout();
   }
 
@@ -41,7 +62,9 @@ class _MonthViewState extends State<MonthView> {
   void _centerSelectedMonthAfterLayout() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_monthSelectorController.hasClients) return;
-      final target = ((_currentMonth.month - 1) * 92.0) - (MediaQuery.of(context).size.width / 2) + 70;
+      final target = ((_currentMonth.month - 1) * 92.0) -
+          (MediaQuery.of(context).size.width / 2) +
+          70;
       _monthSelectorController.animateTo(
         target.clamp(0.0, _monthSelectorController.position.maxScrollExtent),
         duration: const Duration(milliseconds: 320),
@@ -54,6 +77,7 @@ class _MonthViewState extends State<MonthView> {
     setState(() {
       _currentMonth = DateTime(_currentMonth.year, month);
     });
+    widget.onDateChanged?.call(_currentMonth);
     _centerSelectedMonthAfterLayout();
   }
 
@@ -61,18 +85,33 @@ class _MonthViewState extends State<MonthView> {
     setState(() {
       _currentMonth = DateTime(_currentMonth.year + delta, _currentMonth.month);
     });
+    widget.onDateChanged?.call(_currentMonth);
     _centerSelectedMonthAfterLayout();
   }
 
   void _openJournalForTask(Task task) {
     Navigator.of(context).push(
-      JournalView.route(hiveService: widget.hiveService, initialDate: task.dueDate),
+      JournalView.route(
+          hiveService: widget.hiveService, initialDate: task.dueDate),
     );
   }
 
+  void _openAgendaDate(DateTime date) {
+    if (widget.onOpenDate != null) {
+      widget.onOpenDate!(date);
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) =>
+          DayView(hiveService: widget.hiveService, initialDate: date),
+    ));
+  }
+
   Future<void> _editTask(Task task) async {
-    if (isRoutineTask(task) || hasTaskLinkedInstructions(widget.hiveService, task)) {
-      final action = await showRoutineOccurrenceDialog(context: context, task: task, hiveService: widget.hiveService);
+    if (isRoutineTask(task) ||
+        hasTaskLinkedInstructions(widget.hiveService, task)) {
+      final action = await showRoutineOccurrenceDialog(
+          context: context, task: task, hiveService: widget.hiveService);
       if (action == null || action == RoutineOccurrenceAction.close) return;
 
       switch (action) {
@@ -80,52 +119,53 @@ class _MonthViewState extends State<MonthView> {
           _openJournalForTask(task);
           return;
         case RoutineOccurrenceAction.disableRoutine:
-          await widget.hiveService.setRecurringTaskEnabledByReference(task, false);
+          await widget.hiveService
+              .setRecurringTaskEnabledByReference(task, false);
           return;
         case RoutineOccurrenceAction.editDetails:
-          final edited = await showTaskFormDialog(
+          await showTaskFormDialog(
             context,
             date: task.dueDate,
             initialTask: task,
-            title: isRoutineTask(task) ? 'Edit Routine Details' : 'View Task Details',
+            title: isRoutineTask(task)
+                ? 'Edit Routine Details'
+                : 'View Task Details',
             actionLabel: isRoutineTask(task) ? 'Save Routine' : 'Save Task',
+            onSave: (edited) =>
+                widget.hiveService.saveTaskChanges(task, edited),
           );
-          if (edited != null) {
-            if (isRoutineTask(task)) {
-              await widget.hiveService.updateRecurringTaskSeriesByReference(task, edited.copyWith(repeatTask: true));
-            } else {
-              await widget.hiveService.updateTaskByReference(task, edited);
-            }
-          }
           return;
         case RoutineOccurrenceAction.missOccurrence:
-          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: false, status: 'Missed'));
+          await widget.hiveService.updateTaskByReference(
+              task, task.copyWith(done: false, status: 'Missed'));
           return;
         case RoutineOccurrenceAction.completeOccurrence:
-          await widget.hiveService.updateTaskByReference(task, task.copyWith(done: true, status: 'Completed'));
+          await widget.hiveService.updateTaskByReference(
+              task, task.copyWith(done: true, status: 'Completed'));
           return;
         case RoutineOccurrenceAction.close:
           return;
       }
     }
 
-    final updated = await showTaskFormDialog(
+    await showTaskFormDialog(
       context,
       date: task.dueDate,
       initialTask: task,
       title: 'Update Task',
       actionLabel: 'Save Task',
+      onSave: (updated) => widget.hiveService.saveTaskChanges(task, updated),
+      onRestore: () => widget.hiveService.addTask(task.dueDate, task),
       onDelete: () => widget.hiveService.deleteTaskByReference(task),
     );
-
-    if (updated != null) {
-      await widget.hiveService.updateTaskByReference(task, updated);
-    }
   }
 
   List<DateTime> _daysInCurrentMonth() {
     final daysInMonth = _getDaysInMonth(_currentMonth);
-    return List.generate(daysInMonth, (index) => DateTime(_currentMonth.year, _currentMonth.month, index + 1));
+    return List.generate(
+        daysInMonth,
+        (index) =>
+            DateTime(_currentMonth.year, _currentMonth.month, index + 1));
   }
 
   bool _isCompletedTask(Task task) {
@@ -134,20 +174,31 @@ class _MonthViewState extends State<MonthView> {
 
   PeriodProductivityStats _monthlyProductivityStats() {
     final days = _daysInCurrentMonth();
-    final snapshots = days.map((date) => widget.hiveService.calculateProductivitySnapshotForDate(date)).toList();
-    final monthTasks = days.expand((date) => widget.hiveService.getTasksForDate(date)).toList();
+    final snapshots = days
+        .map((date) =>
+            widget.hiveService.calculateProductivitySnapshotForDate(date))
+        .toList();
+    final monthTasks = days
+        .expand((date) => widget.hiveService.getTasksForDate(date))
+        .toList();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final completedTasks = monthTasks.where(_isCompletedTask).length;
-    final pendingTasks = monthTasks.where((task) => !_isCompletedTask(task) && task.status != 'Cancelled').length;
+    final pendingTasks = monthTasks
+        .where((task) => !_isCompletedTask(task) && task.status != 'Cancelled')
+        .length;
     final overdueTasks = monthTasks.where((task) {
-      final due = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-      return due.isBefore(today) && !_isCompletedTask(task) && task.status != 'Cancelled';
+      final due =
+          DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+      return due.isBefore(today) &&
+          !_isCompletedTask(task) &&
+          task.status != 'Cancelled';
     }).length;
 
     return PeriodProductivityStats(
       title: '📅 Monthly Productivity',
-      periodLabel: '${_getMonthName(_currentMonth.month)} ${_currentMonth.year}',
+      periodLabel:
+          '${_getMonthName(_currentMonth.month)} ${_currentMonth.year}',
       snapshots: snapshots,
       maximumPoints: days.length * ProductivitySnapshot.maximumPoints.round(),
       totalDays: days.length,
@@ -158,17 +209,22 @@ class _MonthViewState extends State<MonthView> {
     );
   }
 
-  List<ProductivityIntervalSummary> _monthlyWeekIntervals(List<DateTime> days, List<ProductivitySnapshot> snapshots) {
+  List<ProductivityIntervalSummary> _monthlyWeekIntervals(
+      List<DateTime> days, List<ProductivitySnapshot> snapshots) {
     final intervals = <ProductivityIntervalSummary>[];
     for (var start = 0; start < days.length; start += 7) {
       final end = (start + 7).clamp(0, days.length).toInt();
       final weekSnapshots = snapshots.sublist(start, end);
-      final points = weekSnapshots.fold<int>(0, (sum, snapshot) => sum + snapshot.totalPoints);
-      final maxPoints = weekSnapshots.length * ProductivitySnapshot.maximumPoints;
+      final points = weekSnapshots.fold<int>(
+          0, (sum, snapshot) => sum + snapshot.totalPoints);
+      final maxPoints =
+          weekSnapshots.length * ProductivitySnapshot.maximumPoints;
       intervals.add(ProductivityIntervalSummary(
         label: 'Week ${intervals.length + 1}',
         points: points,
-        score: maxPoints == 0 ? 0 : (points / maxPoints * 100).clamp(0.0, 100.0).toDouble(),
+        score: maxPoints == 0
+            ? 0
+            : (points / maxPoints * 100).clamp(0.0, 100.0).toDouble(),
       ));
     }
     return intervals;
@@ -183,23 +239,21 @@ class _MonthViewState extends State<MonthView> {
     final monthStart = DateTime(_currentMonth.year, _currentMonth.month, 1);
     final monthEnd = DateTime(_currentMonth.year, _currentMonth.month + 1, 0);
 
-    return allTasksByDate.values
-        .expand((tasks) => tasks)
-        .where((task) {
-          final dueDate = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-          return task.repeatTask &&
-              task.repeatFrequency == 'Monthly' &&
-              !dueDate.isBefore(monthStart) &&
-              !dueDate.isAfter(monthEnd);
-        })
-        .toList();
+    return allTasksByDate.values.expand((tasks) => tasks).where((task) {
+      final dueDate =
+          DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+      return task.repeatTask &&
+          task.repeatFrequency == 'Monthly' &&
+          !dueDate.isBefore(monthStart) &&
+          !dueDate.isAfter(monthEnd);
+    }).toList();
   }
 
   Widget _monthlyTasksPanel(List<Task> tasks) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFECE8E6),
-        border: Border.all(color: Colors.black38),
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -208,8 +262,8 @@ class _MonthViewState extends State<MonthView> {
             onTap: () => setState(() => _showMonthlyTasks = !_showMonthlyTasks),
             child: Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
-                color: Color(0xFFAED9AE),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -217,48 +271,66 @@ class _MonthViewState extends State<MonthView> {
                 children: [
                   const Expanded(
                     child: Text(
-                      "MONTHLY TASKS",
+                      "Monthly routines",
                       textAlign: TextAlign.center,
-                      style: TextStyle(letterSpacing: 4, fontWeight: FontWeight.w600),
+                      style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
-                  Icon(_showMonthlyTasks ? Icons.expand_more : Icons.chevron_right, color: Colors.green[800]),
+                  Icon(
+                      _showMonthlyTasks
+                          ? Icons.expand_more
+                          : Icons.chevron_right,
+                      color: Theme.of(context).colorScheme.primary),
                 ],
               ),
             ),
           ),
           if (_showMonthlyTasks)
-            SizedBox(
-              height: 140,
-              child: tasks.isEmpty
-                  ? const Center(child: Text('Nothing for this month, Great Job !'))
-                  : ListView.builder(
-                      itemCount: tasks.length,
-                      itemBuilder: (context, index) {
-                        final task = tasks[index];
-                        return ListTile(
-                          dense: true,
-                          onTap: () => _editTask(task),
-                          title: Text(toTitleCase(task.task)),
-                          subtitle: Text('${task.priority} • ${task.status}'),
-                        );
-                      },
-                    ),
-            ),
+            if (tasks.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 14),
+                child: Text('No monthly routines for this period.'),
+              )
+            else
+              ...tasks.map((task) => ListTile(
+                    dense: true,
+                    onTap: () => _editTask(task),
+                    title: Text(toTitleCase(task.task)),
+                    subtitle: Text('${task.priority} • ${task.status}'),
+                  )),
         ],
       ),
     );
   }
 
   Widget _monthBubbleSelector() {
-    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthLabels = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F4EC),
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.primary.withOpacity(0.12)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, 7))],
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+              color: colorScheme.shadow.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 7))
+        ],
       ),
       child: Column(
         children: [
@@ -272,7 +344,11 @@ class _MonthViewState extends State<MonthView> {
                   onPressed: () => _changeSelectorYear(-1),
                   icon: const Icon(Icons.chevron_left_rounded),
                 ),
-                Text('${_currentMonth.year}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: AppColors.textPrimary)),
+                Text('${_currentMonth.year}',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        color: colorScheme.onSurface)),
                 IconButton(
                   tooltip: 'Next year',
                   onPressed: () => _changeSelectorYear(1),
@@ -317,11 +393,20 @@ class _MonthViewState extends State<MonthView> {
     final daysInMonth = _getDaysInMonth(_currentMonth);
     final monthStart = DateTime(_currentMonth.year, _currentMonth.month, 1);
     final currentMonthStart = DateTime(now.year, now.month, 1);
-    final isCurrentMonth = _currentMonth.year == now.year && _currentMonth.month == now.month;
+    final isCurrentMonth =
+        _currentMonth.year == now.year && _currentMonth.month == now.month;
     final isPastMonth = monthStart.isBefore(currentMonthStart);
     final isFutureMonth = monthStart.isAfter(currentMonthStart);
-    final passedDays = isPastMonth ? daysInMonth : isFutureMonth ? 0 : (now.day - 1).clamp(0, daysInMonth).toInt();
-    final remainingDays = isPastMonth ? 0 : isFutureMonth ? daysInMonth : (daysInMonth - passedDays - 1).clamp(0, daysInMonth).toInt();
+    final passedDays = isPastMonth
+        ? daysInMonth
+        : isFutureMonth
+            ? 0
+            : (now.day - 1).clamp(0, daysInMonth).toInt();
+    final remainingDays = isPastMonth
+        ? 0
+        : isFutureMonth
+            ? daysInMonth
+            : (daysInMonth - passedDays - 1).clamp(0, daysInMonth).toInt();
     final displayDays = ((daysInMonth + 6) ~/ 7) * 7;
     return PeriodProgressBubbleMap(
       theme: theme,
@@ -334,7 +419,8 @@ class _MonthViewState extends State<MonthView> {
       passedItems: passedDays,
       currentIndex: isCurrentMonth ? now.day - 1 : null,
       itemsPerRow: 7,
-      tooltipBuilder: (index) => '${index + 1}/${_currentMonth.month}/${_currentMonth.year}',
+      tooltipBuilder: (index) =>
+          '${index + 1}/${_currentMonth.month}/${_currentMonth.year}',
       bubbleLabelBuilder: (index) => '${index + 1}',
     );
   }
@@ -342,11 +428,14 @@ class _MonthViewState extends State<MonthView> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final isCurrentMonth = _currentMonth.year == now.year && _currentMonth.month == now.month;
+    final isCurrentMonth =
+        _currentMonth.year == now.year && _currentMonth.month == now.month;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${_getMonthName(_currentMonth.month)} ${_currentMonth.year} Progress'),
+        title: Text(widget.showPeriodControls
+            ? '${_getMonthName(_currentMonth.month)} ${_currentMonth.year}'
+            : 'Month'),
         automaticallyImplyLeading: false,
       ),
       body: ValueListenableBuilder(
@@ -358,34 +447,64 @@ class _MonthViewState extends State<MonthView> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _monthBubbleSelector(),
+              if (isCurrentMonth)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      await showQuickAddTaskDialog(
+                        context,
+                        DateTime(now.year, now.month, now.day),
+                        widget.hiveService,
+                      );
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add task'),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              if (widget.showPeriodControls) ...[
+                _monthBubbleSelector(),
+                const SizedBox(height: 16),
+              ],
+              PeriodTaskAgenda(
+                hiveService: widget.hiveService,
+                dates: List.generate(
+                  _getDaysInMonth(_currentMonth),
+                  (index) => DateTime(
+                      _currentMonth.year, _currentMonth.month, index + 1),
+                ),
+                onOpenDate: _openAgendaDate,
+              ),
+              const SizedBox(height: 12),
+              _monthlyTasksPanel(monthlyTasks),
               const SizedBox(height: 16),
               _monthDayProgressMap(selectedDashboardTheme, now),
               const SizedBox(height: 16),
-              ProductivityPeriodSummaryCard(stats: monthlyStats),
-              const SizedBox(height: 16),
-              _monthlyTasksPanel(monthlyTasks),
+              ExpansionTile(title: const Text('Month summary'), children: [
+                ProductivityPeriodSummaryCard(stats: monthlyStats)
+              ]),
             ],
           );
         },
       ),
-      floatingActionButton: isCurrentMonth
-          ? FloatingActionButton(
-              onPressed: () async {
-                final today = DateTime(now.year, now.month, now.day);
-                await showQuickAddTaskDialog(context, today, widget.hiveService);
-              },
-              tooltip: 'Add task for today',
-              child: const Icon(Icons.add),
-            )
-          : null,
     );
   }
 
   String _getMonthName(int month) {
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
     ];
     return months[month - 1];
   }
@@ -396,10 +515,12 @@ class _PeriodSelectorPill extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _PeriodSelectorPill({required this.label, required this.selected, required this.onTap});
+  const _PeriodSelectorPill(
+      {required this.label, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return AnimatedScale(
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutBack,
@@ -415,12 +536,26 @@ class _PeriodSelectorPill extends StatelessWidget {
             constraints: const BoxConstraints(minWidth: 72, minHeight: 44),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
             decoration: BoxDecoration(
-              color: selected ? AppColors.primary : Colors.white,
+              color: selected ? colorScheme.primary : colorScheme.surface,
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: selected ? AppColors.primaryDark : AppColors.primary.withOpacity(0.18), width: selected ? 1.8 : 1),
+              border: Border.all(
+                  color: selected
+                      ? colorScheme.primary
+                      : colorScheme.outlineVariant,
+                  width: selected ? 1.8 : 1),
               boxShadow: selected
-                  ? [BoxShadow(color: AppColors.primary.withOpacity(0.34), blurRadius: 16, offset: const Offset(0, 7))]
-                  : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 4))],
+                  ? [
+                      BoxShadow(
+                          color: colorScheme.primary.withValues(alpha: 0.24),
+                          blurRadius: 16,
+                          offset: const Offset(0, 7))
+                    ]
+                  : [
+                      BoxShadow(
+                          color: colorScheme.shadow.withValues(alpha: 0.04),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4))
+                    ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -429,13 +564,20 @@ class _PeriodSelectorPill extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    color: selected ? Colors.white : AppColors.textPrimary,
+                    color: selected
+                        ? colorScheme.onPrimary
+                        : colorScheme.onSurface,
                     fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
                   ),
                 ),
                 if (selected) ...[
                   const SizedBox(width: 7),
-                  Container(width: 7, height: 7, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+                  Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                          color: colorScheme.onPrimary,
+                          shape: BoxShape.circle)),
                 ],
               ],
             ),

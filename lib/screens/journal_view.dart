@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../constants/colors.dart';
 import '../models/journal_entry.dart';
-import '../models/rank_profile.dart';
 import '../models/task_model.dart';
 import '../services/hive_service.dart';
-import '../widgets/rank_profile_card.dart';
+import '../widgets/recoverable_delete.dart';
 
 class JournalView extends StatefulWidget {
   final HiveService hiveService;
   final VoidCallback? onGoToDashboard;
   final DateTime? initialDate;
 
-  const JournalView({super.key, required this.hiveService, this.onGoToDashboard, this.initialDate});
+  JournalView(
+      {super.key,
+      required this.hiveService,
+      this.onGoToDashboard,
+      this.initialDate});
 
   static Route<void> route({
     required HiveService hiveService,
@@ -26,17 +29,21 @@ class JournalView extends StatefulWidget {
         initialDate: initialDate,
       ),
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+        final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic);
         return FadeTransition(
           opacity: curved,
           child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
+            position: Tween<Offset>(begin: Offset(1, 0), end: Offset.zero)
+                .animate(curved),
             child: child,
           ),
         );
       },
-      transitionDuration: const Duration(milliseconds: 360),
-      reverseTransitionDuration: const Duration(milliseconds: 280),
+      transitionDuration: Duration(milliseconds: 360),
+      reverseTransitionDuration: Duration(milliseconds: 280),
     );
   }
 
@@ -47,23 +54,25 @@ class JournalView extends StatefulWidget {
 class _JournalViewState extends State<JournalView> {
   late DateTime _selectedDate;
   String _selectedMood = 'Good';
-  final TextEditingController _reflectionController = TextEditingController();
+  final _reflectionController = TextEditingController();
+  Future<void> _draftWrite = Future.value();
+  int _draftRevision = 0;
+  bool _loading = false;
+  bool _saving = false;
+  bool _allowPop = false;
+  bool _leaving = false;
+  String? _error;
+  String _draftStatus = '';
 
-  static const List<_MoodOption> _moods = [
-    _MoodOption(label: 'Happy', emoji: '😊', color: Color(0xFFFFC857)),
-    _MoodOption(label: 'Good', emoji: '🙂', color: Color(0xFF7BC96F)),
-    _MoodOption(label: 'Neutral', emoji: '😐', color: Color(0xFF90A4AE)),
-    _MoodOption(label: 'Sad', emoji: '😔', color: Color(0xFF64B5F6)),
-    _MoodOption(label: 'Angry', emoji: '😠', color: Color(0xFFE57373)),
-    _MoodOption(label: 'Anxious', emoji: '😟', color: Color(0xFFFFB74D)),
-  ];
+  static const _moods = ['Happy', 'Good', 'Neutral', 'Sad', 'Angry', 'Anxious'];
 
   @override
   void initState() {
     super.initState();
-    final initial = widget.initialDate ?? DateTime.now();
-    _selectedDate = DateTime(initial.year, initial.month, initial.day);
-    _loadEntryForSelectedDate();
+    final date = widget.initialDate ?? DateTime.now();
+    _selectedDate = DateUtils.dateOnly(date);
+    _loadEntry();
+    _reflectionController.addListener(_queueDraft);
   }
 
   @override
@@ -72,406 +81,262 @@ class _JournalViewState extends State<JournalView> {
     super.dispose();
   }
 
-  void _loadEntryForSelectedDate() {
-    final entry = widget.hiveService.getJournalEntryForDate(_selectedDate);
-    _selectedMood = entry?.mood ?? 'Good';
-    _reflectionController.text = entry?.reflection ?? '';
+  void _loadEntry() {
+    _loading = true;
+    final saved = widget.hiveService.getJournalEntryForDate(_selectedDate);
+    final draft = widget.hiveService.getJournalDraft(_selectedDate);
+    final draftMood = draft?['mood'] as String?;
+    final draftText = draft?['text'] as String?;
+    final draftMatchesSaved = saved != null &&
+        draftText?.trim() == saved.reflection.trim() &&
+        draftMood == saved.mood;
+    final hasUnsavedDraft = draft != null && !draftMatchesSaved;
+    _selectedMood = hasUnsavedDraft
+        ? draftMood ?? saved?.mood ?? 'Good'
+        : saved?.mood ?? draftMood ?? 'Good';
+    _reflectionController.text = hasUnsavedDraft
+        ? draftText ?? saved?.reflection ?? ''
+        : saved?.reflection ?? draftText ?? '';
+    _draftStatus = hasUnsavedDraft
+        ? 'Draft restored'
+        : saved == null
+            ? 'New reflection'
+            : 'Entry saved';
+    if (draftMatchesSaved) {
+      final date = _selectedDate;
+      _draftWrite = _draftWrite.then((_) async {
+        try {
+          await widget.hiveService.clearJournalDraft(date);
+        } catch (_) {
+          if (mounted && _selectedDate == date) {
+            setState(() => _error =
+                'Your entry is saved, but an older draft copy could not be cleared.');
+          }
+        }
+      });
+    }
+    _error = null;
+    _loading = false;
   }
 
-  void _changeDate(int days) {
+  void _queueDraft() {
+    if (_loading) return;
+    final revision = ++_draftRevision;
+    final date = _selectedDate;
+    final text = _reflectionController.text;
+    final mood = _selectedMood;
+    final saved = widget.hiveService.getJournalEntryForDate(date);
+    final matchesSaved = saved != null &&
+        text.trim() == saved.reflection.trim() &&
+        mood == saved.mood;
     setState(() {
-      _selectedDate = _selectedDate.add(Duration(days: days));
-      _loadEntryForSelectedDate();
+      _draftStatus = matchesSaved ? 'Entry saved' : 'Saving draft...';
+      _error = null;
+    });
+    // Serialize writes so a slow earlier write cannot replace newer typing.
+    _draftWrite = _draftWrite.then((_) async {
+      try {
+        if (matchesSaved) {
+          await widget.hiveService.clearJournalDraft(date);
+        } else {
+          await widget.hiveService.saveJournalDraft(date, text, mood);
+        }
+        if (mounted && date == _selectedDate && revision == _draftRevision) {
+          setState(() => _draftStatus =
+              matchesSaved ? 'Entry saved' : 'Draft saved on this device');
+        }
+      } catch (_) {
+        if (mounted && revision == _draftRevision) {
+          setState(() => _error = matchesSaved
+              ? 'Your entry is saved, but an older draft copy could not be cleared.'
+              : 'Draft could not be saved. Keep this page open and retry.');
+        }
+      }
     });
   }
 
-  Future<void> _saveEntry(List<Task> tasksForDay) async {
+  Future<bool> _flushDraft() async {
+    _queueDraft();
+    await _draftWrite;
+    return _error == null;
+  }
+
+  Future<void> _changeDate(int days) async {
+    if (_saving || _leaving) return;
+    _leaving = true;
+    final safe = await _flushDraft();
+    if (mounted && safe)
+      setState(() {
+        _selectedDate = _selectedDate.add(Duration(days: days));
+        _loadEntry();
+      });
+    _leaving = false;
+  }
+
+  Future<void> _leave() async {
+    if (_saving || _leaving) return;
+    _leaving = true;
+    final safe = await _flushDraft();
+    if (mounted && safe) {
+      setState(() => _allowPop = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).pop();
+      });
+    }
+    _leaving = false;
+  }
+
+  Future<void> _saveEntry() async {
+    if (_saving) return;
     final reflection = _reflectionController.text.trim();
     if (reflection.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Write a reflection before saving Daily Journal.')),
-      );
+      setState(() => _error = 'Write a reflection before saving.');
       return;
     }
-
-    final total = tasksForDay.where((task) => task.status != 'Cancelled').length;
-    final hasDailyJournal = tasksForDay.any(widget.hiveService.isDailyJournalTask);
-    final completed = tasksForDay
-            .where((task) => !widget.hiveService.isDailyJournalTask(task) && _isCompleted(task))
-            .length +
-        (hasDailyJournal ? 1 : 0);
-    final score = total == 0 ? 0 : ((completed / total) * 100).round();
-
-    final savedAt = DateTime.now();
-    await widget.hiveService.saveJournalEntry(
-      JournalEntry(
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final date = _selectedDate;
+    final tasks = widget.hiveService
+        .getTasksForDate(date)
+        .where((t) => t.status != 'Cancelled')
+        .toList();
+    final completed = tasks
+        .where((t) =>
+            t.done ||
+            t.status == 'Completed' ||
+            widget.hiveService.isDailyJournalTask(t))
+        .length;
+    final now = DateTime.now();
+    try {
+      await _draftWrite;
+      await widget.hiveService.saveJournalEntry(JournalEntry(
         date: DateTime(
-          _selectedDate.year,
-          _selectedDate.month,
-          _selectedDate.day,
-          savedAt.hour,
-          savedAt.minute,
-          savedAt.second,
-          savedAt.millisecond,
-          savedAt.microsecond,
-        ),
+            date.year, date.month, date.day, now.hour, now.minute, now.second),
         mood: _selectedMood,
         reflection: reflection,
         completedTasks: completed,
-        totalTasks: total,
-        productivityScore: score,
-      ),
-    );
-
-    if (!mounted) return;
-    final wordCount = _reflectionWordCount(reflection);
-    final bonusMessage = _savedWithinJournalWindow(savedAt)
-        ? ' Journal saved inside 10:00 PM–12:00 AM. +20 schedule bonus eligible.'
-        : ' Journal saved outside 10:00 PM–12:00 AM. No schedule bonus.';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Journal entry saved • $wordCount words.$bonusMessage')),
-    );
-  }
-
-  void _goBack() {
-    Navigator.of(context).maybePop();
-  }
-
-  void _goToDashboard() {
-    widget.onGoToDashboard?.call();
-    Navigator.of(context).maybePop();
+        totalTasks: tasks.length,
+        productivityScore:
+            tasks.isEmpty ? 0 : (completed / tasks.length * 100).round(),
+      ));
+      await widget.hiveService.clearJournalDraft(date);
+      if (mounted) {
+        setState(() => _draftStatus = 'Entry saved');
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Journal entry saved')));
+      }
+    } catch (_) {
+      if (mounted)
+        setState(() => _error =
+            'Could not save the entry. Your writing is still here; please retry.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _deleteEntry() async {
-    await widget.hiveService.deleteJournalEntry(_selectedDate);
-    if (!mounted) return;
-    setState(() {
-      _selectedMood = 'Good';
-      _reflectionController.clear();
+    final date = _selectedDate;
+    final entry = widget.hiveService.getJournalEntryForDate(date);
+    if (entry == null) return;
+    await recoverableDelete(context, label: 'journal entry', remove: () async {
+      await _draftWrite;
+      await widget.hiveService.deleteJournalEntry(date);
+      await widget.hiveService.clearJournalDraft(date);
+      if (mounted) setState(_loadEntry);
+    }, restore: () async {
+      await widget.hiveService.saveJournalEntry(entry);
+      if (mounted && _selectedDate == date) setState(_loadEntry);
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Journal entry deleted')),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leading: IconButton(
-          tooltip: 'Back',
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: _goBack,
-        ),
-        title: const Text('Journal & Reflection'),
-        actions: [
-          TextButton.icon(
-            onPressed: _goToDashboard,
-            icon: const Icon(Icons.home_rounded),
-            label: const Text('Dashboard'),
-            style: TextButton.styleFrom(foregroundColor: Colors.white),
-          ),
-        ],
-      ),
-      body: ValueListenableBuilder(
-        valueListenable: widget.hiveService.getBoxListenable(),
-        builder: (context, box, _) {
-          final allTasksByDate = widget.hiveService.getAllTasksByDate();
-          final journalEntries = widget.hiveService.getAllJournalEntries();
-          final tasksForDay = widget.hiveService.getTasksForDate(_selectedDate);
-          final entry = widget.hiveService.getJournalEntryForDate(_selectedDate);
-          final rankProfile = RankProfile.calculate(
-            username: widget.hiveService.getUsername(),
-            allTasksByDate: allTasksByDate,
-            journalEntries: journalEntries,
-          );
-          final analytics = _JournalAnalytics.fromEntries(journalEntries);
-
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
-            children: [
-              RankProfileCard(
-                profile: rankProfile,
-                onUsernameChanged: widget.hiveService.setUsername,
-                compact: true,
-                userProfile: widget.hiveService.getUserProfile(),
-              ),
-              const SizedBox(height: 14),
-              _DateHeader(
-                date: _selectedDate,
-                hasEntry: entry != null,
-                onPrevious: () => _changeDate(-1),
-                onNext: () => _changeDate(1),
-              ),
-              const SizedBox(height: 14),
-              _MoodSelector(
-                moods: _moods,
-                selectedMood: _selectedMood,
-                onChanged: (mood) => setState(() => _selectedMood = mood),
-              ),
-              const SizedBox(height: 14),
-              _ReflectionInput(controller: _reflectionController),
-              const SizedBox(height: 14),
-              _ProductivityConnection(tasks: tasksForDay, entry: entry),
-              const SizedBox(height: 14),
-              _ActionButtons(
-                hasEntry: entry != null,
-                onSave: () => _saveEntry(tasksForDay),
-                onDelete: entry == null ? null : _deleteEntry,
-              ),
-              const SizedBox(height: 14),
-              _JournalAnalyticsPanel(analytics: analytics),
-              const SizedBox(height: 14),
-              _JournalHistory(entries: journalEntries, tasksByDate: allTasksByDate),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  bool _isCompleted(Task task) => task.done || task.status == 'Completed';
-
-  int _reflectionWordCount(String reflection) {
-    return RegExp(r"\b[\w']+\b").allMatches(reflection).length;
-  }
-
-  bool _savedWithinJournalWindow(DateTime savedAt) {
-    final minutes = savedAt.hour * 60 + savedAt.minute;
-    const start = 22 * 60;
-    const end = 0;
-    return minutes >= start || minutes <= end;
-  }
-}
-
-
-class _DateHeader extends StatelessWidget {
-  final DateTime date;
-  final bool hasEntry;
-  final VoidCallback onPrevious;
-  final VoidCallback onNext;
-
-  const _DateHeader({
-    required this.date,
-    required this.hasEntry,
-    required this.onPrevious,
-    required this.onNext,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _calmPanelDecoration(),
-      child: Row(
-        children: [
-          IconButton(onPressed: onPrevious, icon: const Icon(Icons.chevron_left)),
-          Expanded(
-            child: Column(
-              children: [
-                const Text('Daily Reflection', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-                const SizedBox(height: 4),
-                Text('${date.month}/${date.day}/${date.year}', style: const TextStyle(color: Colors.black54)),
-                const SizedBox(height: 6),
-                Chip(
-                  visualDensity: VisualDensity.compact,
-                  label: Text(hasEntry ? 'Saved entry' : 'New entry'),
-                  avatar: Icon(hasEntry ? Icons.check_circle : Icons.edit_note, size: 18),
-                ),
-              ],
-            ),
-          ),
-          IconButton(onPressed: onNext, icon: const Icon(Icons.chevron_right)),
-        ],
-      ),
-    );
-  }
-}
-
-class _MoodSelector extends StatelessWidget {
-  final List<_MoodOption> moods;
-  final String selectedMood;
-  final ValueChanged<String> onChanged;
-
-  const _MoodSelector({required this.moods, required this.selectedMood, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _calmPanelDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('How are you feeling today?', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-          const SizedBox(height: 12),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: moods.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              childAspectRatio: 0.95,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-            ),
-            itemBuilder: (context, index) {
-              final mood = moods[index];
-              final selected = mood.label == selectedMood;
-              return InkWell(
-                borderRadius: BorderRadius.circular(18),
-                onTap: () => onChanged(mood.label),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: selected ? mood.color.withOpacity(0.28) : AppColors.background,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: selected ? mood.color : Colors.black12, width: selected ? 2 : 1),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(mood.emoji, style: const TextStyle(fontSize: 28)),
-                      const SizedBox(height: 4),
-                      Text(
-                        mood.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ReflectionInput extends StatelessWidget {
-  final TextEditingController controller;
-
-  const _ReflectionInput({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _calmPanelDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Write your reflection', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-          const SizedBox(height: 8),
-          const Text(
-            'Capture your thoughts, feelings, experiences, and what today taught you.',
-            style: TextStyle(color: Colors.black54),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: controller,
-            minLines: 6,
-            maxLines: 10,
-            textInputAction: TextInputAction.newline,
-            decoration: InputDecoration(
-              hintText: 'Today I noticed...',
-              filled: true,
-              fillColor: AppColors.background,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProductivityConnection extends StatelessWidget {
-  final List<Task> tasks;
-  final JournalEntry? entry;
-
-  const _ProductivityConnection({required this.tasks, required this.entry});
-
-  @override
-  Widget build(BuildContext context) {
-    final activeTasks = tasks.where((task) => task.status != 'Cancelled').toList();
-    final completedTasks = activeTasks.where((task) => task.done || task.status == 'Completed').toList();
-    final completed = completedTasks.length;
-    final score = activeTasks.isEmpty ? 0 : ((completed / activeTasks.length) * 100).round();
-    final accent = _taskAccentForTasks(activeTasks);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _calmPanelDecoration(accentColor: accent),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Connected productivity data', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _MiniStat(label: 'Tasks', value: '$completed/${activeTasks.length}', accentColor: accent)),
-              const SizedBox(width: 10),
-              Expanded(child: _MiniStat(label: 'Score', value: '$score%', accentColor: accent)),
-              const SizedBox(width: 10),
-              Expanded(child: _MiniStat(label: 'Saved mood', value: entry?.mood ?? '—', accentColor: accent)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          LinearProgressIndicator(
-            value: activeTasks.isEmpty ? 0.0 : completed / activeTasks.length,
-            minHeight: 9,
-            borderRadius: BorderRadius.circular(99),
-            color: accent,
-            backgroundColor: accent.withOpacity(0.14),
-          ),
-          if (activeTasks.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
+    return PopScope(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _leave();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+            title: Text('Journal'),
+            leading: IconButton(
+                tooltip: 'Back',
+                onPressed: _saving ? null : _leave,
+                icon: Icon(Icons.arrow_back))),
+        bottomNavigationBar: SafeArea(
+            child: Padding(
+                padding: EdgeInsets.all(16),
+                child: FilledButton.icon(
+                    onPressed: _saving ? null : _saveEntry,
+                    icon: Icon(Icons.check),
+                    label: Text(_saving ? 'Saving...' : 'Save reflection')))),
+        body: ListView(padding: EdgeInsets.all(16), children: [
+          Row(children: [
+            IconButton(
+                tooltip: 'Previous day',
+                onPressed: _saving ? null : () => _changeDate(-1),
+                icon: Icon(Icons.chevron_left)),
+            Expanded(
+                child: Text(
+                    MaterialLocalizations.of(context)
+                        .formatFullDate(_selectedDate),
+                    textAlign: TextAlign.center)),
+            IconButton(
+                tooltip: 'Next day',
+                onPressed: _saving ? null : () => _changeDate(1),
+                icon: Icon(Icons.chevron_right)),
+          ]),
+          Semantics(
+              liveRegion: true,
+              child: Text(_draftStatus,
+                  style: Theme.of(context).textTheme.bodySmall)),
+          SizedBox(height: 12),
+          Wrap(
               spacing: 8,
-              runSpacing: 8,
-              children: activeTasks.map((task) => _JournalTaskChip(task: task)).toList(),
-            ),
-          ],
-        ],
+              children: _moods
+                  .map((mood) => ChoiceChip(
+                      label: Text(mood),
+                      selected: _selectedMood == mood,
+                      onSelected: _saving
+                          ? null
+                          : (_) {
+                              setState(() => _selectedMood = mood);
+                              _queueDraft();
+                            }))
+                  .toList()),
+          SizedBox(height: 16),
+          TextField(
+              controller: _reflectionController,
+              enabled: !_saving,
+              minLines: 8,
+              maxLines: null,
+              decoration: InputDecoration(
+                  labelText: 'Your reflection',
+                  hintText: 'What mattered today?',
+                  alignLabelWithHint: true,
+                  errorText: _error,
+                  border: OutlineInputBorder())),
+          if (_error != null)
+            TextButton(
+                onPressed: _flushDraft, child: Text('Retry saving draft')),
+          SizedBox(height: 24),
+          ExpansionTile(title: Text('History and insights'), children: [
+            _JournalAnalyticsPanel(
+                analytics: _JournalAnalytics.fromEntries(
+                    widget.hiveService.getAllJournalEntries())),
+            _JournalHistory(
+                entries: widget.hiveService.getAllJournalEntries(),
+                tasksByDate: widget.hiveService.getAllTasksByDate()),
+          ]),
+          if (widget.hiveService.getJournalEntryForDate(_selectedDate) != null)
+            TextButton.icon(
+                onPressed: _saving ? null : _deleteEntry,
+                icon: Icon(Icons.delete_outline),
+                label: Text('Delete entry')),
+        ]),
       ),
-    );
-  }
-}
-
-class _ActionButtons extends StatelessWidget {
-  final bool hasEntry;
-  final VoidCallback onSave;
-  final VoidCallback? onDelete;
-
-  const _ActionButtons({required this.hasEntry, required this.onSave, required this.onDelete});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: onSave,
-            icon: const Icon(Icons.save),
-            label: Text(hasEntry ? 'Update Entry' : 'Save Entry'),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline),
-            label: const Text('Delete Entry'),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -479,33 +344,43 @@ class _ActionButtons extends StatelessWidget {
 class _JournalAnalyticsPanel extends StatelessWidget {
   final _JournalAnalytics analytics;
 
-  const _JournalAnalyticsPanel({required this.analytics});
+  _JournalAnalyticsPanel({required this.analytics});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _calmPanelDecoration(),
+      padding: EdgeInsets.all(16),
+      decoration: _calmPanelDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Journal Analytics', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-          const SizedBox(height: 12),
+          Text('Journal Analytics',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
+          SizedBox(height: 12),
           Wrap(
             spacing: 10,
             runSpacing: 10,
             children: [
-              _AnalyticsPill(label: 'Entries', value: '${analytics.totalEntries}'),
+              _AnalyticsPill(
+                  label: 'Entries', value: '${analytics.totalEntries}'),
               _AnalyticsPill(label: 'Top mood', value: analytics.topMood),
-              _AnalyticsPill(label: 'Weekly reflections', value: '${analytics.weekEntries}'),
-              _AnalyticsPill(label: 'Monthly reflections', value: '${analytics.monthEntries}'),
-              _AnalyticsPill(label: 'Avg productivity', value: '${analytics.averageProductivity}%'),
+              _AnalyticsPill(
+                  label: 'Weekly reflections',
+                  value: '${analytics.weekEntries}'),
+              _AnalyticsPill(
+                  label: 'Monthly reflections',
+                  value: '${analytics.monthEntries}'),
+              _AnalyticsPill(
+                  label: 'Avg productivity',
+                  value: '${analytics.averageProductivity}%'),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Text(
             analytics.patternInsight,
-            style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -517,22 +392,27 @@ class _JournalHistory extends StatelessWidget {
   final List<JournalEntry> entries;
   final Map<DateTime, List<Task>> tasksByDate;
 
-  const _JournalHistory({required this.entries, required this.tasksByDate});
+  _JournalHistory({required this.entries, required this.tasksByDate});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _calmPanelDecoration(),
+      padding: EdgeInsets.all(16),
+      decoration: _calmPanelDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Reflection History', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-          const SizedBox(height: 10),
+          Text('Reflection History',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
+          SizedBox(height: 10),
           if (entries.isEmpty)
-            const Text('No journal entries yet. Save your first reflection today.', style: TextStyle(color: Colors.black54))
+            Text('No journal entries yet. Save your first reflection today.',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant))
           else
-            ...entries.take(8).map((entry) => _HistoryTile(entry: entry, tasks: tasksByDate[_dateOnly(entry.date)] ?? const <Task>[])),
+            ...entries.take(8).map((entry) => _HistoryTile(
+                entry: entry,
+                tasks: tasksByDate[_dateOnly(entry.date)] ?? <Task>[])),
         ],
       ),
     );
@@ -543,15 +423,17 @@ class _HistoryTile extends StatelessWidget {
   final JournalEntry entry;
   final List<Task> tasks;
 
-  const _HistoryTile({required this.entry, required this.tasks});
+  _HistoryTile({required this.entry, required this.tasks});
 
   @override
   Widget build(BuildContext context) {
-    final preview = entry.reflection.trim().isEmpty ? 'No reflection text saved.' : entry.reflection.trim();
+    final preview = entry.reflection.trim().isEmpty
+        ? 'No reflection text saved.'
+        : entry.reflection.trim();
     final accent = _taskAccentForTasks(tasks);
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      margin: EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accent.withOpacity(0.08),
         borderRadius: BorderRadius.circular(16),
@@ -568,25 +450,30 @@ class _HistoryTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
             ),
             alignment: Alignment.center,
-            child: Text(_emojiForMood(entry.mood), style: const TextStyle(fontSize: 22)),
+            child:
+                Text(_emojiForMood(entry.mood), style: TextStyle(fontSize: 22)),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${entry.date.month}/${entry.date.day}/${entry.date.year} • ${entry.mood}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
+                Text(
+                    '${entry.date.month}/${entry.date.day}/${entry.date.year} • ${entry.mood}',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                SizedBox(height: 4),
                 Text(
                   preview,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.black54),
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   'Productivity: ${entry.completedTasks}/${entry.totalTasks} tasks • ${entry.productivityScore}%',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: accent),
+                  style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700, color: accent),
                 ),
               ],
             ),
@@ -602,13 +489,13 @@ class _MiniStat extends StatelessWidget {
   final String value;
   final Color? accentColor;
 
-  const _MiniStat({required this.label, required this.value, this.accentColor});
+  _MiniStat({required this.label, required this.value, this.accentColor});
 
   @override
   Widget build(BuildContext context) {
     final accent = accentColor ?? AppColors.accent;
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: accent.withOpacity(0.09),
         borderRadius: BorderRadius.circular(14),
@@ -616,9 +503,15 @@ class _MiniStat extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(value, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: accent)),
-          const SizedBox(height: 2),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black54, fontSize: 11)),
+          Text(value,
+              style: TextStyle(
+                  fontWeight: FontWeight.w600, fontSize: 16, color: accent)),
+          SizedBox(height: 2),
+          Text(label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 11)),
         ],
       ),
     );
@@ -629,30 +522,35 @@ class _AnalyticsPill extends StatelessWidget {
   final String label;
   final String value;
 
-  const _AnalyticsPill({required this.label, required this.value});
+  _AnalyticsPill({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(16)),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: BorderRadius.circular(16)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-          Text(label, style: const TextStyle(color: Colors.black54, fontSize: 11)),
+          Text(value,
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+          Text(label,
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 11)),
         ],
       ),
     );
   }
 }
 
-
 class _JournalTaskChip extends StatelessWidget {
   final Task task;
 
-  const _JournalTaskChip({required this.task});
+  _JournalTaskChip({required this.task});
 
   @override
   Widget build(BuildContext context) {
@@ -660,20 +558,23 @@ class _JournalTaskChip extends StatelessWidget {
     final isCompleted = task.done || task.status == 'Completed';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: taskColor.withOpacity(isCompleted ? 0.18 : 0.10),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: taskColor.withOpacity(isCompleted ? 0.38 : 0.22)),
+        border:
+            Border.all(color: taskColor.withOpacity(isCompleted ? 0.38 : 0.22)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(isCompleted ? Icons.check_circle : Icons.circle_outlined, size: 15, color: taskColor),
-          const SizedBox(width: 6),
+          Icon(isCompleted ? Icons.check_circle : Icons.circle_outlined,
+              size: 15, color: taskColor),
+          SizedBox(width: 6),
           Text(
             task.task,
-            style: TextStyle(color: taskColor, fontSize: 12, fontWeight: FontWeight.w800),
+            style: TextStyle(
+                color: taskColor, fontSize: 12, fontWeight: FontWeight.w800),
           ),
         ],
       ),
@@ -682,7 +583,8 @@ class _JournalTaskChip extends StatelessWidget {
 }
 
 Color _taskAccentForTasks(List<Task> tasks) {
-  final activeTasks = tasks.where((task) => task.status != 'Cancelled').toList();
+  final activeTasks =
+      tasks.where((task) => task.status != 'Cancelled').toList();
   if (activeTasks.isEmpty) return AppColors.accent;
 
   for (final task in activeTasks) {
@@ -702,7 +604,7 @@ class _JournalAnalytics {
   final String topMood;
   final String patternInsight;
 
-  const _JournalAnalytics({
+  _JournalAnalytics({
     required this.totalEntries,
     required this.weekEntries,
     required this.monthEntries,
@@ -727,9 +629,12 @@ class _JournalAnalytics {
     final topMood = moodCounts.isEmpty
         ? 'No mood yet'
         : moodCounts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
-    final averageProductivity = entries.isEmpty ? 0 : (productivityTotal / entries.length).round();
-    final weekEntries = entries.where((entry) => !entry.date.isBefore(weekStart)).length;
-    final monthEntries = entries.where((entry) => !entry.date.isBefore(monthStart)).length;
+    final averageProductivity =
+        entries.isEmpty ? 0 : (productivityTotal / entries.length).round();
+    final weekEntries =
+        entries.where((entry) => !entry.date.isBefore(weekStart)).length;
+    final monthEntries =
+        entries.where((entry) => !entry.date.isBefore(monthStart)).length;
 
     final insight = entries.isEmpty
         ? 'Start journaling to connect emotions with productive and unproductive days.'
@@ -748,25 +653,17 @@ class _JournalAnalytics {
   }
 }
 
-class _MoodOption {
-  final String label;
-  final String emoji;
-  final Color color;
-
-  const _MoodOption({required this.label, required this.emoji, required this.color});
-}
-
-BoxDecoration _calmPanelDecoration({Color? accentColor}) {
+BoxDecoration _calmPanelDecoration(BuildContext context, {Color? accentColor}) {
   final accent = accentColor;
   return BoxDecoration(
-    color: AppColors.surface,
+    color: Theme.of(context).colorScheme.surface,
     borderRadius: BorderRadius.circular(24),
     border: accent == null ? null : Border.all(color: accent.withOpacity(0.18)),
     boxShadow: [
       BoxShadow(
         color: Colors.black.withOpacity(0.05),
         blurRadius: 18,
-        offset: const Offset(0, 8),
+        offset: Offset(0, 8),
       ),
     ],
   );
